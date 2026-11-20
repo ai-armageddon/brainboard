@@ -1,5 +1,4 @@
 import type { Camera, ColorKey, Item, Tool } from './types';
-import { kvGet, kvSet } from './db';
 
 export const S = {
   items: [] as Item[],
@@ -14,39 +13,109 @@ export const S = {
 
 export const getItem = (id: string | null | undefined) => (id ? S.items.find((i) => i.id === id) : undefined);
 
-// ---------- history (snapshot based; images live in IndexedDB so snapshots stay small)
-const undoStack: string[] = [];
-const redoStack: string[] = [];
+// ---------------------------------------------------------------- per-user, item-level undo
+// An entry remembers only the items *this* user changed, so undo never reverts other people's edits.
 
-export function checkpoint() {
-  undoStack.push(JSON.stringify(S.items));
+interface Entry {
+  before: Map<string, string | null>;
+  after: Map<string, string | null>;
+  beforeOrder?: string[];
+  afterOrder?: string[];
+}
+let open: { pre: Map<string, string>; preOrder: string[]; touched: Set<string>; order: boolean } | null = null;
+const undoStack: Entry[] = [];
+const redoStack: Entry[] = [];
+
+/** Hook for the sync layer: compute & ship pending local changes now. */
+let collect = () => {};
+export const setCollector = (fn: () => void) => { collect = fn; };
+
+/** Called by the sync layer for every item this user changed. */
+export function noteLocalChange(ids: Iterable<string>, order: boolean) {
+  if (!open) return;
+  for (const id of ids) open.touched.add(id);
+  if (order) open.order = true;
+}
+
+function finalize() {
+  collect();
+  const o = open;
+  open = null;
+  if (!o || (!o.touched.size && !o.order)) return;
+  const now = new Map(S.items.map((i) => [i.id, i]));
+  const e: Entry = { before: new Map(), after: new Map() };
+  for (const id of o.touched) {
+    e.before.set(id, o.pre.get(id) ?? null);
+    const cur = now.get(id);
+    e.after.set(id, cur ? JSON.stringify(cur) : null);
+  }
+  if (o.order) {
+    e.beforeOrder = o.preOrder;
+    e.afterOrder = S.items.map((i) => i.id);
+  }
+  undoStack.push(e);
   if (undoStack.length > 200) undoStack.shift();
+}
+
+/** Call right before changing the board. */
+export function checkpoint() {
+  finalize();
+  open = {
+    pre: new Map(S.items.map((i) => [i.id, JSON.stringify(i)])),
+    preOrder: S.items.map((i) => i.id),
+    touched: new Set(),
+    order: false,
+  };
   redoStack.length = 0;
 }
-export const canUndo = () => undoStack.length > 0;
+
+function applyState(state: Map<string, string | null>, order?: string[]) {
+  let items = S.items.slice();
+  for (const [id, json] of state) {
+    const i = items.findIndex((x) => x.id === id);
+    if (json === null) { if (i >= 0) items.splice(i, 1); }
+    else if (i >= 0) items[i] = JSON.parse(json);
+    else items.push(JSON.parse(json));
+  }
+  if (order) {
+    const pos = new Map(order.map((id, i) => [id, i]));
+    items = items.sort((a, b) => (pos.get(a.id) ?? 1e9) - (pos.get(b.id) ?? 1e9));
+  }
+  S.items = items;
+  pruneSelection();
+  changed();
+}
+
+export const canUndo = () => undoStack.length > 0 || !!open?.touched.size;
 export const canRedo = () => redoStack.length > 0;
 
-function restore(json: string) {
-  S.items = JSON.parse(json);
+export function undo() {
+  finalize();
+  const e = undoStack.pop();
+  if (!e) return;
+  redoStack.push(e);
+  applyState(e.before, e.beforeOrder);
+}
+export function redo() {
+  finalize();
+  const e = redoStack.pop();
+  if (!e) return;
+  undoStack.push(e);
+  applyState(e.after, e.afterOrder);
+}
+export function resetHistory() {
+  open = null;
+  undoStack.length = 0;
+  redoStack.length = 0;
+}
+
+export function pruneSelection() {
   const ids = new Set(S.items.map((i) => i.id));
   for (const id of [...S.selected]) if (!ids.has(id)) S.selected.delete(id);
   if (S.editing && !ids.has(S.editing)) S.editing = null;
-  changed();
-}
-export function undo() {
-  const s = undoStack.pop();
-  if (s === undefined) return;
-  redoStack.push(JSON.stringify(S.items));
-  restore(s);
-}
-export function redo() {
-  const s = redoStack.pop();
-  if (s === undefined) return;
-  undoStack.push(JSON.stringify(S.items));
-  restore(s);
 }
 
-// ---------- render scheduling
+// ---------------------------------------------------------------- render + sync scheduling
 let renderFn = () => {};
 let raf = 0;
 export const setRenderer = (fn: () => void) => { renderFn = fn; };
@@ -54,37 +123,30 @@ export function requestRender() {
   if (raf) return;
   raf = requestAnimationFrame(() => { raf = 0; renderFn(); });
 }
+
+let syncFn = () => {};
+export const setSyncScheduler = (fn: () => void) => { syncFn = fn; };
+/** Something on the board changed locally: redraw and sync. */
 export function changed() {
   requestRender();
-  scheduleSave();
+  syncFn();
 }
+/** Item sizes were re-measured during render: just sync. */
+export const scheduleSave = () => syncFn();
 
-// ---------- persistence
-let saveTimer = 0;
-export function scheduleSave() {
-  clearTimeout(saveTimer);
-  saveTimer = window.setTimeout(saveNow, 350);
-}
-export async function saveNow() {
-  clearTimeout(saveTimer);
+// ---------------------------------------------------------------- per-viewer preferences
+const prefKey = 'bb-prefs';
+export function loadPrefs() {
   try {
-    await kvSet('board', { v: 1, items: S.items, cam: S.cam, pen: S.pen, last: S.last });
-  } catch (err) {
-    console.error('brainboard: save failed', err);
-  }
+    const p = JSON.parse(localStorage.getItem(prefKey) ?? '{}');
+    if (p.pen) S.pen = p.pen;
+    if (p.last) S.last = { ...S.last, ...p.last };
+  } catch { /* ignore */ }
 }
-export async function load(): Promise<boolean> {
-  try {
-    const d = await kvGet<{ items: Item[]; cam?: Camera; pen?: typeof S.pen; last?: typeof S.last }>('board');
-    if (d?.items) {
-      S.items = d.items;
-      if (d.cam) S.cam = d.cam;
-      if (d.pen) S.pen = d.pen;
-      if (d.last) S.last = { ...S.last, ...d.last };
-      return true;
-    }
-  } catch (err) {
-    console.error('brainboard: load failed', err);
-  }
-  return false;
+let prefTimer = 0;
+export function savePrefs() {
+  clearTimeout(prefTimer);
+  prefTimer = window.setTimeout(() => {
+    try { localStorage.setItem(prefKey, JSON.stringify({ pen: S.pen, last: S.last })); } catch { /* ignore */ }
+  }, 300);
 }

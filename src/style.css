@@ -700,3 +700,80 @@ body.busy #ctxbar { opacity: 0; pointer-events: none; transition: none; }
   #penbar { bottom: 124px; max-width: calc(100vw - 32px); overflow-x: auto; }
   .brand .name { display: none; }
 }
+
+/* ---------------------------------------------------------------- boards & status */
+.board-title { display: flex; align-items: center; gap: 7px; min-width: 0; }
+.board-title .name {
+  max-width: 260px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  outline: none;
+  border-radius: 5px;
+}
+.board-title .name.editing { background: var(--hover); padding: 0 4px; cursor: text; text-overflow: clip; }
+.status-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--fg-3); flex: none; transition: background 0.2s; }
+.status-dot[data-status="live"] { background: #2fb36d; }
+.status-dot[data-status="connecting"] { background: #e0b400; animation: blink 1s infinite alternate; }
+.status-dot[data-status="offline"] { background: var(--danger); animation: blink 1s infinite alternate; }
+@keyframes blink { to { opacity: 0.35; } }
+
+.menu-label { padding: 6px 10px 4px; font-size: 11px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: var(--fg-3); }
+#board-list { display: flex; flex-direction: column; max-height: 40vh; overflow: auto; }
+#menu .board-row { height: auto; padding: 7px 10px; flex-direction: column; align-items: flex-start; gap: 2px; }
+.board-row-name { font-weight: 500; max-width: 240px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.board-row-meta { font-size: 12px; color: var(--fg-3); display: flex; align-items: center; gap: 4px; }
+#menu .board-row.current { background: var(--accent-soft); }
+#menu .board-row.current .board-row-name { color: var(--accent); }
+#menu button.accent { color: var(--accent); font-weight: 500; }
+.live-dot { width: 6px; height: 6px; border-radius: 50%; background: #2fb36d; display: inline-block; }
+body.guest .owner-only { display: none; }
+
+/* ---------------------------------------------------------------- overlay (join / errors) */
+#overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  display: grid;
+  place-items: center;
+  padding: 16px;
+  background: color-mix(in srgb, var(--bg) 70%, transparent);
+  -webkit-backdrop-filter: blur(10px);
+  backdrop-filter: blur(10px);
+}
+#overlay[hidden] { display: none; }
+#overlay .sheet { width: min(400px, 100%); text-align: center; display: flex; flex-direction: column; align-items: center; gap: 12px; padding: 28px 26px 24px; }
+#overlay h2 { font-size: 20px; letter-spacing: -0.02em; margin: 6px 0 0; }
+#overlay p { margin: 0; font-size: 14px; line-height: 1.5; }
+#overlay code { font-size: 13px; background: var(--hover); padding: 1px 5px; border-radius: 5px; }
+.logo.big { width: 44px; height: 44px; border-radius: 13px; }
+.field { display: flex; flex-direction: column; gap: 6px; width: 100%; text-align: left; font-size: 12.5px; font-weight: 500; color: var(--fg-2); }
+.field input, .field select {
+  font: inherit;
+  font-size: 15px;
+  color: var(--fg);
+  background: var(--bg);
+  border: 1px solid var(--line-strong);
+  border-radius: 10px;
+  padding: 10px 12px;
+  outline: none;
+}
+.field input:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+.colors { display: flex; gap: 6px; flex-wrap: wrap; justify-content: center; }
+.color-pick input { position: absolute; opacity: 0; pointer-events: none; }
+.color-pick i { display: block; width: 24px; height: 24px; border-radius: 50%; cursor: pointer; box-shadow: inset 0 0 0 2px rgba(255, 255, 255, 0.5); }
+.color-pick input:checked + i { box-shadow: 0 0 0 2px var(--panel-solid), 0 0 0 4px var(--fg); }
+.color-pick input:focus-visible + i { outline: 2px solid var(--accent); outline-offset: 3px; }
+button.primary {
+  border: 0;
+  border-radius: 10px;
+  padding: 11px 18px;
+  width: 100%;
+  background: var(--accent);
+  color: #fff;
+  font-weight: 600;
+  font-size: 14.5px;
+  cursor: pointer;
+  margin-top: 4px;
+}
+button.primary:hover { filter: brightness(1.07); }

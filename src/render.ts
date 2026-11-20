@@ -1,7 +1,7 @@
 import { S, setRenderer, scheduleSave } from './state';
 import type { Box, Item, NodeItem } from './types';
 import { edgeGeom, shapePath, strokePath, unionBox } from './geometry';
-import { imageUrl } from './images';
+import { imageUrl } from './net';
 
 const q = <T extends Element>(sel: string) => document.querySelector(sel) as T;
 export const viewport = q<HTMLDivElement>('#viewport');
@@ -116,7 +116,7 @@ function updateNodeEl(el: NodeEl, it: NodeItem, z: number) {
       st.height = `${it.h}px`;
       const img = el.firstElementChild as HTMLImageElement;
       const u = imageUrl(it.blob);
-      if (u && img.getAttribute('src') !== u) img.src = u;
+      if (img.getAttribute('src') !== u) img.src = u;
       break;
     }
     case 'stroke': {
@@ -272,5 +272,4 @@ export function applyCamera() {
   viewport.style.backgroundSize = `${g}px ${g}px`;
   viewport.style.backgroundPosition = `${x}px ${y}px`;
   hooks.afterCamera();
-  scheduleSave();
 }

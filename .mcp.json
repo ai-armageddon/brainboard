@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "brainboard": {
+      "command": "node",
+      "args": ["server/mcp.ts"]
+    }
+  }
+}

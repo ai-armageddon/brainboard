@@ -1,16 +1,48 @@
 # brainboard
 
-A minimal, near-infinite whiteboard for thinking: paste images, write sticky notes and text, sketch with a pen, and build bubble flow charts.
+A minimal, near-infinite whiteboard for thinking. Paste images, write sticky notes and text, sketch with a pen, and build bubble flow charts. You can also let AI agents read and edit your boards over MCP.
 
 ```sh
 npm install
-npm run dev      # http://localhost:5173
-npm run build    # static site in dist/
+npm run dev      # http://localhost:5317  (app + API + live sync)
+npm start        # production build, this computer only
+npm run share    # production build, also reachable on your local network
 ```
 
-Everything is stored locally in your browser (IndexedDB), and images are saved as blobs. To back up a board or move it to another machine, use **Export board…** in the top-left menu. Exports are plain `.json` files with the images embedded. To load one, use **Import board…** or drop the file onto the canvas.
+Requires Node 22.18+ (the server runs its TypeScript directly).
 
-## Using it
+Boards are saved as plain JSON files in `~/.brainboard/`, and images are stored next to them. Set `BRAINBOARD_DIR` to use a different folder. Every open tab stays in sync live. Deleted boards go to `~/.brainboard/trash/`.
+
+## Use it with AI agents (MCP)
+
+Brainboard ships an MCP server. It lets agents such as Claude Code, Claude Desktop or Cursor list, read, see and edit your boards. Their edits appear live in your open tab, and you can undo them.
+
+**Claude Code** picks it up automatically inside this folder (`.mcp.json`). To use it from any folder:
+
+```sh
+claude mcp add brainboard --scope user -- node /absolute/path/to/brainboard/server/mcp.ts
+```
+
+**Claude Desktop / Cursor / other clients** use this config:
+
+```json
+{ "mcpServers": { "brainboard": { "command": "node", "args": ["/absolute/path/to/brainboard/server/mcp.ts"] } } }
+```
+
+| Tool | What it does |
+|---|---|
+| `list_boards` | All boards, most recent first |
+| `read_board` | Outline of every note, shape, image and arrow, with ids, positions and the flow between them (or `format: "json"`) |
+| `render_board` | A PNG of the board, including drawings and images (`show_ids` overlays ids) |
+| `view_image` | Look at a pasted image |
+| `add_items` | Add notes, text, bubbles, boxes, decisions and arrows in one call, with automatic layout |
+| `update_items` / `delete_items` | Edit or remove items by id |
+| `add_image` | Put an image on a board from a file path, URL or base64 |
+| `create_board` / `rename_board` | Manage boards |
+
+Try asking: *"Read my Launch plan board and add the next steps as a flow chart"* or *"Look at the screenshot I pasted on my board and summarise it in a sticky note next to it."*
+
+## Using the canvas
 
 | | |
 |---|---|
@@ -18,21 +50,20 @@ Everything is stored locally in your browser (IndexedDB), and images are saved a
 | **Zoom** | Pinch, or `⌘` + scroll · `⇧1` fit · `⌘0` 100% |
 | **Images** | `⌘V` to paste, drag files in, or press `I` |
 | **Write** | Double-click anywhere for text · `N` for a sticky note · `Enter` edits the selected item |
-| **Draw** | `P` pen (pick color and size in the bar that appears) · `E` eraser |
+| **Draw** | `P` pen · `E` eraser |
 | **Flow charts** | `O` bubble · `R` box · `D` decision · `C` connector |
-| | Hover a shape and drag one of its dots to another shape to connect them. Drop on empty space to create a new connected bubble. Click a dot to add a bubble in that direction. |
-| | `Tab` adds a connected bubble to the right (`⇧Tab` adds one below), even while you're typing |
-| | Double-click a connector to label it |
-| **Arrange** | `⌥`-drag or `⌘D` duplicates · `]` / `[` brings to front or sends to back · arrow keys nudge |
-| **Undo** | `⌘Z` / `⇧⌘Z` |
+| | Drag a shape's dot to connect it. Drop on empty space to grow a new bubble. `Tab` adds a connected bubble to the right, even while typing. |
+| **Boards** | Open the menu in the top left · `⌥N` new board · double-click the board name to rename it |
+| **Undo** | `⌘Z` / `⇧⌘Z` only undo *your* changes, never anyone else's |
 
-Press `?` in the app for the full list.
+Press `?` in the app for every shortcut.
 
 ## Code map
 
-- `src/state.ts`: board state, undo history, and saving
-- `src/render.ts`: DOM/SVG rendering of items, connectors, selection, and the camera
-- `src/input.ts`: pointer, keyboard, clipboard, and drag-and-drop handling
-- `src/actions.ts`: operations such as creating, editing, deleting, images, zoom, and import/export
-- `src/ui.ts`: toolbar, context bar, menu, and theme
-- `src/geometry.ts`: shape paths, connector curves, and stroke smoothing
+- `src/`: the app (vanilla TypeScript and Vite)
+  - `state.ts`: board state and per-user undo · `net.ts`: server connection and live sync
+  - `render.ts`, `input.ts`, `actions.ts`, `ui.ts`: canvas, input, operations, chrome
+- `server/`
+  - `store.ts`: board and image files · `api.ts`: HTTP API · `realtime.ts`: live rooms over WebSocket
+  - `mcp.ts`: MCP server · `agent.ts`: outlines and auto-layout · `render.ts`: PNG rendering
+  - `auth.ts`, `sharing.ts`: owner and guest access

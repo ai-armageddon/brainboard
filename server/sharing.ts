@@ -1,0 +1,103 @@
+// Per-board sharing: invite links (with roles) and live-session settings.
+import { promises as fs, mkdirSync } from 'node:fs';
+import path from 'node:path';
+import crypto from 'node:crypto';
+import { DATA_DIR, isValidId } from './store.ts';
+import { DEFAULT_SETTINGS, type BoardSettings } from '../src/protocol.ts';
+
+export type InviteRole = 'editor' | 'viewer';
+export interface Invite {
+  token: string;
+  role: InviteRole;
+  label: string;
+  created: string;
+}
+export interface Sharing {
+  invites: Invite[];
+  settings: BoardSettings;
+}
+
+const DIR = path.join(DATA_DIR, 'sharing');
+const cache = new Map<string, Sharing>();
+
+const file = (boardId: string) => {
+  if (!isValidId(boardId)) throw new Error('Invalid board id');
+  return path.join(DIR, `${boardId}.json`);
+};
+
+export async function getSharing(boardId: string): Promise<Sharing> {
+  const hit = cache.get(boardId);
+  if (hit) return hit;
+  let s: Sharing = { invites: [], settings: { ...DEFAULT_SETTINGS } };
+  try {
+    const raw = JSON.parse(await fs.readFile(file(boardId), 'utf8')) as Partial<Sharing>;
+    s = { invites: raw.invites ?? [], settings: { ...DEFAULT_SETTINGS, ...raw.settings } };
+  } catch { /* none yet */ }
+  cache.set(boardId, s);
+  return s;
+}
+
+async function save(boardId: string, s: Sharing) {
+  mkdirSync(DIR, { recursive: true });
+  cache.set(boardId, s);
+  const tmp = `${file(boardId)}.${process.pid}.tmp`;
+  await fs.writeFile(tmp, JSON.stringify(s, null, 2));
+  await fs.rename(tmp, file(boardId));
+}
+
+export async function createInvite(boardId: string, role: InviteRole, label: string): Promise<Invite> {
+  const s = await getSharing(boardId);
+  const inv: Invite = {
+    token: crypto.randomBytes(18).toString('base64url'),
+    role,
+    label: label.trim().slice(0, 60) || (role === 'editor' ? 'Can edit' : 'Can view'),
+    created: new Date().toISOString(),
+  };
+  s.invites.push(inv);
+  await save(boardId, s);
+  return inv;
+}
+
+export async function updateInvite(boardId: string, token: string, patch: { role?: InviteRole; label?: string }) {
+  const s = await getSharing(boardId);
+  const inv = s.invites.find((i) => i.token === token);
+  if (!inv) return null;
+  if (patch.role === 'editor' || patch.role === 'viewer') inv.role = patch.role;
+  if (typeof patch.label === 'string') inv.label = patch.label.trim().slice(0, 60) || inv.label;
+  await save(boardId, s);
+  return inv;
+}
+
+export async function revokeInvite(boardId: string, token: string) {
+  const s = await getSharing(boardId);
+  s.invites = s.invites.filter((i) => i.token !== token);
+  await save(boardId, s);
+}
+
+export async function setSettings(boardId: string, patch: Partial<BoardSettings>): Promise<BoardSettings> {
+  const s = await getSharing(boardId);
+  for (const k of Object.keys(DEFAULT_SETTINGS) as (keyof BoardSettings)[]) {
+    if (typeof patch[k] === 'boolean') s.settings[k] = patch[k]!;
+  }
+  await save(boardId, s);
+  return s.settings;
+}
+
+export async function inviteRole(boardId: string, token: string): Promise<InviteRole | null> {
+  const s = await getSharing(boardId);
+  return s.invites.find((i) => i.token === token)?.role ?? null;
+}
+
+/** Any board this invite token belongs to (used to authorise image reads). */
+export async function tokenBoards(token: string): Promise<{ boardId: string; role: InviteRole }[]> {
+  const out: { boardId: string; role: InviteRole }[] = [];
+  let files: string[] = [];
+  try { files = await fs.readdir(DIR); } catch { return out; }
+  for (const f of files) {
+    if (!f.endsWith('.json')) continue;
+    const id = f.slice(0, -5);
+    const role = await inviteRole(id, token);
+    if (role) out.push({ boardId: id, role });
+  }
+  return out;
+}

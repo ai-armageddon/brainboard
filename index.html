@@ -29,22 +29,34 @@
     </div>
 
     <header id="topbar" class="panel">
-      <button id="menu-btn" class="brand" aria-haspopup="menu">
+      <button id="menu-btn" class="brand" aria-haspopup="menu" aria-label="Boards and menu">
         <span class="logo" aria-hidden="true"></span>
-        <span class="name">brainboard</span>
+        <span class="board-title"><span id="board-name" class="name">brainboard</span><span id="status-dot" class="status-dot" title="Connecting…"></span></span>
         <span class="chev" data-icon="chevron"></span>
       </button>
     </header>
 
     <div id="menu" class="panel" role="menu" hidden>
+      <div class="owner-only">
+        <div class="menu-label">Boards</div>
+        <div id="board-list"></div>
+        <button data-action="new-board" class="accent">New board <kbd>⌥N</kbd></button>
+        <hr />
+        <button data-action="rename">Rename board…</button>
+      </div>
       <button data-action="fit">Zoom to fit <kbd>⇧1</kbd></button>
       <button data-action="export">Export board…</button>
       <button data-action="import">Import board…</button>
       <button data-action="theme">Theme <span id="theme-label" class="muted">Auto</span></button>
       <button data-action="shortcuts">Keyboard shortcuts <kbd>?</kbd></button>
       <hr />
-      <button data-action="clear" class="danger">Clear board</button>
+      <div class="owner-only">
+        <button data-action="clear" class="danger">Clear board</button>
+        <button data-action="delete-board" class="danger">Delete board</button>
+      </div>
     </div>
+
+    <div id="overlay" hidden></div>
 
     <nav id="toolbar" class="panel" aria-label="Tools">
       <button class="tbtn" data-tool="select" data-icon="select" data-tip="Select · V" aria-label="Select"></button>

@@ -1,0 +1,334 @@
+// Live rooms over WebSocket: item-level sync, presence, presenting, and per-board settings.
+// The in-memory room is authoritative while people are connected; it is written to disk shortly
+// after each change. Writes from other processes (the MCP server) are merged in via a file watcher.
+import { WebSocketServer, type WebSocket } from 'ws';
+import { watch, type FSWatcher } from 'node:fs';
+import type { IncomingMessage, Server } from 'node:http';
+import type { Duplex } from 'node:stream';
+import { BOARDS_DIR, ensureDirs, isValidId, newId, readBoard, writeBoard, type Board } from './store.ts';
+import { identify, isCrossSite, type Identity } from './auth.ts';
+import { getSharing, inviteRole, setSettings } from './sharing.ts';
+import { applyOps, diffItems, validOp } from '../src/ops.ts';
+import type { BoardSettings, ClientMsg, Op, PeerInfo, Presence, Role, ServerMsg } from '../src/protocol.ts';
+import type { Item } from '../src/types.ts';
+
+interface Client {
+  ws: WebSocket;
+  id: string;
+  name: string;
+  color: string;
+  baseRole: Role;
+  identity: Identity;
+  p: Presence;
+  alive: boolean;
+}
+interface Room {
+  id: string;
+  board: Board;
+  /** item json + order as last written to / read from disk */
+  known: Map<string, string>;
+  knownOrder: string[];
+  writtenRev: number;
+  dirty: boolean;
+  timer: NodeJS.Timeout | null;
+  clients: Set<Client>;
+  presenter: string | null;
+  settings: BoardSettings;
+  dead: boolean;
+}
+
+const rooms = new Map<string, Promise<Room | null>>();
+const PEER_COLORS = ['#f2555a', '#f5871f', '#e0b400', '#2fb36d', '#14a3c7', '#4f6bff', '#9b5cf0', '#e0559c'];
+
+function snapshot(items: Item[]) {
+  return { known: new Map(items.map((i) => [i.id, JSON.stringify(i)])), order: items.map((i) => i.id) };
+}
+
+function getRoom(id: string): Promise<Room | null> {
+  let p = rooms.get(id);
+  if (!p) {
+    p = (async () => {
+      const board = await readBoard(id);
+      if (!board) { rooms.delete(id); return null; }
+      const s = snapshot(board.items);
+      const sharing = await getSharing(id);
+      return {
+        id, board, known: s.known, knownOrder: s.order, writtenRev: board.rev, dirty: false, timer: null,
+        clients: new Set(), presenter: null, settings: { ...sharing.settings }, dead: false,
+      };
+    })();
+    rooms.set(id, p);
+  }
+  return p;
+}
+
+// ------------------------------------------------------------------ persistence
+
+function schedulePersist(room: Room) {
+  room.dirty = true;
+  room.timer ??= setTimeout(() => void persist(room), 250);
+}
+
+async function persist(room: Room) {
+  room.timer = null;
+  if (room.dead || !room.dirty) return;
+  room.dirty = false;
+  room.board.rev = Math.max(room.board.rev, room.writtenRev) + 1;
+  room.writtenRev = room.board.rev;
+  const s = snapshot(room.board.items);
+  room.known = s.known;
+  room.knownOrder = s.order;
+  try {
+    await writeBoard(room.board);
+  } catch (err) {
+    console.error('[brainboard] failed to save board', room.id, err);
+    room.dirty = true;
+  }
+}
+
+/** Board files changed on disk: merge outside edits (e.g. from an AI agent) into the live room. */
+async function onFileChange(id: string) {
+  const p = rooms.get(id);
+  if (!p) return;
+  const room = await p;
+  if (!room || room.dead) return;
+  const b = await readBoard(id).catch(() => null);
+  if (!b) {
+    room.dead = true;
+    if (room.timer) clearTimeout(room.timer);
+    broadcast(room, { t: 'deleted' });
+    for (const c of room.clients) c.ws.close(4410, 'board deleted');
+    rooms.delete(id);
+    return;
+  }
+  if (b.rev === room.writtenRev) return; // our own write
+  const ops = diffItems(room.known, room.knownOrder, b.items);
+  const s = snapshot(b.items);
+  room.known = s.known;
+  room.knownOrder = s.order;
+  room.writtenRev = b.rev;
+  room.board.rev = Math.max(room.board.rev, b.rev);
+  if (b.name !== room.board.name) {
+    room.board.name = b.name;
+    broadcast(room, { t: 'meta', name: b.name });
+  }
+  if (ops.length) {
+    room.board.items = applyOps(room.board.items, ops);
+    broadcast(room, { t: 'ops', ops, from: 'agent' });
+  }
+  if (room.dirty) schedulePersist(room);
+}
+
+let watcher: FSWatcher | null = null;
+const fileTimers = new Map<string, NodeJS.Timeout>();
+function startWatcher() {
+  if (watcher) return;
+  ensureDirs();
+  watcher = watch(BOARDS_DIR, (_e, filename) => {
+    const f = filename ? String(filename) : '';
+    if (!f.endsWith('.json')) return;
+    const id = f.slice(0, -5);
+    clearTimeout(fileTimers.get(id));
+    fileTimers.set(id, setTimeout(() => { fileTimers.delete(id); void onFileChange(id); }, 40));
+  });
+}
+
+// ------------------------------------------------------------------ messaging
+
+const send = (c: Client, m: ServerMsg) => { if (c.ws.readyState === 1) c.ws.send(JSON.stringify(m)); };
+function broadcast(room: Room, m: ServerMsg, except?: Client) {
+  const data = JSON.stringify(m);
+  for (const c of room.clients) if (c !== except && c.ws.readyState === 1) c.ws.send(data);
+}
+
+const roleOf = (room: Room, c: Client): Role =>
+  c.baseRole !== 'owner' && room.settings.paused ? 'viewer' : c.baseRole;
+
+const info = (room: Room, c: Client, withPresence = true): PeerInfo => ({
+  id: c.id, name: c.name, color: c.color, role: roleOf(room, c),
+  ...(withPresence ? { p: c.p } : {}),
+});
+
+const cleanName = (s: unknown) => String(s ?? '').replace(/\s+/g, ' ').trim().slice(0, 40);
+const cleanColor = (s: unknown) => (typeof s === 'string' && /^#[0-9a-f]{6}$/i.test(s) ? s : null);
+
+function sanitizePresence(p: Presence): Presence {
+  const out: Presence = {};
+  const num = (v: unknown) => typeof v === 'number' && Number.isFinite(v);
+  if (p.cursor === null) out.cursor = null;
+  else if (p.cursor && num(p.cursor.x) && num(p.cursor.y)) out.cursor = { x: p.cursor.x, y: p.cursor.y };
+  if (p.view && num(p.view.x) && num(p.view.y) && num(p.view.w) && num(p.view.h)) out.view = { ...p.view };
+  if (Array.isArray(p.sel)) out.sel = p.sel.filter((s) => typeof s === 'string').slice(0, 500);
+  if (p.editing === null || typeof p.editing === 'string') out.editing = p.editing;
+  return out;
+}
+
+/** Called by the API when invites change: re-evaluate everyone's access. */
+export async function refreshAccess(boardId: string) {
+  const p = rooms.get(boardId);
+  const room = p && (await p);
+  if (!room) return;
+  for (const c of room.clients) {
+    if (c.identity.owner) continue;
+    const role = await inviteRole(boardId, c.identity.token);
+    if (!role) {
+      send(c, { t: 'error', msg: 'Your invite was revoked by the owner.' });
+      c.ws.close(4403, 'revoked');
+      continue;
+    }
+    if (role !== c.baseRole) {
+      c.baseRole = role;
+      send(c, { t: 'role', role: roleOf(room, c) });
+      broadcast(room, { t: 'peer', peer: info(room, c, false) }, c);
+    }
+  }
+}
+
+export async function liveCounts(): Promise<Record<string, number>> {
+  const out: Record<string, number> = {};
+  for (const [id, p] of rooms) {
+    const r = await p;
+    if (r) out[id] = r.clients.size;
+  }
+  return out;
+}
+
+async function handle(room: Room, c: Client, raw: string) {
+  let m: ClientMsg;
+  try { m = JSON.parse(raw); } catch { return; }
+  switch (m.t) {
+    case 'ops': {
+      if (roleOf(room, c) === 'viewer') {
+        send(c, { t: 'role', role: 'viewer' });
+        return;
+      }
+      if (!Array.isArray(m.ops)) return;
+      const ops = m.ops.filter(validOp) as Op[];
+      if (ops.length) {
+        room.board.items = applyOps(room.board.items, ops);
+        schedulePersist(room);
+        broadcast(room, { t: 'ops', ops, from: c.id }, c);
+      }
+      send(c, { t: 'ack', seq: m.seq });
+      return;
+    }
+    case 'presence': {
+      c.p = { ...c.p, ...sanitizePresence(m.p ?? {}) };
+      const p = { ...c.p };
+      if (roleOf(room, c) === 'viewer' && !room.settings.viewerCursors) p.cursor = null;
+      broadcast(room, { t: 'presence', id: c.id, p }, c);
+      return;
+    }
+    case 'profile': {
+      c.name = cleanName(m.name) || c.name;
+      c.color = cleanColor(m.color) ?? c.color;
+      broadcast(room, { t: 'peer', peer: info(room, c, false) });
+      return;
+    }
+    case 'present': {
+      if (roleOf(room, c) === 'viewer') return;
+      if (m.on) room.presenter = c.id;
+      else if (room.presenter === c.id) room.presenter = null;
+      broadcast(room, { t: 'presenter', id: room.presenter });
+      return;
+    }
+    case 'settings': {
+      if (c.baseRole !== 'owner') return;
+      const wasPaused = room.settings.paused;
+      room.settings = await setSettings(room.id, m.s ?? {});
+      broadcast(room, { t: 'settings', s: room.settings });
+      if (wasPaused !== room.settings.paused) {
+        for (const o of room.clients) {
+          if (o.baseRole === 'owner') continue;
+          send(o, { t: 'role', role: roleOf(room, o) });
+          broadcast(room, { t: 'peer', peer: info(room, o, false) }, o);
+        }
+      }
+      return;
+    }
+    case 'kick': {
+      if (c.baseRole !== 'owner') return;
+      for (const o of room.clients) {
+        if (o.id === m.id && o.baseRole !== 'owner') {
+          send(o, { t: 'error', msg: 'The owner removed you from this board.' });
+          o.ws.close(4403, 'removed');
+        }
+      }
+      return;
+    }
+  }
+}
+
+async function onConnection(ws: WebSocket, identity: Identity, baseRole: Role, boardId: string, url: URL) {
+  const room = await getRoom(boardId);
+  if (!room) { ws.close(4404, 'board not found'); return; }
+  const used = new Set([...room.clients].map((c) => c.color));
+  const c: Client = {
+    ws,
+    id: newId(),
+    name: cleanName(url.searchParams.get('name')) || (identity.owner ? 'Owner' : 'Guest'),
+    color: cleanColor(url.searchParams.get('color')) ?? PEER_COLORS.find((col) => !used.has(col)) ?? PEER_COLORS[room.clients.size % PEER_COLORS.length],
+    baseRole,
+    identity,
+    p: {},
+    alive: true,
+  };
+  room.clients.add(c);
+  send(c, {
+    t: 'welcome',
+    you: info(room, c, false),
+    board: { id: room.id, name: room.board.name, items: room.board.items },
+    peers: [...room.clients].filter((o) => o !== c).map((o) => info(room, o)),
+    presenter: room.presenter,
+    settings: room.settings,
+  });
+  broadcast(room, { t: 'join', peer: info(room, c, false) }, c);
+
+  ws.on('message', (data) => { void handle(room, c, String(data)); });
+  ws.on('pong', () => { c.alive = true; });
+  ws.on('close', () => {
+    room.clients.delete(c);
+    broadcast(room, { t: 'leave', id: c.id });
+    if (room.presenter === c.id) {
+      room.presenter = null;
+      broadcast(room, { t: 'presenter', id: null });
+    }
+  });
+}
+
+function reject(socket: Duplex, status: number, msg: string) {
+  socket.write(`HTTP/1.1 ${status} ${msg}\r\nConnection: close\r\n\r\n`);
+  socket.destroy();
+}
+
+export function attachRealtime(server: Server) {
+  const wss = new WebSocketServer({ noServer: true, maxPayload: 64 * 1024 * 1024 });
+  server.on('upgrade', (req: IncomingMessage, socket: Duplex, head: Buffer) => {
+    const url = new URL(req.url ?? '/', 'http://localhost');
+    if (url.pathname !== '/ws') return; // leave other sockets (e.g. Vite HMR) alone
+    void (async () => {
+      if (isCrossSite(req)) return reject(socket, 403, 'Forbidden');
+      const boardId = url.searchParams.get('board') ?? '';
+      const identity = identify(req, url);
+      if (!identity || !isValidId(boardId)) return reject(socket, 403, 'Forbidden');
+      let role: Role | null = 'owner';
+      if (!identity.owner) role = await inviteRole(boardId, identity.token);
+      if (!role) return reject(socket, 403, 'Forbidden');
+      wss.handleUpgrade(req, socket, head, (ws) => void onConnection(ws, identity, role, boardId, url));
+    })();
+  });
+  startWatcher();
+  const ping = setInterval(() => {
+    for (const p of rooms.values()) {
+      void p.then((room) => {
+        for (const c of room?.clients ?? []) {
+          if (!c.alive) { c.ws.terminate(); continue; }
+          c.alive = false;
+          c.ws.ping();
+        }
+      });
+    }
+  }, 30_000);
+  ping.unref();
+  server.on('close', () => clearInterval(ping));
+}

@@ -1,8 +1,7 @@
 import { S, changed, checkpoint, getItem, requestRender } from './state';
 import type { Box, Camera, ColorKey, EdgeItem, Item, NodeItem, ShapeKind, TextualItem, Tool } from './types';
 import { applyCamera, render, textElOf, viewport } from './render';
-import { blobGet, blobSet } from './db';
-import { registerUrl } from './images';
+import { api, canEdit, imageUrl, session } from './net';
 import { clamp, intersects, unionBox } from './geometry';
 import { toast, updateToolUI } from './ui';
 
@@ -278,22 +277,23 @@ function loadImage(url: string): Promise<{ w: number; h: number }> {
 }
 
 export async function addImages(files: File[], at: { x: number; y: number }) {
+  if (!canEdit()) return;
   const imgs = files.filter((f) => f.type.startsWith('image/'));
   if (!imgs.length) return;
   const k = 1 / S.cam.z;
   const created: NodeItem[] = [];
   let off = 0;
   for (const f of imgs) {
-    const blob = uid();
     const url = URL.createObjectURL(f);
     const dims = await loadImage(url);
+    URL.revokeObjectURL(url);
+    let blob: string;
     try {
-      await blobSet(blob, f);
+      blob = await api.uploadImage(f);
     } catch {
-      toast('Could not store that image');
+      toast('Could not upload that image');
       continue;
     }
-    registerUrl(blob, url);
     const s = Math.min(1, 520 / Math.max(dims.w, dims.h));
     const w = dims.w * s * k, h = dims.h * s * k;
     created.push({ id: uid(), type: 'image', blob, x: at.x - w / 2 + off, y: at.y - h / 2 + off, w, h });
@@ -384,33 +384,32 @@ export async function exportBoard() {
   const blobs: Record<string, string> = {};
   for (const it of S.items) {
     if (it.type !== 'image' || blobs[it.blob]) continue;
-    const b = await blobGet(it.blob);
-    if (b) blobs[it.blob] = await blobToDataUrl(b);
+    const res = await fetch(imageUrl(it.blob));
+    if (res.ok) blobs[it.blob] = await blobToDataUrl(await res.blob());
   }
-  const data = { app: 'brainboard', version: 1, items: S.items, cam: S.cam, blobs };
+  const data = { app: 'brainboard', version: 1, name: session.boardName, items: S.items, blobs };
   const a = document.createElement('a');
   a.href = URL.createObjectURL(new Blob([JSON.stringify(data)], { type: 'application/json' }));
-  a.download = `brainboard-${new Date().toISOString().slice(0, 10)}.json`;
+  a.download = `${(session.boardName || 'brainboard').replace(/[^\w\- ]+/g, '').trim() || 'brainboard'}.json`;
   a.click();
   setTimeout(() => URL.revokeObjectURL(a.href), 5000);
   toast('Board exported');
 }
 
+/** Import an exported .json as a new board (never overwrites the current one). */
 export async function importBoard(file: File) {
   try {
     const data = JSON.parse(await file.text());
     if (data?.app !== 'brainboard' || !Array.isArray(data.items)) throw new Error('not a board');
+    toast('Importing…');
     for (const [id, url] of Object.entries(data.blobs ?? {})) {
       const b = await (await fetch(String(url))).blob();
-      await blobSet(id, b);
+      await api.uploadImage(b, id);
     }
-    stopEditing();
-    checkpoint();
-    S.items = data.items;
-    S.selected.clear();
-    changed();
-    requestAnimationFrame(zoomToFit);
-    toast('Board imported · ⌘Z to undo');
+    const name = String(data.name ?? file.name.replace(/\.json$/i, '').replace(/^brainboard-/, 'Imported ')).slice(0, 80);
+    const meta = await api.createBoard(name, data.items);
+    location.hash = meta.id;
+    toast(`Imported as “${meta.name}”`);
   } catch {
     toast('That file isn’t a brainboard export');
   }

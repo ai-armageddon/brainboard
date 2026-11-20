@@ -7,6 +7,8 @@ import {
   importBoard, reorder, setColor, setShape, setTool, setZoom, startEditing, viewCenter, zoomBy, zoomToFit,
 } from './actions';
 import { clamp } from './geometry';
+import { api, events, saveProfile, session, type BoardMeta } from './net';
+import { openBoard, saveCamera } from './boards';
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
 
@@ -186,6 +188,7 @@ export function buildUI() {
     e.stopPropagation();
     menu.hidden = !menu.hidden;
     $('menu-btn').classList.toggle('open', !menu.hidden);
+    if (!menu.hidden && !session.invite) void refreshBoardList();
   });
   menu.addEventListener('click', (e) => {
     const b = (e.target as Element).closest<HTMLElement>('button');
@@ -203,6 +206,9 @@ export function buildUI() {
       }
       case 'shortcuts': toggleShortcuts(true); break;
       case 'clear': clearBoard(); break;
+      case 'new-board': void newBoard(); break;
+      case 'rename': startRename(); break;
+      case 'delete-board': void deleteCurrentBoard(); break;
     }
   });
   window.addEventListener('pointerdown', (e) => {
@@ -237,9 +243,168 @@ export function buildUI() {
     ($('redo-btn') as HTMLButtonElement).disabled = !canRedo();
   };
   hooks.afterCamera = () => {
+    saveCamera();
     positionCtxBar();
     zoomLabel.textContent = `${Math.round(S.cam.z * 100)}%`;
   };
   viewport.dataset.tool = S.tool;
+
+  $('board-list').addEventListener('click', (e) => {
+    const b = (e.target as Element).closest<HTMLElement>('[data-board]');
+    if (!b) return;
+    closePopovers();
+    openBoard(b.dataset.board!);
+  });
+  $('board-name').addEventListener('dblclick', (e) => { e.stopPropagation(); if (!session.invite) startRename(); });
+  window.addEventListener('keydown', (e) => {
+    if (e.altKey && e.code === 'KeyN' && !session.invite && !S.editing) { e.preventDefault(); void newBoard(); }
+  });
+
+  const syncTitle = () => {
+    const name = session.boardName || 'brainboard';
+    if (!renaming) $('board-name').textContent = name;
+    document.title = session.boardName ? `${session.boardName} · Brainboard` : 'Brainboard';
+  };
+  const syncStatus = () => {
+    const dot = $('status-dot');
+    dot.dataset.status = session.status;
+    dot.title = session.status === 'live' ? 'Live · changes save automatically' : session.status === 'connecting' ? 'Connecting…' : 'Offline · reconnecting';
+  };
+  events.addEventListener('welcome', syncTitle);
+  events.addEventListener('meta', syncTitle);
+  events.addEventListener('status', syncStatus);
+  events.addEventListener('notice', (e) => toast(String((e as CustomEvent).detail)));
+  events.addEventListener('fatal', (e) => showOverlay('fatal', undefined, String((e as CustomEvent).detail)));
+  syncStatus();
   requestRender();
+}
+
+// ---------------------------------------------------------------- boards
+
+let boardCache: BoardMeta[] = [];
+const escapeHtml = (s: string) => s.replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`);
+
+function relTime(iso: string) {
+  const s = (Date.now() - Date.parse(iso)) / 1000;
+  if (s < 60) return 'just now';
+  if (s < 3600) return `${Math.floor(s / 60)}m ago`;
+  if (s < 86400) return `${Math.floor(s / 3600)}h ago`;
+  if (s < 86400 * 7) return `${Math.floor(s / 86400)}d ago`;
+  return new Date(iso).toLocaleDateString();
+}
+
+async function refreshBoardList() {
+  try { boardCache = await api.boards(); } catch { return; }
+  $('board-list').innerHTML = boardCache.map((b) => `
+    <button class="board-row ${b.id === session.boardId ? 'current' : ''}" data-board="${b.id}">
+      <span class="board-row-name">${escapeHtml(b.name)}</span>
+      <span class="board-row-meta">${b.live ? `<i class="live-dot"></i>${b.live} live · ` : ''}${relTime(b.updated)}</span>
+    </button>`).join('');
+}
+
+async function newBoard() {
+  closePopovers();
+  try {
+    const b = await api.createBoard('Untitled board');
+    openBoard(b.id);
+    setTimeout(startRename, 150);
+  } catch (err) {
+    toast(`Couldn’t create a board: ${(err as Error).message}`);
+  }
+}
+
+let renaming = false;
+function startRename() {
+  if (!session.boardId || session.invite) return;
+  closePopovers();
+  const el = $('board-name');
+  const id = session.boardId;
+  const before = session.boardName;
+  renaming = true;
+  el.contentEditable = 'true';
+  el.classList.add('editing');
+  el.focus();
+  const r = document.createRange();
+  r.selectNodeContents(el);
+  getSelection()?.removeAllRanges();
+  getSelection()?.addRange(r);
+  const done = async (save: boolean) => {
+    el.removeEventListener('keydown', onKey);
+    el.contentEditable = 'false';
+    el.classList.remove('editing');
+    renaming = false;
+    const name = el.textContent?.replace(/\s+/g, ' ').trim() ?? '';
+    if (!save || !name || name === before) { el.textContent = before; return; }
+    session.boardName = name;
+    document.title = `${name} · Brainboard`;
+    try { await api.renameBoard(id, name); } catch { toast('Rename failed'); }
+  };
+  const onKey = (e: KeyboardEvent) => {
+    e.stopPropagation();
+    if (e.key === 'Enter') { e.preventDefault(); el.blur(); }
+    if (e.key === 'Escape') { e.preventDefault(); void done(false); el.blur(); }
+  };
+  el.addEventListener('keydown', onKey);
+  el.addEventListener('blur', () => { if (renaming) void done(true); }, { once: true });
+}
+
+let deleteArmed = 0;
+async function deleteCurrentBoard() {
+  const id = session.boardId;
+  if (!id) return;
+  const btn = menu.querySelector<HTMLElement>('[data-action="delete-board"]')!;
+  if (Date.now() - deleteArmed > 4000) {
+    deleteArmed = Date.now();
+    menu.hidden = false;
+    btn.textContent = 'Click again to delete';
+    setTimeout(() => { btn.textContent = 'Delete board'; }, 4000);
+    return;
+  }
+  deleteArmed = 0;
+  btn.textContent = 'Delete board';
+  closePopovers();
+  try {
+    await api.deleteBoard(id);
+    const rest = (await api.boards()).filter((b) => b.id !== id);
+    openBoard(rest[0]?.id ?? (await api.createBoard('My board')).id);
+    toast('Board moved to ~/.brainboard/trash');
+  } catch (err) {
+    toast(`Couldn’t delete: ${(err as Error).message}`);
+  }
+}
+
+// ---------------------------------------------------------------- full-screen states
+
+export function showOverlay(kind: 'offline' | 'invalid' | 'join' | 'fatal', onJoin?: () => void, msg?: string) {
+  const el = $('overlay');
+  el.hidden = false;
+  const logo = '<span class="logo big" aria-hidden="true"></span>';
+  if (kind === 'join') {
+    const p = session.profile;
+    el.innerHTML = `
+      <form class="panel sheet join">
+        ${logo}
+        <h2>You’re invited to a board</h2>
+        <p class="muted">Pick a name so others know who’s here.</p>
+        <label class="field"><span>Your name</span><input name="name" maxlength="40" autocomplete="nickname" placeholder="e.g. Sam" value="${escapeHtml(p.name)}" required /></label>
+        <div class="colors">${['#f2555a', '#f5871f', '#e0b400', '#2fb36d', '#14a3c7', '#4f6bff', '#9b5cf0', '#e0559c'].map((c) => `<label class="color-pick"><input type="radio" name="color" value="${c}" ${c === p.color ? 'checked' : ''}/><i style="background:${c}"></i></label>`).join('')}</div>
+        <button class="primary" type="submit">Join board</button>
+      </form>`;
+    const form = el.querySelector('form')!;
+    (form.elements.namedItem('name') as HTMLInputElement).focus();
+    form.addEventListener('submit', (e) => {
+      e.preventDefault();
+      const fd = new FormData(form);
+      saveProfile(String(fd.get('name') ?? ''), String(fd.get('color') ?? p.color));
+      el.hidden = true;
+      onJoin?.();
+    });
+    return;
+  }
+  const copy = {
+    offline: ['Can’t reach your brainboard server', 'Start it from the project folder with <code>npm run dev</code>, then reload this page.'],
+    invalid: ['This invite link doesn’t work', 'It may have been revoked, or the board was deleted. Ask the owner for a new link.'],
+    fatal: [msg ?? 'Disconnected', session.invite ? 'Ask the owner for a new link if you need access again.' : 'Reload to pick another board.'],
+  }[kind];
+  el.innerHTML = `<div class="panel sheet notice">${logo}<h2>${copy[0]}</h2><p class="muted">${copy[1]}</p><button class="primary" onclick="location.reload()">Reload</button></div>`;
 }
