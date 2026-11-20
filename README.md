@@ -13,6 +13,16 @@ Requires Node 22.18+ (the server runs its TypeScript directly).
 
 Boards are saved as plain JSON files in `~/.brainboard/`, and images are stored next to them. Set `BRAINBOARD_DIR` to use a different folder. Every open tab stays in sync live. Deleted boards go to `~/.brainboard/trash/`.
 
+## Collaborate in real time
+
+Click **Share** in the top right to make invite links. Each link either **can edit** or **can view**. You can change a link's permission or revoke it at any time, and that applies instantly to everyone using it. Guests pick a name and colour, then join only that board. They can't see your other boards.
+
+- **Live presence:** everyone's cursor, selection and "typing…" marker, in their colour. Click an avatar to **follow** that person's view.
+- **Present:** everyone follows your view while you walk through the board. They can choose "Look around", unless you lock the view.
+- **Session controls** in the Share dialog: *Pause editing* makes everyone else view-only, *Lock view while presenting*, *Show viewers' cursors* (turn off for big audiences), and a **Remove** button for each person.
+- **Reaching guests:** `npm run dev` and `npm start` listen only on this computer. For people on the same Wi-Fi, run `npm run share`; the Share dialog picks your network address for the links. For anyone else, run `npm start` and put it behind a tunnel (for example `cloudflared tunnel --url http://localhost:5317`), then paste the tunnel's address into **Link address**. The dev server rejects tunnel hostnames.
+- **Security:** requests from this computer are the owner. Other devices need an invite link, or the private owner link printed by `npm run share`. Cross-site requests are refused, and roles are enforced on the server, not just in the UI.
+
 ## Use it with AI agents (MCP)
 
 Brainboard ships an MCP server. It lets agents such as Claude Code, Claude Desktop or Cursor list, read, see and edit your boards. Their edits appear live in your open tab, and you can undo them.

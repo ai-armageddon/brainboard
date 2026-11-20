@@ -22,6 +22,11 @@ const P: Record<string, string> = {
   back: '<rect x="4" y="4" width="11" height="11" rx="2" fill="currentColor" fill-opacity=".18"/><path d="M19 9h.5a.5.5 0 0 1 .5.5v10a.5.5 0 0 1-.5.5h-10a.5.5 0 0 1-.5-.5V19"/>',
   type: '<path d="M4 7V5h10v2"/><path d="M9 5v12"/><path d="M13 13h7M16.5 13v6"/>',
   chevron: '<path d="m8 10 4 4 4-4"/>',
+  present: '<rect x="3.5" y="4.5" width="17" height="12" rx="2"/><path d="M12 16.5V20M8.5 20h7"/><path d="m10.5 8.2 3.6 2.3-3.6 2.3z" fill="currentColor"/>',
+  eye: '<path d="M2.5 12s3.5-6.5 9.5-6.5 9.5 6.5 9.5 6.5-3.5 6.5-9.5 6.5S2.5 12 2.5 12z"/><circle cx="12" cy="12" r="2.8"/>',
+  link: '<path d="M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1"/><path d="M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1"/>',
+  users: '<circle cx="9" cy="8.5" r="3.2"/><path d="M3.5 19a5.5 5.5 0 0 1 11 0"/><path d="M15.5 5.6a3.2 3.2 0 0 1 0 5.8M17.5 14.2A5.5 5.5 0 0 1 20.5 19"/>',
+  close: '<path d="M6.5 6.5l11 11M17.5 6.5l-11 11"/>',
   sizeDown: '<path d="M4 18 9 6l5 12"/><path d="M5.8 14h6.4"/><path d="M16 12h5"/>',
   sizeUp: '<path d="M4 18 9 6l5 12"/><path d="M5.8 14h6.4"/><path d="M16 12h5M18.5 9.5v5"/>',
 };

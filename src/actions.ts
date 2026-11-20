@@ -14,6 +14,7 @@ export const canEditText = (it: Item | undefined) => isTextual(it) || it?.type =
 // ---------------------------------------------------------------- tools & selection
 
 export function setTool(t: Tool) {
+  if (!canEdit() && t !== 'select' && t !== 'hand') return;
   if (S.editing) stopEditing();
   S.tool = t;
   if (t !== 'select' && t !== 'hand') S.selected.clear();
@@ -38,6 +39,7 @@ export function selectionItems(): Item[] {
 }
 
 export function deleteSelection() {
+  if (!canEdit()) return;
   if (!S.selected.size) return;
   stopEditing();
   checkpoint();
@@ -68,6 +70,7 @@ export function cloneItems(src: Item[], dx: number, dy: number): Item[] {
 
 /** Caller is responsible for checkpoint(). */
 export function duplicateSelection(offset: number) {
+  if (!canEdit()) return;
   stopEditing();
   const out = cloneItems(selectionItems(), offset, offset);
   if (!out.length) return;
@@ -77,6 +80,7 @@ export function duplicateSelection(offset: number) {
 }
 
 export function pasteItems(items: Item[], at: { x: number; y: number }) {
+  if (!canEdit()) return;
   const nodes = items.filter(isNode);
   if (!nodes.length) return;
   const b = unionBox(nodes);
@@ -89,6 +93,7 @@ export function pasteItems(items: Item[], at: { x: number; y: number }) {
 }
 
 export function reorder(front: boolean) {
+  if (!canEdit()) return;
   if (!S.selected.size) return;
   checkpoint();
   const sel = S.items.filter((i) => S.selected.has(i.id));
@@ -98,6 +103,7 @@ export function reorder(front: boolean) {
 }
 
 export function nudge(dx: number, dy: number) {
+  if (!canEdit()) return;
   const nodes = S.items.filter((i): i is NodeItem => isNode(i) && S.selected.has(i.id));
   if (!nodes.length) return;
   checkpoint();
@@ -108,6 +114,7 @@ export function nudge(dx: number, dy: number) {
 // ---------------------------------------------------------------- style
 
 export function setColor(c: ColorKey) {
+  if (!canEdit()) return;
   const its = S.items.filter((i) => S.selected.has(i.id) && 'color' in i) as (Item & { color: ColorKey })[];
   if (!its.length) return;
   checkpoint();
@@ -119,6 +126,7 @@ export function setColor(c: ColorKey) {
 }
 
 export function setShape(kind: ShapeKind) {
+  if (!canEdit()) return;
   const its = S.items.filter((i) => S.selected.has(i.id) && i.type === 'shape');
   if (!its.length) return;
   checkpoint();
@@ -127,6 +135,7 @@ export function setShape(kind: ShapeKind) {
 }
 
 export function bumpFont(f: number) {
+  if (!canEdit()) return;
   const its = S.items.filter((i) => S.selected.has(i.id) && 'fs' in i) as (Item & { fs: number })[];
   if (!its.length) return;
   checkpoint();
@@ -176,6 +185,7 @@ export function siblingOf(src: NodeItem): NodeItem {
 export type Side = 'n' | 'e' | 's' | 'w';
 
 export function createSibling(id: string, side: Side = 'e') {
+  if (!canEdit()) return;
   const src = getItem(id);
   if (!isNode(src) || src.type === 'stroke') return;
   stopEditing();
@@ -220,6 +230,7 @@ function panIntoView(b: Box) {
 // ---------------------------------------------------------------- text editing
 
 export function startEditing(id: string) {
+  if (!canEdit()) return;
   const it = getItem(id);
   if (!canEditText(it)) return;
   if (S.editing && S.editing !== id) stopEditing();
@@ -416,6 +427,7 @@ export async function importBoard(file: File) {
 }
 
 export function clearBoard() {
+  if (!canEdit()) return;
   if (!S.items.length) return;
   stopEditing();
   checkpoint();

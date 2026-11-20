@@ -8,6 +8,7 @@ import { buildUI, showOverlay, updateToolUI } from './ui';
 import { initInput } from './input';
 import { api, events, session } from './net';
 import { openBoard, restoreCamera } from './boards';
+import { initCollab } from './collab';
 import { blobGet, kvGet, kvSet } from './db';
 import type { Item } from './types';
 
@@ -35,6 +36,7 @@ async function main() {
   loadPrefs();
   paintLogos();
   buildUI();
+  initCollab();
   initInput();
   updateToolUI();
   applyCamera();

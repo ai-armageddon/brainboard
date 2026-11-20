@@ -26,6 +26,7 @@
         </div>
       </div>
       <div id="marquee"></div>
+      <div id="cursors"></div>
       <div id="hint">
         <span class="logo xl"></span>
         <div class="hint-title">Think out loud.</div>
@@ -46,6 +47,15 @@
       </button>
     </header>
 
+    <div id="collab" class="panel solo">
+      <div id="avatars"></div>
+      <span id="role-badge" class="role-badge" hidden></span>
+      <button id="present-btn" class="cbtn" data-tip="Present · everyone follows you" aria-label="Present"></button>
+      <button id="share-btn" class="share-btn owner-only" aria-label="Share">Share</button>
+    </div>
+    <div id="follow-banner" class="panel" hidden></div>
+    <div id="peer-pop" class="panel" hidden></div>
+
     <div id="menu" class="panel" role="menu" hidden>
       <div class="owner-only">
         <div class="menu-label">Boards</div>
@@ -56,7 +66,7 @@
       </div>
       <button data-action="fit">Zoom to fit <kbd>⇧1</kbd></button>
       <button data-action="export">Export board…</button>
-      <button data-action="import">Import board…</button>
+      <button data-action="import" class="owner-only">Import board…</button>
       <button data-action="theme">Theme <span id="theme-label" class="muted">Auto</span></button>
       <button data-action="shortcuts">Keyboard shortcuts <kbd>?</kbd></button>
       <hr />
@@ -67,6 +77,16 @@
       <div class="menu-foot"><span class="wordmark">brain<span>board</span></span><span class="muted">v0.3</span></div>
     </div>
 
+    <div id="share" hidden>
+      <div class="panel sheet share-sheet" role="dialog" aria-labelledby="share-title">
+        <div class="sheet-head">
+          <h2><span class="logo"></span><span id="share-title">Share</span></h2>
+          <button class="close" aria-label="Close">Esc</button>
+        </div>
+        <div class="share-body"></div>
+      </div>
+    </div>
+
     <div id="overlay" hidden></div>
     <div id="splash" aria-hidden="true"><span class="logo xl"></span></div>
 
@@ -74,17 +94,17 @@
       <button class="tbtn" data-tool="select" data-icon="select" data-tip="Select · V" aria-label="Select"></button>
       <button class="tbtn" data-tool="hand" data-icon="hand" data-tip="Pan · H or hold Space" aria-label="Pan"></button>
       <span class="sep"></span>
-      <button class="tbtn" data-tool="pen" data-icon="pen" data-tip="Pen · P" aria-label="Pen"></button>
-      <button class="tbtn" data-tool="eraser" data-icon="eraser" data-tip="Eraser · E" aria-label="Eraser"></button>
+      <button class="tbtn edit-tool" data-tool="pen" data-icon="pen" data-tip="Pen · P" aria-label="Pen"></button>
+      <button class="tbtn edit-tool" data-tool="eraser" data-icon="eraser" data-tip="Eraser · E" aria-label="Eraser"></button>
       <span class="sep"></span>
-      <button class="tbtn" data-tool="note" data-icon="note" data-tip="Sticky note · N" aria-label="Sticky note"></button>
-      <button class="tbtn" data-tool="text" data-icon="text" data-tip="Text · T" aria-label="Text"></button>
-      <button id="img-btn" class="tbtn" data-icon="image" data-tip="Image · I (or just paste)" aria-label="Image"></button>
+      <button class="tbtn edit-tool" data-tool="note" data-icon="note" data-tip="Sticky note · N" aria-label="Sticky note"></button>
+      <button class="tbtn edit-tool" data-tool="text" data-icon="text" data-tip="Text · T" aria-label="Text"></button>
+      <button id="img-btn" class="tbtn edit-tool" data-icon="image" data-tip="Image · I (or just paste)" aria-label="Image"></button>
       <span class="sep"></span>
-      <button class="tbtn" data-tool="ellipse" data-icon="ellipse" data-tip="Bubble · O" aria-label="Bubble"></button>
-      <button class="tbtn" data-tool="rect" data-icon="rect" data-tip="Box · R" aria-label="Box"></button>
-      <button class="tbtn" data-tool="diamond" data-icon="diamond" data-tip="Decision · D" aria-label="Decision"></button>
-      <button class="tbtn" data-tool="connect" data-icon="connect" data-tip="Connector · C" aria-label="Connector"></button>
+      <button class="tbtn edit-tool" data-tool="ellipse" data-icon="ellipse" data-tip="Bubble · O" aria-label="Bubble"></button>
+      <button class="tbtn edit-tool" data-tool="rect" data-icon="rect" data-tip="Box · R" aria-label="Box"></button>
+      <button class="tbtn edit-tool" data-tool="diamond" data-icon="diamond" data-tip="Decision · D" aria-label="Decision"></button>
+      <button class="tbtn edit-tool" data-tool="connect" data-icon="connect" data-tip="Connector · C" aria-label="Connector"></button>
     </nav>
 
     <div id="penbar" class="panel" hidden></div>

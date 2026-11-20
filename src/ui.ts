@@ -10,6 +10,7 @@ import { clamp } from './geometry';
 import { api, events, saveProfile, session, type BoardMeta } from './net';
 import { openBoard, saveCamera } from './boards';
 import { paintLogos } from './brand';
+import { userMovedCamera } from './collab';
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
 
@@ -180,10 +181,10 @@ export function buildUI() {
 
   $('undo-btn').addEventListener('click', undo);
   $('redo-btn').addEventListener('click', redo);
-  $('zoom-in').addEventListener('click', () => zoomBy(1.25));
-  $('zoom-out').addEventListener('click', () => zoomBy(0.8));
-  $('zoom-fit').addEventListener('click', zoomToFit);
-  zoomLabel.addEventListener('click', () => setZoom(1));
+  $('zoom-in').addEventListener('click', () => { if (userMovedCamera()) zoomBy(1.25); });
+  $('zoom-out').addEventListener('click', () => { if (userMovedCamera()) zoomBy(0.8); });
+  $('zoom-fit').addEventListener('click', () => { if (userMovedCamera()) zoomToFit(); });
+  zoomLabel.addEventListener('click', () => { if (userMovedCamera()) setZoom(1); });
 
   $('menu-btn').addEventListener('click', (e) => {
     e.stopPropagation();
@@ -197,7 +198,7 @@ export function buildUI() {
     const act = b.dataset.action;
     if (act !== 'theme') closePopovers();
     switch (act) {
-      case 'fit': zoomToFit(); break;
+      case 'fit': if (userMovedCamera()) zoomToFit(); break;
       case 'export': void exportBoard(); break;
       case 'import': fileBoard.click(); break;
       case 'theme': {

@@ -9,6 +9,8 @@ import {
 } from './actions';
 import { clamp, contains, distToSeg, edgeGeom, strokePath, unionBox } from './geometry';
 import { closePopovers, openImagePicker, toggleShortcuts } from './ui';
+import { canEdit } from './net';
+import { userMovedCamera } from './collab';
 
 type Drag =
   | { kind: 'pan'; lx: number; ly: number }
@@ -50,18 +52,20 @@ function onDown(e: PointerEvent) {
 
   if (e.button === 1 || (e.button === 0 && (S.space || S.tool === 'hand'))) {
     e.preventDefault();
+    if (!userMovedCamera()) return;
     begin({ kind: 'pan', lx: e.clientX, ly: e.clientY }, e);
     return;
   }
   if (e.button !== 0) return;
+  const ro = !canEdit();
 
   const handle = t.closest<HTMLElement>('.handle');
-  if (handle) { beginResize(handle.dataset.corner!, e); return; }
+  if (handle && !ro) { beginResize(handle.dataset.corner!, e); return; }
 
   const itemEl = t.closest<HTMLElement>('[data-id]');
   const id = itemEl?.dataset.id ?? null;
   const port = t.closest<HTMLElement>('.port');
-  if (port && id) {
+  if (port && id && !ro) {
     begin({ kind: 'connect', from: id, side: port.dataset.side as Side, sx: e.clientX, sy: e.clientY, moved: false, target: null }, e);
     return;
   }
@@ -87,7 +91,10 @@ function onDown(e: PointerEvent) {
       return;
     case 'select':
     case 'hand':
-      if (id) {
+      if (id && ro) {
+        S.selected = e.shiftKey ? new Set([...S.selected, id]) : new Set([id]);
+        requestRender();
+      } else if (id) {
         const wasSelected = S.selected.has(id);
         if (e.shiftKey) {
           if (wasSelected) { S.selected.delete(id); requestRender(); return; }
@@ -419,9 +426,13 @@ function onKeyDown(e: KeyboardEvent) {
     return;
   }
   if (isEditableTarget(e.target)) return;
+  const ro = !canEdit();
 
   if (mod) {
-    switch (e.key.toLowerCase()) {
+    const k = e.key.toLowerCase();
+    if (ro && ['z', 'y', 'd', 'x'].includes(k)) { e.preventDefault(); return; }
+    if (['=', '+', '-', '0'].includes(k) && !userMovedCamera()) { e.preventDefault(); return; }
+    switch (k) {
       case 'z': e.preventDefault(); if (e.shiftKey) redo(); else undo(); return;
       case 'y': e.preventDefault(); redo(); return;
       case 'd': e.preventDefault(); if (S.selected.size) { checkpoint(); duplicateSelection(16 / S.cam.z); } return;
@@ -441,6 +452,10 @@ function onKeyDown(e: KeyboardEvent) {
     return;
   }
 
+  if (ro && ['Delete', 'Backspace', 'Enter', 'Tab', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', '[', ']'].includes(e.key)) {
+    if (e.key === 'Tab') e.preventDefault();
+    return;
+  }
   switch (e.key) {
     case 'Escape':
       closePopovers();
@@ -475,10 +490,10 @@ function onKeyDown(e: KeyboardEvent) {
     case '[': reorder(false); return;
     case '?': toggleShortcuts(); return;
   }
-  if (e.code === 'Digit1' && e.shiftKey) { e.preventDefault(); zoomToFit(); return; }
+  if (e.code === 'Digit1' && e.shiftKey) { e.preventDefault(); if (userMovedCamera()) zoomToFit(); return; }
 
   const k = e.key.toLowerCase();
-  if (k === 'i') { openImagePicker(); return; }
+  if (k === 'i') { if (!ro) openImagePicker(); return; }
   const tool = TOOL_KEYS[k];
   if (tool && !e.shiftKey) setTool(tool);
 }
@@ -504,7 +519,7 @@ function onCopy(e: ClipboardEvent, cut: boolean) {
   e.preventDefault();
   internalClip = structuredClone(items);
   e.clipboardData?.setData('text/plain', MARK + JSON.stringify(items));
-  if (cut) deleteSelection();
+  if (cut && canEdit()) deleteSelection();
 }
 
 function onPaste(e: ClipboardEvent) {
@@ -516,7 +531,7 @@ function onPaste(e: ClipboardEvent) {
     document.execCommand('insertText', false, dt.getData('text/plain'));
     return;
   }
-  if (isEditableTarget(e.target)) return;
+  if (isEditableTarget(e.target) || !canEdit()) return;
   e.preventDefault();
   const at = pointerWorld();
   const files = [...dt.files].filter((f) => f.type.startsWith('image/'));
@@ -554,6 +569,7 @@ export function initInput() {
   viewport.addEventListener('lostpointercapture', (e) => { if (drag) onUp(e); });
 
   viewport.addEventListener('dblclick', (e) => {
+    if (!canEdit()) return;
     const t = e.target as Element;
     if (t.closest('.txt.editing') || t.closest('.handle, .port')) return;
     const id = t.closest<HTMLElement>('[data-id]')?.dataset.id;
@@ -572,6 +588,7 @@ export function initInput() {
 
   viewport.addEventListener('wheel', (e) => {
     e.preventDefault();
+    if (!userMovedCamera()) return;
     const unit = e.deltaMode === 1 ? 16 : e.deltaMode === 2 ? innerHeight : 1;
     if (e.ctrlKey || e.metaKey) {
       zoomAt(e.clientX, e.clientY, S.cam.z * Math.exp(clamp(-e.deltaY * unit, -25, 25) * 0.01));
@@ -590,6 +607,7 @@ export function initInput() {
   viewport.addEventListener('gesturestart', (e) => { e.preventDefault(); gz = S.cam.z; });
   viewport.addEventListener('gesturechange', (e) => {
     e.preventDefault();
+    if (!userMovedCamera()) return;
     const ge = e as unknown as { scale: number; clientX: number; clientY: number };
     zoomAt(ge.clientX, ge.clientY, gz * ge.scale);
   });
@@ -614,6 +632,7 @@ export function initInput() {
   viewport.addEventListener('drop', (e) => {
     e.preventDefault();
     viewport.classList.remove('dropping');
+    if (!canEdit()) return;
     const files = [...(e.dataTransfer?.files ?? [])];
     const board = files.find((f) => f.name.endsWith('.json'));
     if (board) { void importBoard(board); return; }
