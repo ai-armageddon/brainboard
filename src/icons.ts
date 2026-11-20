@@ -1,0 +1,31 @@
+const P: Record<string, string> = {
+  select: '<path d="M5.5 4.5 19 10.2l-5.9 1.9-2 5.9z"/>',
+  hand: '<path d="M8 12.5V6a1.5 1.5 0 0 1 3 0v5.5"/><path d="M11 11V4.5a1.5 1.5 0 0 1 3 0V11"/><path d="M14 11V6a1.5 1.5 0 0 1 3 0v8a6 6 0 0 1-6 6h-.6a5.5 5.5 0 0 1-4.4-2.2l-2.6-3.6a1.5 1.5 0 0 1 2.4-1.8L8 14"/>',
+  pen: '<path d="M15.5 4.5a2.1 2.1 0 0 1 3 3L8 18l-4 1 1-4z"/><path d="m13.5 6.5 3 3"/>',
+  eraser: '<path d="M8.5 19.5 4.4 15.4a1.6 1.6 0 0 1 0-2.2L13.2 4.4a1.6 1.6 0 0 1 2.2 0l4.2 4.2a1.6 1.6 0 0 1 0 2.2L11 19.5z"/><path d="M8.5 19.5H20"/><path d="m9 8.6 6.4 6.4"/>',
+  note: '<path d="M4.5 5.5a1 1 0 0 1 1-1h13a1 1 0 0 1 1 1V14l-5.5 5.5h-8.5a1 1 0 0 1-1-1z"/><path d="M14 19.5V15a1 1 0 0 1 1-1h4.5"/>',
+  text: '<path d="M5 7V5h14v2"/><path d="M12 5v14"/><path d="M9.5 19h5"/>',
+  ellipse: '<ellipse cx="12" cy="12" rx="8.5" ry="6"/>',
+  pill: '<rect x="3.5" y="7.5" width="17" height="9" rx="4.5"/>',
+  rect: '<rect x="4" y="6" width="16" height="12" rx="2.5"/>',
+  diamond: '<path d="M12 3.5 20.5 12 12 20.5 3.5 12z"/>',
+  connect: '<circle cx="5.5" cy="18.5" r="2"/><path d="M7.3 17.2C9 11 12.5 7.5 18 6.5"/><path d="m15 4 3.4 2.4L16.2 10"/>',
+  image: '<rect x="3.5" y="4.5" width="17" height="15" rx="2.5"/><circle cx="9" cy="10" r="1.6"/><path d="m20.5 15.5-4.8-4.8L7 19.5"/>',
+  undo: '<path d="M9 14 4.5 9.5 9 5"/><path d="M4.5 9.5H15a4.5 4.5 0 0 1 0 9h-3"/>',
+  redo: '<path d="m15 14 4.5-4.5L15 5"/><path d="M19.5 9.5H9a4.5 4.5 0 0 0 0 9h3"/>',
+  plus: '<path d="M12 6v12M6 12h12"/>',
+  minus: '<path d="M6 12h12"/>',
+  fit: '<path d="M4.5 9V4.5H9"/><path d="M15 4.5h4.5V9"/><path d="M19.5 15v4.5H15"/><path d="M9 19.5H4.5V15"/>',
+  trash: '<path d="M4.5 7h15"/><path d="M10 11v5.5M14 11v5.5"/><path d="m6.5 7 .8 11.2a2 2 0 0 0 2 1.8h5.4a2 2 0 0 0 2-1.8L17.5 7"/><path d="M9.5 7V5a1 1 0 0 1 1-1h3a1 1 0 0 1 1 1v2"/>',
+  copy: '<rect x="8.5" y="8.5" width="11" height="11" rx="2"/><path d="M15.5 8.5V6.5a2 2 0 0 0-2-2h-7a2 2 0 0 0-2 2v7a2 2 0 0 0 2 2h2"/>',
+  front: '<rect x="9" y="9" width="11" height="11" rx="2" fill="currentColor" fill-opacity=".18"/><path d="M15 5.5V5a1 1 0 0 0-1-1H5a1 1 0 0 0-1 1v9a1 1 0 0 0 1 1h.5"/>',
+  back: '<rect x="4" y="4" width="11" height="11" rx="2" fill="currentColor" fill-opacity=".18"/><path d="M19 9h.5a.5.5 0 0 1 .5.5v10a.5.5 0 0 1-.5.5h-10a.5.5 0 0 1-.5-.5V19"/>',
+  type: '<path d="M4 7V5h10v2"/><path d="M9 5v12"/><path d="M13 13h7M16.5 13v6"/>',
+  chevron: '<path d="m8 10 4 4 4-4"/>',
+  sizeDown: '<path d="M4 18 9 6l5 12"/><path d="M5.8 14h6.4"/><path d="M16 12h5"/>',
+  sizeUp: '<path d="M4 18 9 6l5 12"/><path d="M5.8 14h6.4"/><path d="M16 12h5M18.5 9.5v5"/>',
+};
+
+export function icon(name: string, size = 20) {
+  return `<svg viewBox="0 0 24 24" width="${size}" height="${size}" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${P[name] ?? ''}</svg>`;
+}

@@ -1,0 +1,624 @@
+import { S, changed, checkpoint, getItem, redo, requestRender, undo } from './state';
+import type { Box, Item, NodeItem, StrokeItem, Tool } from './types';
+import { applyCamera, live, marquee, nodeElOf, viewport } from './render';
+import {
+  addImages, canEditText, createNode, createSibling, defaultSize, deleteSelection, duplicateSelection,
+  importBoard, isNode, isTextual, makeEdge, nudge, pasteItems, reorder, screenToWorld, selectAll,
+  selectionItems, setTool, siblingOf, startEditing, stopCamAnim, stopEditing, uid, zoomAt, zoomBy,
+  zoomToFit, setZoom, type Side,
+} from './actions';
+import { clamp, contains, distToSeg, edgeGeom, strokePath, unionBox } from './geometry';
+import { closePopovers, openImagePicker, toggleShortcuts } from './ui';
+
+type Drag =
+  | { kind: 'pan'; lx: number; ly: number }
+  | { kind: 'move'; sx: number; sy: number; started: boolean; orig: Map<string, { x: number; y: number }>; clickId: string; wasSelected: boolean; shift: boolean }
+  | { kind: 'marquee'; sx: number; sy: number; base: Set<string> }
+  | { kind: 'resize'; corner: string; start: Box; origs: Map<string, NodeItem> ; lock: boolean }
+  | { kind: 'draw'; pts: number[] }
+  | { kind: 'erase'; last: { x: number; y: number }; did: boolean }
+  | { kind: 'create'; tool: Tool; start: { x: number; y: number }; sx: number; sy: number; id: string | null }
+  | { kind: 'connect'; from: string; side: Side | null; sx: number; sy: number; moved: boolean; target: string | null };
+
+let drag: Drag | null = null;
+const pointer = { x: innerWidth / 2, y: innerHeight / 2 };
+let internalClip: Item[] | null = null;
+const MARK = 'brainboard/v1:';
+
+const isEditableTarget = (t: EventTarget | null) =>
+  t instanceof HTMLElement && !!t.closest('input, textarea, [contenteditable="true"], [contenteditable="plaintext-only"]');
+
+function begin(d: Drag, e: PointerEvent) {
+  drag = d;
+  viewport.setPointerCapture(e.pointerId);
+  if (d.kind === 'pan') viewport.classList.add('panning');
+}
+
+function setBusy(on: boolean) {
+  document.body.classList.toggle('busy', on);
+}
+
+// ------------------------------------------------------------------ pointer down
+
+function onDown(e: PointerEvent) {
+  const t = e.target as Element;
+  if (t.closest('.txt.editing')) return;
+  closePopovers();
+  if (S.editing) stopEditing();
+  stopCamAnim();
+  const p = screenToWorld(e.clientX, e.clientY);
+
+  if (e.button === 1 || (e.button === 0 && (S.space || S.tool === 'hand'))) {
+    e.preventDefault();
+    begin({ kind: 'pan', lx: e.clientX, ly: e.clientY }, e);
+    return;
+  }
+  if (e.button !== 0) return;
+
+  const handle = t.closest<HTMLElement>('.handle');
+  if (handle) { beginResize(handle.dataset.corner!, e); return; }
+
+  const itemEl = t.closest<HTMLElement>('[data-id]');
+  const id = itemEl?.dataset.id ?? null;
+  const port = t.closest<HTMLElement>('.port');
+  if (port && id) {
+    begin({ kind: 'connect', from: id, side: port.dataset.side as Side, sx: e.clientX, sy: e.clientY, moved: false, target: null }, e);
+    return;
+  }
+
+  switch (S.tool) {
+    case 'pen':
+      begin({ kind: 'draw', pts: [p.x, p.y] }, e);
+      drawLive([p.x, p.y]);
+      return;
+    case 'eraser':
+      begin({ kind: 'erase', last: p, did: false }, e);
+      eraseAlong(drag as Extract<Drag, { kind: 'erase' }>, p);
+      return;
+    case 'note': case 'text': case 'ellipse': case 'rect': case 'diamond':
+      begin({ kind: 'create', tool: S.tool, start: p, sx: e.clientX, sy: e.clientY, id: null }, e);
+      return;
+    case 'connect':
+      if (id && isNode(getItem(id))) {
+        begin({ kind: 'connect', from: id, side: null, sx: e.clientX, sy: e.clientY, moved: false, target: null }, e);
+      } else {
+        begin({ kind: 'pan', lx: e.clientX, ly: e.clientY }, e);
+      }
+      return;
+    case 'select':
+    case 'hand':
+      if (id) {
+        const wasSelected = S.selected.has(id);
+        if (e.shiftKey) {
+          if (wasSelected) { S.selected.delete(id); requestRender(); return; }
+          S.selected.add(id);
+        } else if (!wasSelected) {
+          S.selected = new Set([id]);
+        }
+        requestRender();
+        begin({ kind: 'move', sx: e.clientX, sy: e.clientY, started: false, orig: new Map(), clickId: id, wasSelected, shift: e.shiftKey }, e);
+      } else {
+        const base = e.shiftKey ? new Set(S.selected) : new Set<string>();
+        if (!e.shiftKey && S.selected.size) { S.selected.clear(); requestRender(); }
+        begin({ kind: 'marquee', sx: e.clientX, sy: e.clientY, base }, e);
+      }
+  }
+}
+
+function beginResize(corner: string, e: PointerEvent) {
+  const nodes = S.items.filter((i): i is NodeItem => isNode(i) && S.selected.has(i.id));
+  if (!nodes.length) return;
+  checkpoint();
+  const origs = new Map(nodes.map((n) => [n.id, structuredClone(n)]));
+  const lock = nodes.length > 1 || nodes.some((n) => n.type === 'image' || n.type === 'text' || n.type === 'stroke');
+  begin({ kind: 'resize', corner, start: unionBox(nodes), origs, lock }, e);
+  setBusy(true);
+}
+
+// ------------------------------------------------------------------ pointer move
+
+function onMove(e: PointerEvent) {
+  pointer.x = e.clientX;
+  pointer.y = e.clientY;
+  if (!drag) return;
+  const z = S.cam.z;
+  const p = screenToWorld(e.clientX, e.clientY);
+
+  switch (drag.kind) {
+    case 'pan':
+      S.cam.x += e.clientX - drag.lx;
+      S.cam.y += e.clientY - drag.ly;
+      drag.lx = e.clientX;
+      drag.ly = e.clientY;
+      applyCamera();
+      return;
+
+    case 'move': {
+      const dxs = e.clientX - drag.sx, dys = e.clientY - drag.sy;
+      if (!drag.started) {
+        if (Math.hypot(dxs, dys) < 3) return;
+        drag.started = true;
+        checkpoint();
+        if (e.altKey) duplicateSelection(0); // alt-drag leaves a copy behind
+        for (const id of S.selected) {
+          const it = getItem(id);
+          if (isNode(it)) drag.orig.set(id, { x: it.x, y: it.y });
+        }
+        setBusy(true);
+      }
+      for (const [id, o] of drag.orig) {
+        const it = getItem(id) as NodeItem | undefined;
+        if (it) { it.x = o.x + dxs / z; it.y = o.y + dys / z; }
+      }
+      changed();
+      return;
+    }
+
+    case 'marquee': {
+      const x0 = Math.min(drag.sx, e.clientX), y0 = Math.min(drag.sy, e.clientY);
+      const w = Math.abs(e.clientX - drag.sx), h = Math.abs(e.clientY - drag.sy);
+      Object.assign(marquee.style, { display: 'block', transform: `translate(${x0}px,${y0}px)`, width: `${w}px`, height: `${h}px` });
+      const a = screenToWorld(x0, y0);
+      const rect = { x: a.x, y: a.y, w: w / z, h: h / z };
+      const sel = new Set(drag.base);
+      for (const it of S.items) if (isNode(it) && contains(rect, it)) sel.add(it.id);
+      S.selected = sel;
+      requestRender();
+      return;
+    }
+
+    case 'resize':
+      doResize(drag, p, e.shiftKey);
+      return;
+
+    case 'draw': {
+      const evs = e.getCoalescedEvents?.() ?? [e];
+      const pts = drag.pts;
+      for (const ev of evs) {
+        const q = screenToWorld(ev.clientX, ev.clientY);
+        const lx = pts[pts.length - 2], ly = pts[pts.length - 1];
+        if (Math.hypot(q.x - lx, q.y - ly) * z < 1.5) continue;
+        pts.push(q.x, q.y);
+      }
+      drawLive(pts);
+      return;
+    }
+
+    case 'erase':
+      eraseAlong(drag, p);
+      return;
+
+    case 'create': {
+      if (drag.tool === 'text') return;
+      if (!drag.id && Math.hypot(e.clientX - drag.sx, e.clientY - drag.sy) < 6) return;
+      let w = Math.abs(p.x - drag.start.x), h = Math.abs(p.y - drag.start.y);
+      if (e.shiftKey) w = h = Math.max(w, h);
+      const min = 24 / z;
+      w = Math.max(w, min); h = Math.max(h, min);
+      const x = p.x < drag.start.x ? drag.start.x - w : drag.start.x;
+      const y = p.y < drag.start.y ? drag.start.y - h : drag.start.y;
+      if (!drag.id) {
+        checkpoint();
+        const kind = drag.tool === 'note' ? 'note' : (drag.tool as 'ellipse' | 'rect' | 'diamond');
+        drag.id = createNode(kind, { x, y, w, h }).id;
+        S.selected = new Set([drag.id]);
+        setBusy(true);
+      }
+      const it = getItem(drag.id) as NodeItem;
+      Object.assign(it, { x, y, w, h });
+      changed();
+      return;
+    }
+
+    case 'connect': {
+      if (!drag.moved && Math.hypot(e.clientX - drag.sx, e.clientY - drag.sy) > 6) {
+        drag.moved = true;
+        setBusy(true);
+      }
+      if (!drag.moved) return;
+      const under = document.elementFromPoint(e.clientX, e.clientY)?.closest<HTMLElement>('#items [data-id]');
+      const tid = under?.dataset.id ?? null;
+      const target = tid && tid !== drag.from ? tid : null;
+      if (target !== drag.target) {
+        if (drag.target) nodeElOf(drag.target)?.classList.remove('connect-target');
+        if (target) nodeElOf(target)?.classList.add('connect-target');
+        drag.target = target;
+      }
+      const src = getItem(drag.from) as NodeItem;
+      const dst = target ? (getItem(target) as NodeItem) : { x: p.x, y: p.y, w: 0, h: 0 };
+      const sw = makeEdge(drag.from, drag.from).sw;
+      const g = edgeGeom(src, dst, sw);
+      live.edge.setAttribute('d', g.d);
+      live.arrow.setAttribute('d', g.arrow);
+      live.edge.style.strokeWidth = `${sw}px`;
+      return;
+    }
+  }
+}
+
+function doResize(d: Extract<Drag, { kind: 'resize' }>, p: { x: number; y: number }, shift: boolean) {
+  const s = d.start;
+  const min = 12 / S.cam.z;
+  let x0 = s.x, y0 = s.y, x1 = s.x + s.w, y1 = s.y + s.h;
+  const west = d.corner.includes('w'), north = d.corner.includes('n');
+  if (west) x0 = Math.min(p.x, x1 - min); else x1 = Math.max(p.x, x0 + min);
+  if (north) y0 = Math.min(p.y, y1 - min); else y1 = Math.max(p.y, y0 + min);
+  let sx = (x1 - x0) / (s.w || 1), sy = (y1 - y0) / (s.h || 1);
+  if (d.lock !== shift) {
+    const k = Math.max(sx, sy);
+    sx = sy = k;
+    if (west) x0 = x1 - s.w * k; else x1 = x0 + s.w * k;
+    if (north) y0 = y1 - s.h * k; else y1 = y0 + s.h * k;
+  }
+  const multi = d.origs.size > 1;
+  for (const [id, o] of d.origs) {
+    const it = getItem(id) as NodeItem | undefined;
+    if (!it) continue;
+    it.x = x0 + (o.x - s.x) * sx;
+    it.y = y0 + (o.y - s.y) * sy;
+    it.w = o.w * sx;
+    it.h = o.h * sy;
+    if (it.type === 'stroke' && o.type === 'stroke') it.points = o.points.map((v, i) => (i % 2 ? v * sy : v * sx));
+    if (it.type === 'text' && o.type === 'text') it.fs = o.fs * sx;
+    else if (multi && 'fs' in it && 'fs' in o) it.fs = o.fs * Math.min(sx, sy);
+  }
+  changed();
+}
+
+// ------------------------------------------------------------------ pointer up
+
+function onUp(e: PointerEvent) {
+  const d = drag;
+  if (!d) return;
+  drag = null;
+  setBusy(false);
+  viewport.classList.remove('panning');
+  const p = screenToWorld(e.clientX, e.clientY);
+
+  switch (d.kind) {
+    case 'move':
+      if (!d.started && !d.shift && d.wasSelected && S.selected.size > 1) S.selected = new Set([d.clickId]);
+      break;
+    case 'marquee':
+      marquee.style.display = 'none';
+      break;
+    case 'draw':
+      live.stroke.setAttribute('d', '');
+      if (e.type !== 'pointercancel') finishStroke(d.pts);
+      break;
+    case 'create': {
+      let id = d.id;
+      if (!id) {
+        checkpoint();
+        if (d.tool === 'text') {
+          const fs = 22 / S.cam.z;
+          id = createNode('text', { x: d.start.x - fs * 0.2, y: d.start.y - fs * 0.75, w: 0, h: 0 }).id;
+        } else {
+          const kind = d.tool === 'note' ? 'note' : (d.tool as 'ellipse' | 'rect' | 'diamond');
+          const sz = defaultSize(kind);
+          id = createNode(kind, { x: d.start.x - sz.w / 2, y: d.start.y - sz.h / 2, ...sz }).id;
+        }
+      }
+      setTool('select');
+      startEditing(id);
+      break;
+    }
+    case 'connect':
+      live.edge.setAttribute('d', '');
+      live.arrow.setAttribute('d', '');
+      finishConnect(d, p);
+      break;
+  }
+  requestRender();
+}
+
+function finishConnect(d: Extract<Drag, { kind: 'connect' }>, p: { x: number; y: number }) {
+  if (d.target) {
+    nodeElOf(d.target)?.classList.remove('connect-target');
+    const dup = S.items.some((i) => i.type === 'edge' && i.from === d.from && i.to === d.target);
+    if (!dup) {
+      checkpoint();
+      S.items.push(makeEdge(d.from, d.target));
+    }
+    S.selected = new Set([d.target]);
+    changed();
+    return;
+  }
+  const src = getItem(d.from);
+  if (!isNode(src)) return;
+  if (d.moved) {
+    // Dropped on empty canvas: grow a new connected bubble there.
+    const n = siblingOf(src);
+    n.x = p.x - n.w / 2;
+    n.y = p.y - n.h / 2;
+    checkpoint();
+    S.items.push(n, makeEdge(src.id, n.id));
+    S.selected = new Set([n.id]);
+    if (S.tool !== 'select') setTool('select');
+    changed();
+    if (isTextual(n)) startEditing(n.id);
+  } else if (d.side) {
+    createSibling(d.from, d.side);
+  }
+}
+
+// ------------------------------------------------------------------ pen & eraser
+
+function drawLive(pts: number[]) {
+  live.stroke.setAttribute('d', strokePath(pts.length === 2 ? [...pts, pts[0] + 0.01, pts[1]] : pts));
+  live.stroke.style.strokeWidth = `${S.pen.size / S.cam.z}px`;
+  live.stroke.style.stroke = `var(--s-${S.pen.color})`;
+}
+
+function finishStroke(pts: number[]) {
+  if (pts.length === 2) pts.push(pts[0] + 0.01, pts[1]);
+  const size = S.pen.size / S.cam.z;
+  let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+  for (let i = 0; i < pts.length; i += 2) {
+    x0 = Math.min(x0, pts[i]); x1 = Math.max(x1, pts[i]);
+    y0 = Math.min(y0, pts[i + 1]); y1 = Math.max(y1, pts[i + 1]);
+  }
+  const pad = size / 2 + 1 / S.cam.z;
+  const x = x0 - pad, y = y0 - pad;
+  const rel = pts.map((v, i) => Math.round((i % 2 ? v - y : v - x) * 100) / 100);
+  checkpoint();
+  const stroke: StrokeItem = { id: uid(), type: 'stroke', x, y, w: x1 - x0 + pad * 2, h: y1 - y0 + pad * 2, points: rel, color: S.pen.color, size };
+  S.items.push(stroke);
+  changed();
+}
+
+function eraseAlong(d: Extract<Drag, { kind: 'erase' }>, p: { x: number; y: number }) {
+  const z = S.cam.z;
+  const dist = Math.hypot(p.x - d.last.x, p.y - d.last.y);
+  const steps = Math.max(1, Math.ceil((dist * z) / 4));
+  const hits = new Set<string>();
+  for (let s = 0; s <= steps; s++) {
+    const qx = d.last.x + ((p.x - d.last.x) * s) / steps;
+    const qy = d.last.y + ((p.y - d.last.y) * s) / steps;
+    for (const it of S.items) {
+      if (it.type !== 'stroke' || hits.has(it.id)) continue;
+      const r = it.size / 2 + 8 / z;
+      if (qx < it.x - r || qx > it.x + it.w + r || qy < it.y - r || qy > it.y + it.h + r) continue;
+      const pt = it.points;
+      for (let i = 0; i + 3 < pt.length; i += 2) {
+        if (distToSeg(qx, qy, it.x + pt[i], it.y + pt[i + 1], it.x + pt[i + 2], it.y + pt[i + 3]) <= r) {
+          hits.add(it.id);
+          break;
+        }
+      }
+    }
+  }
+  d.last = p;
+  if (!hits.size) return;
+  if (!d.did) { checkpoint(); d.did = true; }
+  S.items = S.items.filter((i) => !hits.has(i.id));
+  changed();
+}
+
+// ------------------------------------------------------------------ keyboard
+
+const TOOL_KEYS: Record<string, Tool> = {
+  v: 'select', h: 'hand', p: 'pen', e: 'eraser', n: 'note', t: 'text',
+  o: 'ellipse', r: 'rect', d: 'diamond', c: 'connect',
+};
+
+function onKeyDown(e: KeyboardEvent) {
+  const mod = e.metaKey || e.ctrlKey;
+
+  if (S.editing) {
+    if (e.key === 'Escape' || (e.key === 'Enter' && mod)) {
+      e.preventDefault();
+      stopEditing();
+    } else if (e.key === 'Tab') {
+      const it = getItem(S.editing);
+      if (it && (it.type === 'shape' || it.type === 'note')) {
+        e.preventDefault();
+        createSibling(it.id, e.shiftKey ? 's' : 'e');
+      }
+    }
+    return;
+  }
+  if (isEditableTarget(e.target)) return;
+
+  if (mod) {
+    switch (e.key.toLowerCase()) {
+      case 'z': e.preventDefault(); if (e.shiftKey) redo(); else undo(); return;
+      case 'y': e.preventDefault(); redo(); return;
+      case 'd': e.preventDefault(); if (S.selected.size) { checkpoint(); duplicateSelection(16 / S.cam.z); } return;
+      case 'a': e.preventDefault(); if (S.tool !== 'select') setTool('select'); selectAll(); return;
+      case '=': case '+': e.preventDefault(); zoomBy(1.25); return;
+      case '-': e.preventDefault(); zoomBy(0.8); return;
+      case '0': e.preventDefault(); setZoom(1); return;
+      case 'c': case 'x': if (S.selected.size) internalClip = structuredClone(selectionItems()); return;
+    }
+    return;
+  }
+  if (e.altKey) return;
+
+  if (e.key === ' ') {
+    e.preventDefault();
+    if (!S.space) { S.space = true; viewport.classList.add('space'); }
+    return;
+  }
+
+  switch (e.key) {
+    case 'Escape':
+      closePopovers();
+      if (S.tool !== 'select') setTool('select');
+      if (S.selected.size) { S.selected.clear(); requestRender(); }
+      return;
+    case 'Delete': case 'Backspace':
+      e.preventDefault();
+      deleteSelection();
+      return;
+    case 'Enter': {
+      const id = S.selected.size === 1 ? [...S.selected][0] : null;
+      if (id && canEditText(getItem(id))) { e.preventDefault(); startEditing(id); }
+      return;
+    }
+    case 'Tab': {
+      const id = S.selected.size === 1 ? [...S.selected][0] : null;
+      if (id && isNode(getItem(id))) { e.preventDefault(); createSibling(id, e.shiftKey ? 's' : 'e'); }
+      else e.preventDefault();
+      return;
+    }
+    case 'ArrowUp': case 'ArrowDown': case 'ArrowLeft': case 'ArrowRight': {
+      if (!S.selected.size) return;
+      e.preventDefault();
+      const step = (e.shiftKey ? 10 : 1) / S.cam.z;
+      const dx = e.key === 'ArrowLeft' ? -step : e.key === 'ArrowRight' ? step : 0;
+      const dy = e.key === 'ArrowUp' ? -step : e.key === 'ArrowDown' ? step : 0;
+      nudge(dx, dy);
+      return;
+    }
+    case ']': reorder(true); return;
+    case '[': reorder(false); return;
+    case '?': toggleShortcuts(); return;
+  }
+  if (e.code === 'Digit1' && e.shiftKey) { e.preventDefault(); zoomToFit(); return; }
+
+  const k = e.key.toLowerCase();
+  if (k === 'i') { openImagePicker(); return; }
+  const tool = TOOL_KEYS[k];
+  if (tool && !e.shiftKey) setTool(tool);
+}
+
+function onKeyUp(e: KeyboardEvent) {
+  if (e.key === ' ') {
+    S.space = false;
+    viewport.classList.remove('space');
+  }
+}
+
+// ------------------------------------------------------------------ clipboard & drop
+
+function pointerWorld() {
+  const inside = pointer.x > 0 && pointer.y > 0 && pointer.x < innerWidth && pointer.y < innerHeight;
+  return screenToWorld(inside ? pointer.x : innerWidth / 2, inside ? pointer.y : innerHeight / 2);
+}
+
+function onCopy(e: ClipboardEvent, cut: boolean) {
+  if (S.editing || isEditableTarget(e.target)) return;
+  const items = selectionItems();
+  if (!items.length) return;
+  e.preventDefault();
+  internalClip = structuredClone(items);
+  e.clipboardData?.setData('text/plain', MARK + JSON.stringify(items));
+  if (cut) deleteSelection();
+}
+
+function onPaste(e: ClipboardEvent) {
+  const dt = e.clipboardData;
+  if (!dt) return;
+  if (S.editing) {
+    // keep pasted text plain inside notes/bubbles
+    e.preventDefault();
+    document.execCommand('insertText', false, dt.getData('text/plain'));
+    return;
+  }
+  if (isEditableTarget(e.target)) return;
+  e.preventDefault();
+  const at = pointerWorld();
+  const files = [...dt.files].filter((f) => f.type.startsWith('image/'));
+  if (files.length) { void addImages(files, at); return; }
+
+  const text = dt.getData('text/plain');
+  if (text.startsWith(MARK)) {
+    try { pasteItems(JSON.parse(text.slice(MARK.length)), at); } catch { /* ignore */ }
+    return;
+  }
+  if (!text.trim()) {
+    if (internalClip) pasteItems(internalClip, at);
+    return;
+  }
+  checkpoint();
+  const long = text.length > 60 || text.includes('\n');
+  const k = 1 / S.cam.z;
+  const it = long
+    ? createNode('note', { x: at.x - 140 * k, y: at.y - 60 * k, w: 280 * k, h: 120 * k })
+    : createNode('text', { x: at.x, y: at.y, w: 0, h: 0 });
+  it.text = text.replace(/\r\n/g, '\n').trimEnd();
+  if (S.tool !== 'select') setTool('select');
+  S.selected = new Set([it.id]);
+  changed();
+}
+
+// ------------------------------------------------------------------ setup
+
+export function initInput() {
+  viewport.addEventListener('pointerdown', onDown);
+  viewport.addEventListener('pointermove', onMove);
+  window.addEventListener('pointermove', (e) => { pointer.x = e.clientX; pointer.y = e.clientY; }, { passive: true });
+  viewport.addEventListener('pointerup', onUp);
+  viewport.addEventListener('pointercancel', onUp);
+  viewport.addEventListener('lostpointercapture', (e) => { if (drag) onUp(e); });
+
+  viewport.addEventListener('dblclick', (e) => {
+    const t = e.target as Element;
+    if (t.closest('.txt.editing') || t.closest('.handle, .port')) return;
+    const id = t.closest<HTMLElement>('[data-id]')?.dataset.id;
+    if (id) {
+      if (canEditText(getItem(id))) startEditing(id);
+      return;
+    }
+    if (S.tool === 'select') {
+      const p = screenToWorld(e.clientX, e.clientY);
+      const fs = 22 / S.cam.z;
+      checkpoint();
+      const it = createNode('text', { x: p.x - fs * 0.2, y: p.y - fs * 0.75, w: 0, h: 0 });
+      startEditing(it.id);
+    }
+  });
+
+  viewport.addEventListener('wheel', (e) => {
+    e.preventDefault();
+    const unit = e.deltaMode === 1 ? 16 : e.deltaMode === 2 ? innerHeight : 1;
+    if (e.ctrlKey || e.metaKey) {
+      zoomAt(e.clientX, e.clientY, S.cam.z * Math.exp(clamp(-e.deltaY * unit, -25, 25) * 0.01));
+    } else {
+      stopCamAnim();
+      S.cam.x -= e.deltaX * unit;
+      S.cam.y -= e.deltaY * unit;
+      applyCamera();
+    }
+  }, { passive: false });
+  // stop browser page-zoom when pinching over floating panels
+  window.addEventListener('wheel', (e) => { if (e.ctrlKey) e.preventDefault(); }, { passive: false });
+
+  // Safari trackpad pinch
+  let gz = 1;
+  viewport.addEventListener('gesturestart', (e) => { e.preventDefault(); gz = S.cam.z; });
+  viewport.addEventListener('gesturechange', (e) => {
+    e.preventDefault();
+    const ge = e as unknown as { scale: number; clientX: number; clientY: number };
+    zoomAt(ge.clientX, ge.clientY, gz * ge.scale);
+  });
+
+  // Commit text when focus leaves an editor (but not when the window itself loses focus).
+  viewport.addEventListener('focusout', (e) => {
+    if ((e.target as Element).classList?.contains('txt') && S.editing && document.hasFocus()) stopEditing();
+  });
+  viewport.addEventListener('input', () => requestRender());
+  viewport.addEventListener('scroll', () => { viewport.scrollTop = 0; viewport.scrollLeft = 0; });
+
+  window.addEventListener('keydown', onKeyDown);
+  window.addEventListener('keyup', onKeyUp);
+  window.addEventListener('blur', () => { S.space = false; viewport.classList.remove('space'); });
+
+  document.addEventListener('copy', (e) => onCopy(e, false));
+  document.addEventListener('cut', (e) => onCopy(e, true));
+  document.addEventListener('paste', onPaste);
+
+  viewport.addEventListener('dragover', (e) => { e.preventDefault(); viewport.classList.add('dropping'); });
+  viewport.addEventListener('dragleave', () => viewport.classList.remove('dropping'));
+  viewport.addEventListener('drop', (e) => {
+    e.preventDefault();
+    viewport.classList.remove('dropping');
+    const files = [...(e.dataTransfer?.files ?? [])];
+    const board = files.find((f) => f.name.endsWith('.json'));
+    if (board) { void importBoard(board); return; }
+    void addImages(files, screenToWorld(e.clientX, e.clientY));
+  });
+
+  window.addEventListener('resize', () => applyCamera());
+}

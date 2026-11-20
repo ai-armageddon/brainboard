@@ -1,0 +1,133 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="color-scheme" content="light dark" />
+    <title>brainboard</title>
+    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='9' fill='%234f6bff'/%3E%3Ccircle cx='11' cy='12' r='3.2' fill='white'/%3E%3Ccircle cx='21' cy='20' r='3.2' fill='white' fill-opacity='.75'/%3E%3Cpath d='M13.5 14 18.5 18' stroke='white' stroke-width='2' stroke-linecap='round'/%3E%3C/svg%3E" />
+  </head>
+  <body>
+    <div id="viewport" tabindex="-1">
+      <div id="world">
+        <svg id="edges"></svg>
+        <div id="items"></div>
+        <div id="labels"></div>
+        <svg id="live"><path class="live-edge" /><path class="live-arrow" /><path class="live-stroke" /></svg>
+        <div id="selbox">
+          <div class="handle" data-corner="nw"></div>
+          <div class="handle" data-corner="ne"></div>
+          <div class="handle" data-corner="sw"></div>
+          <div class="handle" data-corner="se"></div>
+        </div>
+      </div>
+      <div id="marquee"></div>
+      <div id="hint">
+        <div class="hint-title">A blank canvas for your brain</div>
+        <div class="hint-sub">Paste an image, double-click to write, or pick a tool below.</div>
+      </div>
+    </div>
+
+    <header id="topbar" class="panel">
+      <button id="menu-btn" class="brand" aria-haspopup="menu">
+        <span class="logo" aria-hidden="true"></span>
+        <span class="name">brainboard</span>
+        <span class="chev" data-icon="chevron"></span>
+      </button>
+    </header>
+
+    <div id="menu" class="panel" role="menu" hidden>
+      <button data-action="fit">Zoom to fit <kbd>⇧1</kbd></button>
+      <button data-action="export">Export board…</button>
+      <button data-action="import">Import board…</button>
+      <button data-action="theme">Theme <span id="theme-label" class="muted">Auto</span></button>
+      <button data-action="shortcuts">Keyboard shortcuts <kbd>?</kbd></button>
+      <hr />
+      <button data-action="clear" class="danger">Clear board</button>
+    </div>
+
+    <nav id="toolbar" class="panel" aria-label="Tools">
+      <button class="tbtn" data-tool="select" data-icon="select" data-tip="Select · V" aria-label="Select"></button>
+      <button class="tbtn" data-tool="hand" data-icon="hand" data-tip="Pan · H or hold Space" aria-label="Pan"></button>
+      <span class="sep"></span>
+      <button class="tbtn" data-tool="pen" data-icon="pen" data-tip="Pen · P" aria-label="Pen"></button>
+      <button class="tbtn" data-tool="eraser" data-icon="eraser" data-tip="Eraser · E" aria-label="Eraser"></button>
+      <span class="sep"></span>
+      <button class="tbtn" data-tool="note" data-icon="note" data-tip="Sticky note · N" aria-label="Sticky note"></button>
+      <button class="tbtn" data-tool="text" data-icon="text" data-tip="Text · T" aria-label="Text"></button>
+      <button id="img-btn" class="tbtn" data-icon="image" data-tip="Image · I (or just paste)" aria-label="Image"></button>
+      <span class="sep"></span>
+      <button class="tbtn" data-tool="ellipse" data-icon="ellipse" data-tip="Bubble · O" aria-label="Bubble"></button>
+      <button class="tbtn" data-tool="rect" data-icon="rect" data-tip="Box · R" aria-label="Box"></button>
+      <button class="tbtn" data-tool="diamond" data-icon="diamond" data-tip="Decision · D" aria-label="Decision"></button>
+      <button class="tbtn" data-tool="connect" data-icon="connect" data-tip="Connector · C" aria-label="Connector"></button>
+    </nav>
+
+    <div id="penbar" class="panel" hidden></div>
+    <div id="ctxbar" class="panel"></div>
+
+    <div id="undobar" class="panel">
+      <button id="undo-btn" class="tbtn sm" data-icon="undo" data-tip="Undo · ⌘Z" aria-label="Undo"></button>
+      <button id="redo-btn" class="tbtn sm" data-icon="redo" data-tip="Redo · ⇧⌘Z" aria-label="Redo"></button>
+    </div>
+
+    <div id="zoombar" class="panel">
+      <button id="zoom-out" class="tbtn sm" data-icon="minus" data-tip="Zoom out · ⌘−" aria-label="Zoom out"></button>
+      <button id="zoom-label" class="zoom-label" data-tip="Reset to 100% · ⌘0">100%</button>
+      <button id="zoom-in" class="tbtn sm" data-icon="plus" data-tip="Zoom in · ⌘+" aria-label="Zoom in"></button>
+      <button id="zoom-fit" class="tbtn sm" data-icon="fit" data-tip="Zoom to fit · ⇧1" aria-label="Zoom to fit"></button>
+    </div>
+
+    <div id="shortcuts" hidden>
+      <div class="panel sheet" role="dialog" aria-label="Keyboard shortcuts">
+        <div class="sheet-head">
+          <h2>Shortcuts</h2>
+          <button class="close" aria-label="Close">Esc</button>
+        </div>
+        <div class="cols">
+          <section>
+            <h3>Tools</h3>
+            <dl>
+              <dt>Select</dt><dd><kbd>V</kbd></dd>
+              <dt>Pan</dt><dd><kbd>H</kbd> or hold <kbd>Space</kbd></dd>
+              <dt>Pen / Eraser</dt><dd><kbd>P</kbd> <kbd>E</kbd></dd>
+              <dt>Sticky note / Text</dt><dd><kbd>N</kbd> <kbd>T</kbd></dd>
+              <dt>Bubble / Box / Decision</dt><dd><kbd>O</kbd> <kbd>R</kbd> <kbd>D</kbd></dd>
+              <dt>Connector</dt><dd><kbd>C</kbd></dd>
+              <dt>Insert image</dt><dd><kbd>I</kbd> or <kbd>⌘V</kbd></dd>
+            </dl>
+          </section>
+          <section>
+            <h3>Canvas</h3>
+            <dl>
+              <dt>Pan</dt><dd>Scroll / two-finger drag</dd>
+              <dt>Zoom</dt><dd>Pinch or <kbd>⌘</kbd> + scroll</dd>
+              <dt>Zoom to fit</dt><dd><kbd>⇧1</kbd></dd>
+              <dt>Zoom to 100%</dt><dd><kbd>⌘0</kbd></dd>
+              <dt>Undo / Redo</dt><dd><kbd>⌘Z</kbd> <kbd>⇧⌘Z</kbd></dd>
+            </dl>
+          </section>
+          <section>
+            <h3>Editing</h3>
+            <dl>
+              <dt>Write anywhere</dt><dd>Double-click</dd>
+              <dt>Edit selected</dt><dd><kbd>Enter</kbd></dd>
+              <dt>Finish editing</dt><dd><kbd>Esc</kbd></dd>
+              <dt>Add connected bubble</dt><dd><kbd>Tab</kbd> (<kbd>⇧Tab</kbd> below)</dd>
+              <dt>Duplicate</dt><dd><kbd>⌘D</kbd> or <kbd>⌥</kbd>-drag</dd>
+              <dt>Copy / Paste</dt><dd><kbd>⌘C</kbd> <kbd>⌘V</kbd></dd>
+              <dt>Front / Back</dt><dd><kbd>]</kbd> <kbd>[</kbd></dd>
+              <dt>Delete</dt><dd><kbd>⌫</kbd></dd>
+            </dl>
+          </section>
+        </div>
+        <p class="tip">Tip: hover a bubble and drag one of its dots to connect it — drop on empty space to grow a new bubble.</p>
+      </div>
+    </div>
+
+    <div id="toast" role="status" aria-live="polite"></div>
+    <input type="file" id="file-images" accept="image/*" multiple hidden />
+    <input type="file" id="file-board" accept=".json,application/json" hidden />
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>
