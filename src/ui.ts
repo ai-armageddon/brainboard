@@ -9,6 +9,7 @@ import {
 import { clamp } from './geometry';
 import { api, events, saveProfile, session, type BoardMeta } from './net';
 import { openBoard, saveCamera } from './boards';
+import { paintLogos } from './brand';
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
 
@@ -378,6 +379,8 @@ async function deleteCurrentBoard() {
 export function showOverlay(kind: 'offline' | 'invalid' | 'join' | 'fatal', onJoin?: () => void, msg?: string) {
   const el = $('overlay');
   el.hidden = false;
+  document.body.classList.add('loaded');
+  requestAnimationFrame(() => paintLogos(el));
   const logo = '<span class="logo big" aria-hidden="true"></span>';
   if (kind === 'join') {
     const p = session.profile;

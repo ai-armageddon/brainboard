@@ -1,4 +1,7 @@
+import '@fontsource-variable/inter';
+import '@fontsource-variable/bricolage-grotesque';
 import './style.css';
+import { paintLogos } from './brand';
 import { loadPrefs, requestRender } from './state';
 import { applyCamera, render } from './render';
 import { buildUI, showOverlay, updateToolUI } from './ui';
@@ -30,6 +33,7 @@ async function migrateFromBrowser(): Promise<boolean> {
 
 async function main() {
   loadPrefs();
+  paintLogos();
   buildUI();
   initInput();
   updateToolUI();
@@ -39,6 +43,7 @@ async function main() {
 
   events.addEventListener('welcome', (e) => {
     if ((e as CustomEvent<boolean>).detail && session.boardId) restoreCamera(session.boardId);
+    document.body.classList.add('loaded');
     requestRender();
   });
 

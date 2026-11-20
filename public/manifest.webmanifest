@@ -1,0 +1,14 @@
+{
+  "name": "Brainboard",
+  "short_name": "Brainboard",
+  "description": "An infinite whiteboard for thinking out loud: notes, images, sketches and flow charts.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#131416",
+  "theme_color": "#5e5cf0",
+  "icons": [
+    { "src": "/icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "/icon-512.png", "sizes": "512x512", "type": "image/png" },
+    { "src": "/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}
