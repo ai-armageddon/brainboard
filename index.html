@@ -145,6 +145,7 @@
       <button data-action="fit">Zoom to fit <kbd>⇧1</kbd></button>
       <button data-action="export">Export… <kbd>⇧⌘E</kbd></button>
       <button data-action="import" class="owner-only">Import board…</button>
+      <button data-action="connect">Connect AI… <span class="muted">ChatGPT, Claude</span></button>
       <button data-action="theme">Theme <span id="theme-label" class="muted">Auto</span></button>
       <button data-action="vim">Vim keys <span id="vim-label" class="muted">Off</span></button>
       <button data-action="shortcuts">Keyboard shortcuts <kbd>?</kbd></button>
@@ -165,6 +166,16 @@
           <button class="close" aria-label="Close">Esc</button>
         </div>
         <div class="home-body"></div>
+      </div>
+    </div>
+
+    <div id="connect" hidden>
+      <div class="panel sheet connect-sheet" role="dialog" aria-labelledby="connect-title">
+        <div class="sheet-head">
+          <h2><span class="logo"></span><span id="connect-title">Connect AI</span></h2>
+          <button class="close" aria-label="Close">Esc</button>
+        </div>
+        <div class="connect-body share-body"></div>
       </div>
     </div>
 

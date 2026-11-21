@@ -12,7 +12,7 @@ Live at **[brainboard.ink](https://brainboard.ink)**, or run your own: boards ar
 - **Flow charts.** Bubbles, boxes, pills and decisions with curved, labelled connectors. Press `Tab` to grow the next step.
 - **Live collaboration.** Invite links that can edit or only view. Everyone's cursor, selection, typing and pen strokes show up live. Talk over built-in voice chat, follow someone, or present to the room.
 - **Vim keys.** A `:` command line with completion, `/` search, find and replace, and an optional vim mode with `hjkl` navigation.
-- **Agent friendly.** A built-in MCP server lets Claude, Cursor and other agents list, read, render and edit boards. Their edits appear live in your tab.
+- **Agent friendly.** Connect ChatGPT, Claude, Codex or Cursor over MCP. They can read, render and edit your boards and see what you're looking at, and their edits appear live in your tab.
 - **No sign-up wall.** Start drawing straight away. Create an account (with a passkey, or email and password) when you want to keep your boards and open them anywhere.
 - **Export anywhere.** PNG, PDF, SVG, a Markdown outline, or a full brainboard file, saved wherever you choose.
 - **Yours.** Self-host it in one command. Light and dark themes and per-user undo.
@@ -138,7 +138,20 @@ Some useful commands:
 
 ## Use it with AI agents (MCP)
 
-brainboard ships an MCP server, so agents such as Claude Code, Claude Desktop and Cursor can list, read, look at and edit your boards. Their edits appear live in your open tab, and you can undo them.
+brainboard ships an MCP server, so ChatGPT, Claude, Codex, Cursor and other agents can list, read, look at and edit your boards. Their edits appear live in your open tab, and you can undo them.
+
+### Chat apps: ChatGPT, Claude, Codex (Connect AI)
+
+Open the menu and choose **Connect AI…**, name the connection and copy the link it makes (`https://brainboard.ink/mcp/bb_…`). The app shows the steps for each one:
+
+- **ChatGPT:** Settings → Apps → Advanced settings → Developer mode, then create an app with the link as its MCP server URL and no authentication. Needs a paid plan.
+- **Claude** (web and desktop): Settings → Connectors → Add custom connector, and paste the link.
+- **Codex:** add `[mcp_servers.brainboard]` with `url = "<link>"` to `~/.codex/config.toml`.
+- **Anything else** that speaks MCP over HTTP: use the link, or `POST /mcp` with `Authorization: Bearer bb_…`.
+
+A link acts as you: the browser that made it, or your account once you sign in. It can open your boards and the ones shared with you, with the same role, and nothing else. Only a hash of it is stored, and deleting it in Connect AI cuts that app off at once. Over a link the agent also gets **`current_context`**: which board you have open, the area on your screen and what's in it, what you've selected or are typing in, which view you're in, and who else is there. So *"turn these into a flowchart"* works. Things it adds without a position land where you're looking.
+
+### On this computer (stdio)
 
 **Claude Code** picks it up automatically inside this folder through `.mcp.json`. To use it from anywhere:
 
@@ -154,13 +167,14 @@ claude mcp add brainboard --scope user -- node /absolute/path/to/brainboard/serv
 
 | Tool | What it does |
 |---|---|
+| `current_context` | What you're doing right now: open board, what's on screen, selection, view, who else is there (Connect AI links only) |
 | `list_boards` | All boards, most recent first |
 | `read_board` | An outline of every note, shape, image and arrow, with ids, positions and the flow between them (or `format: "json"`) |
 | `render_board` | A PNG of the board, including drawings and images (`show_ids` overlays ids) |
 | `view_image` | Look at a pasted image |
 | `add_items` | Add notes, text, bubbles, boxes, decisions and arrows in one call, with automatic layout |
 | `update_items` / `delete_items` | Edit or remove items by id |
-| `add_image` | Put an image on a board from a file path, URL or base64 |
+| `add_image` | Put an image on a board from a URL or base64 (or a file path, on this computer) |
 | `create_board` / `rename_board` | Manage boards |
 
 Try asking: *"Read my Q3 launch plan board and add the next steps as a flow chart"* or *"Look at the screenshot I pasted and summarise it in a sticky note next to it."*
@@ -224,7 +238,8 @@ App icons and the favicon come from the brand mark in `src/brand.ts`: `node scri
 | `src/account.ts` | Sign-in sheet, save reminders, screen names |
 | `src/voice.ts` · `src/director.ts` | Voice chat (WebRTC) · cinematic follow camera |
 | `server/store.ts` · `server/api.ts` · `server/realtime.ts` | Board and image files · HTTP API · live rooms |
-| `server/mcp.ts` · `server/agent.ts` · `server/render.ts` | MCP server · outlines and auto-layout · PNG rendering |
+| `server/mcp.ts` · `server/remote-mcp.ts` · `server/tools.ts` · `server/keys.ts` | MCP on stdio · MCP over HTTP for chat apps · the shared tools · Connect AI links |
+| `server/agent.ts` · `server/render.ts` | Outlines and auto-layout · PNG rendering |
 | `server/auth.ts` · `server/sharing.ts` | Who is asking (account, anonymous browser, guest) · board owners and invite links |
 | `server/accounts.ts` · `server/passkeys.ts` · `server/config.ts` | Accounts, passwords and sessions · passkeys (WebAuthn) · hosted vs local mode |
 | `scripts/og.ts` · `scripts/icons.ts` | Social share card · app icons and favicon |

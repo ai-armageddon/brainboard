@@ -6,7 +6,7 @@ import { WebSocketServer, type WebSocket } from 'ws';
 import { watch, type FSWatcher } from 'node:fs';
 import type { IncomingMessage, Server } from 'node:http';
 import type { Duplex } from 'node:stream';
-import { BOARDS_DIR, ensureDirs, isValidId, newId, readBoard, writeBoard, type Board } from './store.ts';
+import { BOARDS_DIR, ensureDirs, isValidId, newId, readBoard, updateBoard, writeBoard, type Board } from './store.ts';
 import { inviteToken, isCrossSite, ownerKeyOf, owns, principal } from './auth.ts';
 
 /** How a client got in: as the board's owner, or with an invite token. */
@@ -29,6 +29,11 @@ interface Client {
   /** voice chat */
   voice: boolean;
   selfMuted: boolean;
+  /** the browser/account behind this tab ("user:<id>" / "anon:<id>"), and whether it's this machine */
+  acct: string | null;
+  local: boolean;
+  /** last time they moved, selected or edited something */
+  seen: number;
 }
 interface Room {
   id: string;
@@ -252,9 +257,76 @@ export async function liveCounts(): Promise<Record<string, number>> {
   return out;
 }
 
+// ------------------------------------------------------------------ outside edits & awareness (remote MCP)
+
+/**
+ * Edit a board on behalf of an AI agent: straight into the live room when someone has it open (so it shows up
+ * at once and can't race the room's own saves), otherwise on disk.
+ */
+export async function editBoard(id: string, fn: (b: Board) => void): Promise<Board> {
+  const p = rooms.get(id);
+  const room = p && (await p);
+  if (!room || room.dead) return updateBoard(id, fn);
+  const draft: Board = structuredClone(room.board);
+  fn(draft);
+  const cur = snapshot(room.board.items);
+  const ops = diffItems(cur.known, cur.order, draft.items);
+  if (ops.length) {
+    room.board.items = applyOps(room.board.items, ops);
+    broadcast(room, { t: 'ops', ops, from: 'agent' });
+  }
+  if (draft.name !== room.board.name) {
+    room.board.name = draft.name;
+    broadcast(room, { t: 'meta', name: draft.name });
+  }
+  schedulePersist(room);
+  return room.board;
+}
+
+export interface Screen {
+  boardId: string;
+  board: Board;
+  role: Role;
+  name: string;
+  view: { x: number; y: number; w: number; h: number } | null;
+  sel: string[];
+  editing: string | null;
+  cursor: { x: number; y: number } | null;
+  /** someone else presenting on this board (people usually follow them) */
+  presenter: string | null;
+  presenting: boolean;
+  /** ms since they last did anything in this tab */
+  idle: number;
+  others: { name: string; color: string; role: Role; view: { x: number; y: number; w: number; h: number } | null }[];
+}
+
+/** The tabs a person has open right now, most recently active first. */
+export async function screensOf(isMe: (acct: string | null, local: boolean) => boolean): Promise<Screen[]> {
+  const out: Screen[] = [];
+  for (const p of rooms.values()) {
+    const room = await p;
+    if (!room || room.dead) continue;
+    for (const c of room.clients) {
+      if (!isMe(c.acct, c.local)) continue;
+      const others = [...room.clients].filter((o) => !isMe(o.acct, o.local));
+      const presenter = room.presenter ? [...room.clients].find((o) => o.id === room.presenter) : undefined;
+      out.push({
+        boardId: room.id, board: room.board, role: roleOf(room, c), name: c.name,
+        view: c.p.view ?? null, sel: c.p.sel ?? [], editing: c.p.editing ?? null, cursor: c.p.cursor ?? null,
+        presenter: presenter && presenter !== c ? presenter.name : null,
+        presenting: room.presenter === c.id,
+        idle: Date.now() - c.seen,
+        others: others.map((o) => ({ name: o.name, color: o.color, role: roleOf(room, o), view: o.p.view ?? null })),
+      });
+    }
+  }
+  return out.sort((a, b) => a.idle - b.idle);
+}
+
 async function handle(room: Room, c: Client, raw: string) {
   let m: ClientMsg;
   try { m = JSON.parse(raw); } catch { return; }
+  if (m.t === 'ops' || m.t === 'presence' || m.t === 'ink') c.seen = Date.now();
   switch (m.t) {
     case 'ops': {
       if (roleOf(room, c) === 'viewer') {
@@ -381,7 +453,7 @@ async function handle(room: Room, c: Client, raw: string) {
   }
 }
 
-async function onConnection(ws: WebSocket, identity: Identity, baseRole: Role, boardId: string, url: URL) {
+async function onConnection(ws: WebSocket, identity: Identity, baseRole: Role, boardId: string, url: URL, acct: string | null, local: boolean) {
   const room = await getRoom(boardId);
   if (!room) { ws.close(4404, 'board not found'); return; }
   const used = new Set([...room.clients].map((c) => c.color));
@@ -396,6 +468,9 @@ async function onConnection(ws: WebSocket, identity: Identity, baseRole: Role, b
     alive: true,
     voice: false,
     selfMuted: true,
+    acct,
+    local,
+    seen: Date.now(),
   };
   room.clients.add(c);
   if (!identity.owner) void noteInviteUse(room.id, identity.token, c.name, identity.key);
@@ -450,7 +525,7 @@ export function attachRealtime(server: Server) {
         role = await inviteRole(boardId, token);
       }
       if (!role) return reject(socket, 403, 'Forbidden');
-      wss.handleUpgrade(req, socket, head, (ws) => void onConnection(ws, identity, role, boardId, url));
+      wss.handleUpgrade(req, socket, head, (ws) => void onConnection(ws, identity, role, boardId, url, ownerKeyOf(who), who.local));
     })();
   });
   startWatcher();
