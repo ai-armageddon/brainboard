@@ -1,0 +1,171 @@
+<!doctype html>
+<!-- Social share card (1200×630). Render to public/og.png with: node scripts/og.ts -->
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<style>
+  @font-face { font-family: Geist; src: url(../node_modules/@fontsource-variable/geist/files/geist-latin-wght-normal.woff2) format("woff2"); font-weight: 100 900; }
+  @font-face { font-family: "Geist Mono"; src: url(../node_modules/@fontsource-variable/geist-mono/files/geist-mono-latin-wght-normal.woff2) format("woff2"); font-weight: 100 900; }
+
+  :root {
+    --bg: #0a0a0a; --fg: #fafafa; --fg-2: #a1a1a1; --fg-3: #6b6b6b;
+    --blue: #4ea1ff; --violet: #b48cf2; --orange: #ff8a3d; --green: #3ecf8e;
+    --pink: #e0559c; --cyan: #14a3c7; --indigo: #5b6cf0;
+  }
+  * { box-sizing: border-box; margin: 0; }
+  html, body { width: 1200px; height: 630px; overflow: hidden; }
+  body {
+    position: relative;
+    background: var(--bg);
+    color: var(--fg);
+    font-family: Geist, system-ui, sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /* canvas: dot grid that fades toward the text column, plus soft colour glows behind the scene */
+  .grid {
+    position: absolute; inset: 0;
+    background-image: radial-gradient(circle, rgba(255,255,255,.13) 1.1px, transparent 1.4px);
+    background-size: 24px 24px;
+    background-position: 6px 6px;
+    -webkit-mask-image: linear-gradient(100deg, transparent 18%, #000 58%);
+  }
+  .glow { position: absolute; border-radius: 50%; filter: blur(90px); opacity: .32; }
+  .glow.a { width: 420px; height: 320px; left: 640px; top: 40px; background: var(--violet); }
+  .glow.b { width: 360px; height: 300px; left: 900px; top: 300px; background: var(--orange); opacity: .2; }
+  .glow.c { width: 300px; height: 260px; left: 560px; top: 380px; background: var(--blue); opacity: .2; }
+  .vignette { position: absolute; inset: 0; background: radial-gradient(120% 90% at 30% 50%, transparent 55%, rgba(0,0,0,.55)); }
+
+  /* copy */
+  .copy { position: absolute; left: 72px; top: 64px; bottom: 64px; width: 540px; display: flex; flex-direction: column; }
+  .brand { display: flex; align-items: center; gap: 14px; }
+  .brand svg { width: 44px; height: 44px; display: block; }
+  .wordmark { font-size: 30px; font-weight: 650; letter-spacing: -0.045em; }
+  .wordmark span { font-weight: 350; }
+  h1 {
+    margin-top: auto;
+    font-size: 76px; line-height: .98; font-weight: 600; letter-spacing: -0.055em;
+  }
+  h1 em {
+    font-style: normal;
+    background: linear-gradient(92deg, var(--blue) 0%, var(--violet) 45%, var(--orange) 100%);
+    -webkit-background-clip: text; background-clip: text; color: transparent;
+  }
+  .sub { margin-top: 24px; font-size: 23px; line-height: 1.4; color: var(--fg-2); letter-spacing: -0.012em; max-width: 470px; }
+  .foot { margin-top: 44px; display: flex; align-items: center; gap: 16px; font-family: "Geist Mono", monospace; font-size: 15px; letter-spacing: .02em; color: var(--fg-3); }
+  .foot b { color: var(--fg); font-weight: 500; }
+  .foot i { width: 4px; height: 4px; border-radius: 50%; background: var(--fg-3); }
+
+  /* board scene */
+  .scene { position: absolute; inset: 0; }
+  .scene svg.wires { position: absolute; inset: 0; overflow: visible; }
+  .wire { fill: none; stroke: #8a8a8a; stroke-width: 2; stroke-linecap: round; }
+  .head { fill: #8a8a8a; }
+  .lbl { font: 500 15px Geist; fill: var(--fg-2); }
+
+  .node { position: absolute; display: grid; place-items: center; font-size: 19px; font-weight: 500; letter-spacing: -0.01em; color: var(--fg); }
+  .idea { left: 664px; top: 92px; width: 150px; height: 88px; border-radius: 50%; background: #17304d; border: 2.5px solid var(--blue); }
+  .research { left: 884px; top: 92px; width: 176px; height: 88px; border-radius: 12px; background: #2a2244; border: 2.5px solid var(--violet); }
+  .decide { left: 914px; top: 254px; width: 116px; height: 116px; }
+  .decide::before { content: ""; position: absolute; inset: 0; background: #432a1a; border: 2.5px solid var(--orange); transform: scaleY(.82) rotate(45deg) scale(.72); border-radius: 4px; }
+  .decide span { position: relative; }
+  .ship { left: 1100px; top: 270px; width: 180px; height: 84px; border-radius: 42px; background: #19372a; border: 2.5px solid var(--green); justify-content: start; padding-left: 40px; }
+  .ring { position: absolute; left: 1082px; top: 250px; width: 230px; height: 124px; border-radius: 50%; border: 3px solid #ff5c6c; transform: rotate(-3deg); opacity: .9; }
+
+  .sticky { position: absolute; left: 650px; top: 262px; width: 212px; height: 176px; background: #463c1c; padding: 18px 20px; font-size: 15.5px; line-height: 1.6; color: #f3ead0; box-shadow: 0 18px 40px rgba(0,0,0,.45); }
+  .sticky b { display: block; font-weight: 550; margin-bottom: 6px; }
+  .sticky .caret { display: inline-block; width: 2px; height: 18px; background: var(--pink); vertical-align: -3px; margin-left: 1px; }
+  .sticky-sel { position: absolute; left: 644px; top: 256px; width: 224px; height: 188px; border: 2px solid var(--pink); }
+  .tag { position: absolute; padding: 4px 8px 5px; border-radius: 4px; font-size: 13px; font-weight: 550; color: #fff; white-space: nowrap; }
+
+  .photo { position: absolute; left: 920px; top: 432px; width: 230px; height: 150px; overflow: hidden; box-shadow: 0 20px 50px rgba(0,0,0,.5); }
+  .photo svg { display: block; width: 100%; height: 100%; }
+  .photo-sel { position: absolute; left: 914px; top: 426px; width: 242px; height: 162px; border: 2px solid var(--cyan); }
+
+  .cursor { position: absolute; display: flex; align-items: flex-start; }
+  .cursor svg { width: 20px; height: 25px; filter: drop-shadow(0 2px 4px rgba(0,0,0,.4)); }
+  .cursor .tag { position: relative; margin: 18px 0 0 -2px; }
+
+  .live { position: absolute; right: 36px; top: 36px; display: flex; align-items: center; gap: 10px; padding: 8px 14px 8px 10px; border-radius: 999px; background: rgba(28,28,28,.82); border: 1px solid rgba(255,255,255,.1); font-size: 14px; font-weight: 500; color: var(--fg-2); backdrop-filter: blur(10px); }
+  .live .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--green); box-shadow: 0 0 0 4px rgba(62,207,142,.18); }
+  .avs { display: flex; }
+  .avs b { width: 26px; height: 26px; border-radius: 50%; display: grid; place-items: center; font-size: 12px; font-weight: 600; color: #fff; background: var(--c); border: 2px solid #1c1c1c; margin-left: -7px; }
+  .avs b:first-child { margin-left: 0; }
+</style>
+</head>
+<body>
+  <div class="glow a"></div><div class="glow b"></div><div class="glow c"></div>
+  <div class="grid"></div>
+
+  <div class="scene">
+    <svg class="wires" viewBox="0 0 1200 630" width="1200" height="630">
+      <!-- Idea → Research -->
+      <path class="wire" d="M814 136H874" /><path class="head" d="M884 136 872 130v12z" />
+      <!-- Research → Ready? -->
+      <path class="wire" d="M972 180V250" /><path class="head" d="M972 262 966 250h12z" />
+      <!-- Ready? → Ship it -->
+      <path class="wire" d="M1030 312H1044" /><path class="wire" d="M1080 312H1090" /><path class="head" d="M1100 312 1088 306v12z" />
+      <text class="lbl" x="1048" y="317">yes</text>
+      <!-- Ready? → back to the notes -->
+      <path class="wire" d="M914 312H888" /><path class="head" d="M876 312 888 306v12z" />
+      <text class="lbl" x="884" y="300">no</text>
+    </svg>
+
+    <div class="node idea">Idea</div>
+    <div class="node research">Research</div>
+    <div class="node decide"><span>Ready?</span></div>
+    <div class="ring"></div>
+    <div class="node ship">Ship it</div>
+
+    <div class="sticky"><b>Beta feedback</b>onboarding is long<br />love the templates<br />export to PNG<span class="caret"></span></div>
+    <div class="sticky-sel"></div>
+    <div class="tag" style="left:644px;top:228px;background:var(--pink)">Mia is typing…</div>
+
+    <div class="photo">
+      <svg viewBox="0 0 230 150" preserveAspectRatio="none">
+        <defs>
+          <linearGradient id="sky" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#ff7a59" /><stop offset=".6" stop-color="#ffb38a" /><stop offset="1" stop-color="#ffd2a8" /></linearGradient>
+        </defs>
+        <rect width="230" height="150" fill="url(#sky)" />
+        <circle cx="168" cy="52" r="17" fill="#fff4dc" />
+        <path d="M0 110 50 62 92 96 140 50 230 104V150H0z" fill="#6a3f86" />
+        <path d="M0 128 64 98 120 122 180 94 230 116V150H0z" fill="#2b1a45" />
+      </svg>
+    </div>
+    <div class="photo-sel"></div>
+    <div class="tag" style="left:914px;top:398px;background:var(--cyan)">Sam</div>
+
+    <div class="cursor" style="left:840px;top:404px">
+      <svg viewBox="0 0 16 20"><path d="M1.5 1.5v14l3.8-3.6 2.6 6 2.4-1-2.6-5.9h5.3z" fill="#e0559c" stroke="#fff" stroke-width="1.2" stroke-linejoin="round" /></svg>
+      <span class="tag" style="background:var(--pink)">Mia</span>
+    </div>
+    <div class="cursor" style="left:1080px;top:520px">
+      <svg viewBox="0 0 16 20"><path d="M1.5 1.5v14l3.8-3.6 2.6 6 2.4-1-2.6-5.9h5.3z" fill="#14a3c7" stroke="#fff" stroke-width="1.2" stroke-linejoin="round" /></svg>
+      <span class="tag" style="background:var(--cyan)">Sam</span>
+    </div>
+    <div class="cursor" style="left:1060px;top:188px">
+      <svg viewBox="0 0 16 20"><path d="M1.5 1.5v14l3.8-3.6 2.6 6 2.4-1-2.6-5.9h5.3z" fill="#5b6cf0" stroke="#fff" stroke-width="1.2" stroke-linejoin="round" /></svg>
+      <span class="tag" style="background:var(--indigo)">Claude</span>
+    </div>
+
+    <div class="live"><span class="dot"></span><span class="avs"><b style="--c:#14a3c7">S</b><b style="--c:#e0559c">M</b><b style="--c:#5b6cf0">C</b></span>3 editing</div>
+  </div>
+
+  <div class="vignette"></div>
+
+  <div class="copy">
+    <div class="brand">
+      <svg viewBox="0 0 32 32" aria-hidden="true">
+        <rect width="32" height="32" rx="2" fill="#fafafa" />
+        <path d="M9 6.5V18" stroke="#0a0a0a" stroke-width="3.2" />
+        <circle cx="15" cy="18.5" r="6" fill="none" stroke="#0a0a0a" stroke-width="3.2" />
+        <rect x="20.2" y="6.5" width="4.3" height="4.3" fill="#0a0a0a" />
+      </svg>
+      <span class="wordmark">brain<span>board</span></span>
+    </div>
+    <h1>Think it through,<br /><em>together.</em></h1>
+    <p class="sub">An infinite whiteboard for notes, images, sketches and flow charts. Live with your team and your agents.</p>
+    <div class="foot"><b>brainboard.ink</b><i></i>Real-time<i></i>MCP-ready</div>
+  </div>
+</body>
+</html>

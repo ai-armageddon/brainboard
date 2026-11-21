@@ -1,7 +1,7 @@
 {
   "name": "Brainboard",
   "short_name": "Brainboard",
-  "description": "An infinite whiteboard for notes, images, sketches and flow charts.",
+  "description": "An infinite whiteboard for notes, images, sketches and flow charts. Live with your team, and with AI agents over MCP.",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#0a0a0a",
