@@ -12,6 +12,7 @@ import { openBoard, saveCamera } from './boards';
 import { paintLogos } from './brand';
 import { userMovedCamera } from './collab';
 import { isVimMode, setVimMode } from './vim';
+import { startTour } from './tour';
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
 
@@ -209,6 +210,7 @@ export function buildUI() {
       }
       case 'shortcuts': toggleShortcuts(true); break;
       case 'vim': setVimMode(!isVimMode()); break;
+      case 'tour': startTour(); break;
       case 'clear': clearBoard(); break;
       case 'new-board': void newBoard(); break;
       case 'rename': startRename(); break;
@@ -242,13 +244,7 @@ export function buildUI() {
 
   hooks.afterRender = () => {
     updateCtxBar();
-    const empty = S.items.length === 0;
-    if (empty !== hint.classList.contains('show')) {
-      hint.classList.toggle('show', empty);
-      // SMIL dots keep running when hidden unless paused explicitly
-      const svg = hint.querySelector<SVGSVGElement>('svg.flow');
-      if (empty) svg?.unpauseAnimations(); else svg?.pauseAnimations();
-    }
+    hint.classList.toggle('show', S.items.length === 0);
     ($('undo-btn') as HTMLButtonElement).disabled = !canUndo();
     ($('redo-btn') as HTMLButtonElement).disabled = !canRedo();
   };

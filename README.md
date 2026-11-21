@@ -66,7 +66,7 @@ Try asking: *"Read my Launch plan board and add the next steps as a flow chart"*
 | **Boards** | Open the menu in the top left · `⌥N` new board · double-click the board name to rename it |
 | **Undo** | `⌘Z` / `⇧⌘Z` only undo *your* changes, never anyone else's |
 
-Press `?` in the app for every shortcut.
+Press `?` in the app for every shortcut. A short tour pops up the first time you open brainboard, and you can replay it from the menu with **Quick tour**.
 
 ## Vim keys
 

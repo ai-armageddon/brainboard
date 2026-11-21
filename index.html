@@ -30,19 +30,31 @@
       <div id="cursors"></div>
       <div id="hint">
         <div class="hint-art" aria-hidden="true">
-          <i class="glow g1"></i><i class="glow g2"></i><i class="glow g3"></i>
-          <svg viewBox="0 0 320 150" class="flow">
-            <path class="wire" id="w1" d="M98 78C116 78 112 44 130 44" />
-            <path class="wire" id="w2" d="M196 44C232 44 262 40 262 62" />
-            <path class="wire" id="w3" d="M96 90C112 106 120 116 140 116" />
-            <circle class="pulse p1" r="2.6"><animateMotion dur="3.4s" repeatCount="indefinite" rotate="auto"><mpath href="#w1" /></animateMotion></circle>
-            <circle class="pulse p2" r="2.6"><animateMotion dur="4.2s" begin="1.2s" repeatCount="indefinite"><mpath href="#w2" /></animateMotion></circle>
-            <circle class="pulse p3" r="2.6"><animateMotion dur="3.8s" begin="0.6s" repeatCount="indefinite"><mpath href="#w3" /></animateMotion></circle>
-            <g class="node n1"><ellipse cx="60" cy="82" rx="38" ry="23" /></g>
-            <g class="node n2"><rect x="130" y="24" width="66" height="40" rx="3" /></g>
-            <g class="node n3"><path d="M262 62 290 90 262 118 234 90z" /></g>
-            <g class="node n4"><rect x="140" y="96" width="40" height="40" rx="1" /></g>
-          </svg>
+          <div class="scene">
+            <i class="glow g1"></i><i class="glow g2"></i><i class="glow g3"></i>
+            <div class="live-chip"><span class="lc-dot"></span>Live<span class="lc-avatars"><b style="--c:#9b5cf0">A</b><b style="--c:#14a3c7">S</b><b style="--c:#e0559c">M</b></span><span class="lc-count">3 editing</span></div>
+            <svg class="wires" viewBox="0 0 520 280">
+              <defs>
+                <linearGradient id="hw1" gradientUnits="userSpaceOnUse" x1="138" y1="0" x2="196" y2="0"><stop offset="0" stop-color="#6aa8ff" /><stop offset="1" stop-color="#b48cf2" /></linearGradient>
+                <linearGradient id="hw2" gradientUnits="userSpaceOnUse" x1="316" y1="0" x2="378" y2="0"><stop offset="0" stop-color="#b48cf2" /><stop offset="1" stop-color="#ff8a65" /></linearGradient>
+                <linearGradient id="hw3" gradientUnits="userSpaceOnUse" x1="138" y1="0" x2="212" y2="0"><stop offset="0" stop-color="#6aa8ff" /><stop offset="1" stop-color="#ffc94d" /></linearGradient>
+              </defs>
+              <path class="wire" d="M138 179C168 179 166 97 196 97" /><path class="wire" d="M190 92.5 196 97 190 101.5" />
+              <path class="wire" d="M316 97C346 97 350 112 377 112" /><path class="wire" d="M371 107.5 377 112 371 116.5" />
+              <path class="wire" d="M138 188C168 198 184 208 212 208" /><path class="wire" d="M206 203.5 212 208 206 212.5" />
+              <path class="comet k1" pathLength="100" stroke="url(#hw1)" d="M138 179C168 179 166 97 196 97" />
+              <path class="comet k2" pathLength="100" stroke="url(#hw2)" d="M316 97C346 97 350 112 377 112" />
+              <path class="comet k3" pathLength="100" stroke="url(#hw3)" d="M138 188C168 198 184 208 212 208" />
+            </svg>
+            <div class="node pill n-idea"><i></i>Idea</div>
+            <div class="node card n-research"><b>Research</b><s></s><s></s></div>
+            <div class="n-ship"><div class="node d"></div><span>Ship it?</span></div>
+            <div class="snote"><em class="who" style="--c:#e0559c">Mia</em><span class="typed">Launch plan</span><s></s><s></s></div>
+            <div class="photo ph1" style="--c:#9b5cf0"></div>
+            <div class="photo ph2" style="--c:#14a3c7"></div>
+            <div class="pcursor c-ava" style="--c:#9b5cf0"><svg viewBox="0 0 16 20" width="16" height="20"><path d="M1.5 1.5v14l3.8-3.6 2.6 6 2.4-1-2.6-5.9h5.3z"/></svg><span>Ava</span></div>
+            <div class="pcursor c-sam" style="--c:#14a3c7"><svg viewBox="0 0 16 20" width="16" height="20"><path d="M1.5 1.5v14l3.8-3.6 2.6 6 2.4-1-2.6-5.9h5.3z"/></svg><span>Sam</span></div>
+          </div>
         </div>
         <div class="hint-title">Empty board</div>
         <div class="hint-sub">Paste, type or draw anywhere.</div>
@@ -85,6 +97,7 @@
       <button data-action="theme">Theme <span id="theme-label" class="muted">Auto</span></button>
       <button data-action="vim">Vim keys <span id="vim-label" class="muted">Off</span></button>
       <button data-action="shortcuts">Keyboard shortcuts <kbd>?</kbd></button>
+      <button data-action="tour">Quick tour</button>
       <hr />
       <div class="owner-only">
         <button data-action="clear" class="danger">Clear board</button>

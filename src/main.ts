@@ -3,6 +3,7 @@ import '@fontsource-variable/geist-mono';
 import './style.css';
 import { paintLogos } from './brand';
 import { initVim } from './vim';
+import { startTour, tourSeen } from './tour';
 import { loadPrefs, requestRender } from './state';
 import { applyCamera, render } from './render';
 import { buildUI, showOverlay, updateToolUI } from './ui';
@@ -33,6 +34,8 @@ async function migrateFromBrowser(): Promise<boolean> {
   }
 }
 
+let tourStarted = false;
+
 async function main() {
   loadPrefs();
   paintLogos();
@@ -49,6 +52,10 @@ async function main() {
     if ((e as CustomEvent<boolean>).detail && session.boardId) restoreCamera(session.boardId);
     document.body.classList.add('loaded');
     requestRender();
+    if (!tourSeen() && !tourStarted) {
+      tourStarted = true;
+      setTimeout(startTour, 900);
+    }
   });
 
   const params = new URLSearchParams(location.search);
