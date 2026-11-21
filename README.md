@@ -201,7 +201,7 @@ Passkeys only work on the real domain (and on `localhost` in development), not o
 
 ### Link previews
 
-`index.html` carries Open Graph, X (Twitter) and JSON-LD tags, so a pasted brainboard.ink link unfurls with the card at the top of this README in Slack, iMessage, Discord, LinkedIn and X. The tags point at `https://brainboard.ink`; if you host it on another domain, change the `canonical`, `og:url`, `og:image` and `twitter:image` addresses to yours.
+`index.html` carries Open Graph, X (Twitter) and JSON-LD tags, so a pasted brainboard.ink link unfurls with the card at the top of this README in Slack, iMessage, Discord, LinkedIn and X. Invite links unfurl with the board's name instead, and who sent the invite (`server/meta.ts`). They're marked `noindex`, so search engines leave private boards out. Plain board links can't do this: the board id sits after `#`, which browsers never send to the server. The tags point at `https://brainboard.ink`; if you host it on another domain, change the `canonical`, `og:url`, `og:image` and `twitter:image` addresses to yours.
 
 The card (`public/og.png`, 1200×630) is a web page, `scripts/og.html`, drawn with the app's own fonts and colours. Edit it, then redraw the PNG with headless Chrome:
 
