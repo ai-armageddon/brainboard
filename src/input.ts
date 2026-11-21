@@ -17,6 +17,7 @@ import { inkEnd, inkMove, inkStart } from './ink';
 import { eraseStroke } from './erase';
 import { IS_MAC, keyLabel } from './keys';
 import { recognize, steady, taper, type ShapeName } from './beautify';
+import { arrange, arrangeForKey } from './arrange';
 
 type Drag =
   | { kind: 'brush-size'; tool: 'pen' | 'eraser'; pointerId: number; startX: number; startSize: number }
@@ -525,8 +526,8 @@ function onKeyDown(e: KeyboardEvent) {
   if (e.key === PAN_KEY && !S.editing) viewport.classList.add('panmod');
 
   const target = e.target instanceof HTMLElement ? e.target : null;
-  if (e.key === 'Escape' && document.querySelector('.font-picker[open]')) {
-    document.querySelector<HTMLDetailsElement>('.font-picker[open]')!.open = false;
+  if (e.key === 'Escape' && document.querySelector('#ctxbar details[open]')) {
+    document.querySelector<HTMLDetailsElement>('#ctxbar details[open]')!.open = false;
     e.preventDefault();
     return;
   }
@@ -572,7 +573,15 @@ function onKeyDown(e: KeyboardEvent) {
     }
     return;
   }
-  if (e.altKey) return;
+  if (e.altKey) {
+    // ⌥A/H/D align left/center/right, ⌥W/V/S top/middle/bottom, ⌥⇧H/V space evenly, ⌥⇧T tidy up.
+    const kind = e.ctrlKey || e.metaKey ? null : arrangeForKey(e.code, e.shiftKey);
+    if (kind && S.selected.size) {
+      e.preventDefault();
+      if (!ro && !arrange(kind)) toast(kind === 'space-h' || kind === 'space-v' ? 'Select 3 or more items to space them evenly' : 'Select 2 or more items to line them up');
+    }
+    return;
+  }
 
   if (e.key === ' ') {
     e.preventDefault();

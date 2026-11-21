@@ -67,6 +67,7 @@ Shortcuts are written for Mac. On Windows and Linux, `⌘` is `Ctrl` and `⌥` (
 | **Flow charts** | `O` bubble · `R` box · `D` decision · `C` connector |
 | | Drag a shape's dot onto another shape to connect them, or onto empty space to grow a new bubble. `Tab` adds a connected bubble to the right, even while you type. |
 | **Organise** | `⌘D` duplicate · `]` / `[` bring to front or send to back · `⌫` delete |
+| **Arrange** | Select 2 or more and open the align menu in the selection bar: align edges or centers, space evenly across or down, or **Tidy up** into neat rows. `⌥A` `⌥H` `⌥D` left / center / right · `⌥W` `⌥V` `⌥S` top / middle / bottom · `⌥⇧H` `⌥⇧V` space evenly · `⌥⇧T` tidy up |
 | **Boards** | `⌥B` all boards · open the menu at the top left · `⌥N` new board · double-click the board name to rename it |
 | **Views** | `{` `}` previous / next view · `⌥1`–`⌥9` jump to a view |
 | **Export** | `⇧⌘E`, or **Export…** in the menu: PNG (1–3×, transparent if you like), PDF, SVG, a Markdown outline of the text and flow, or a brainboard file you can import again. Pick the whole board or just the selection, and a light or dark theme. **Save as…** lets you choose the folder and file name in Chrome, Edge and Opera. Other browsers save to Downloads |

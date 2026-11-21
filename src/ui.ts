@@ -15,6 +15,7 @@ import { openConnect } from './connect';
 import { paintLogos } from './brand';
 import { userMovedCamera } from './collab';
 import { keyLabel, localizeKeys } from './keys';
+import { ARRANGE, arrange, arrangeAvailable, type ArrangeKind } from './arrange';
 import { isVimMode, setVimMode } from './vim';
 import { startTour } from './tour';
 import { openAuth, signOut } from './account';
@@ -149,6 +150,22 @@ function buildCtx(sel: Item[]) {
       '<button class="cbtn" data-act="underline" aria-label="Underline" title="Underline · ⌘U"><u>U</u></button>' +
       btn('font-down', 'sizeDown', 'Smaller text') + btn('font-up', 'sizeUp', 'Larger text'));
   }
+  const nodes = sel.filter((i) => i.type !== 'edge').length;
+  if (nodes >= 2) {
+    const align = (k: ArrangeKind) => { const a = ARRANGE[k]; return `<button class="arr-btn" data-arrange="${k}" title="${a.tip} · ${a.key}">${icon(a.icon, 20)}<span>${a.label}</span></button>`; };
+    const row = (k: ArrangeKind) => {
+      const a = ARRANGE[k];
+      return `<button class="arr-row" data-arrange="${k}" title="${a.tip}" ${arrangeAvailable(k, nodes) ? '' : 'disabled'}>${icon(a.icon, 18)}<span>${a.label}</span><kbd>${a.key}</kbd></button>`;
+    };
+    parts.push(`<details class="arrange-picker"><summary aria-label="Align and space" data-tip="Align &amp; space">${icon('alignLeft', 18)}${icon('chevron', 14)}</summary>
+      <div class="arrange-menu panel">
+        <div class="arr-title">Align</div>
+        <div class="arr-grid">${(['left', 'center', 'right', 'top', 'middle', 'bottom'] as const).map(align).join('')}</div>
+        <div class="arr-title">Spacing</div>
+        ${(['space-h', 'space-v', 'tidy'] as const).map(row).join('')}
+        ${nodes < 3 ? '<p class="arr-note">Select 3 or more to space them evenly</p>' : ''}
+      </div></details>`);
+  }
   const tail: string[] = [];
   if (sel.length === 1 && canEditText(sel[0])) tail.push(btn('edit', 'type', sel[0].type === 'edge' ? 'Label · Enter' : 'Edit text · Enter'));
   if (sel.some((i) => i.type !== 'edge')) {
@@ -226,6 +243,16 @@ function positionCtxBar(glide: boolean) {
   const roomBelow = innerHeight - top - h;
   ctx.classList.toggle('fonts-above', roomBelow < 210 ? top > roomBelow : top < T && top >= 210);
   ctx.style.transform = `translate(${Math.round(left)}px,${Math.round(top)}px)`;
+  placeArrangeMenu(top);
+}
+
+/** Open the arrange menu above the bar when it fits there, otherwise below. */
+function placeArrangeMenu(top = ctx.getBoundingClientRect().top) {
+  const menu = ctx.querySelector<HTMLElement>('.arrange-picker[open] .arrange-menu');
+  if (!menu) return;
+  const h = menu.offsetHeight + 8;
+  const below = innerHeight - (top + ctx.offsetHeight) - 76; // leave the toolbar clear
+  ctx.classList.toggle('arrange-above', top - 60 >= h || (below < h && top > below));
 }
 
 // ---------------------------------------------------------------- menu, theme, shortcuts
@@ -310,7 +337,11 @@ export function buildUI() {
   ctx.addEventListener('pointerout', (e) => { if (!fontOption(e.relatedTarget)) clearFontPreview(); });
   ctx.addEventListener('focusin', previewOption);
   ctx.addEventListener('toggle', (e) => {
-    if (e.target instanceof HTMLDetailsElement && !e.target.open) clearFontPreview();
+    if (!(e.target instanceof HTMLDetailsElement)) return;
+    if (!e.target.open) clearFontPreview();
+    // One menu at a time.
+    else for (const d of ctx.querySelectorAll<HTMLDetailsElement>('details[open]')) if (d !== e.target) d.open = false;
+    placeArrangeMenu();
   }, true);
   window.addEventListener('blur', clearFontPreview);
   ctx.addEventListener('pointerdown', (e) => {
@@ -336,6 +367,7 @@ export function buildUI() {
     }
     if (b.dataset.color) return setColor(b.dataset.color as ColorKey);
     if (b.dataset.shape) return setShape(b.dataset.shape as ShapeKind);
+    if (b.dataset.arrange && Object.hasOwn(ARRANGE, b.dataset.arrange)) return void arrange(b.dataset.arrange as ArrangeKind);
     if (b.dataset.corners && Object.hasOwn(CORNERS, b.dataset.corners)) return setCorners(CORNERS[b.dataset.corners as CornerKey]);
     switch (b.dataset.act) {
       case 'bold': case 'underline': return formatSelection(b.dataset.act);
@@ -393,8 +425,7 @@ export function buildUI() {
   window.addEventListener('pointerdown', (e) => {
     const t = e.target as Element;
     if (!ctx.contains(t)) finishTextSizing();
-    const picker = ctx.querySelector<HTMLDetailsElement>('.font-picker[open]');
-    if (picker && !picker.contains(t)) picker.open = false;
+    for (const picker of ctx.querySelectorAll<HTMLDetailsElement>('details[open]')) if (!picker.contains(t)) picker.open = false;
     if (!menu.hidden && !t.closest('#menu, #menu-btn')) closePopovers();
   });
 
