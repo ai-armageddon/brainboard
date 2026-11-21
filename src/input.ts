@@ -30,7 +30,7 @@ type Drag =
 let drag: Drag | null = null;
 const brushCursor = document.getElementById('brush-cursor')!;
 
-function positionBrushCursor(e: PointerEvent) {
+function positionBrushCursor(e: MouseEvent) {
   brushCursor.hidden = false;
   brushCursor.style.left = `${e.clientX}px`;
   brushCursor.style.top = `${e.clientY}px`;
@@ -674,7 +674,35 @@ export function initInput() {
     }
   });
 
+  // Trackpads emit a stream of fractional notches. Respond immediately, then
+  // accumulate the rest so a slow swipe can still change size by just one pixel.
+  let wheelRemainder = 0;
+  let lastWheelAt = -Infinity;
+  let lastDirection = 0;
+  let lastBrush: Tool | null = null;
+  function resizeWithWheel(e: WheelEvent) {
+    if (!e.shiftKey || e.ctrlKey || e.metaKey || !isBrushTool(S.tool) || !canEdit()) return false;
+    e.preventDefault();
+    if (drag) return true;
+    // Some browsers deliver Shift + wheel on the horizontal axis.
+    const delta = e.deltaY || e.deltaX;
+    if (!delta) return true;
+    const direction = -Math.sign(delta);
+    const notches = Math.abs(delta) / (e.deltaMode === 1 ? 3 : e.deltaMode === 2 ? 1 : 100);
+    const fresh = e.timeStamp - lastWheelAt > 220 || direction !== lastDirection || S.tool !== lastBrush;
+    const total = fresh ? Math.max(1, notches) : wheelRemainder + notches;
+    const steps = Math.floor(total + 1e-9);
+    wheelRemainder = Math.max(0, total - steps);
+    lastWheelAt = e.timeStamp;
+    lastDirection = direction;
+    lastBrush = S.tool;
+    if (e.currentTarget === viewport) positionBrushCursor(e);
+    if (steps) setBrushSize(S[S.tool].size + direction * steps);
+    return true;
+  }
+  document.getElementById('penbar')!.addEventListener('wheel', resizeWithWheel, { passive: false });
   viewport.addEventListener('wheel', (e) => {
+    if (resizeWithWheel(e)) return;
     e.preventDefault();
     if (!userMovedCamera()) return;
     const unit = e.deltaMode === 1 ? 16 : e.deltaMode === 2 ? innerHeight : 1;

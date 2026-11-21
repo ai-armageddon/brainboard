@@ -61,6 +61,8 @@ export function updateToolUI() {
   updateBrushSize();
 }
 
+let brushPreviewTimer = 0;
+
 export function setBrushSize(size: number) {
   if (!isBrushTool(S.tool)) return;
   const brush = S[S.tool];
@@ -68,6 +70,10 @@ export function setBrushSize(size: number) {
   if (brush.size === next) return;
   brush.size = next;
   updateBrushSize();
+  const cursor = $('brush-cursor');
+  cursor.classList.add('sizing');
+  clearTimeout(brushPreviewTimer);
+  brushPreviewTimer = window.setTimeout(() => cursor.classList.remove('sizing'), 1000);
   savePrefs();
 }
 
@@ -75,7 +81,12 @@ function updateBrushSize() {
   if (!isBrushTool(S.tool)) return;
   const size = S[S.tool].size;
   $('pen-size').textContent = `${size} px`;
-  $('brush-cursor').style.setProperty('--diameter', `${size}px`);
+  const cursor = $('brush-cursor');
+  cursor.dataset.size = `${size} px`;
+  cursor.style.setProperty('--diameter', `${size}px`);
+  const scaleMax = 2 ** Math.ceil(Math.log2(Math.max(16, size)));
+  penbar.style.setProperty('--size-percent', `${100 * size / scaleMax}%`);
+  $('brush-scale-end').textContent = `${scaleMax} px`;
   penbar.querySelector<HTMLButtonElement>('[data-step="-1"]')!.disabled = size <= 1;
   for (const b of penbar.querySelectorAll<HTMLElement>('[data-size]')) {
     const on = Number(b.dataset.size) === size;

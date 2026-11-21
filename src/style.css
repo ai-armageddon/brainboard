@@ -917,6 +917,21 @@ body.busy #ctxbar { opacity: 0; pointer-events: none; transition: none; }
 .sw:hover::after { transform: scale(1.15); }
 .sw.on { box-shadow: 0 0 0 1.5px var(--fg); }
 
+#brush-cursor.sizing { background: var(--accent-soft); }
+#brush-cursor.sizing::after {
+  content: attr(data-size);
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  margin: 14px 0 0 14px;
+  padding: 3px 6px;
+  border-radius: var(--r-sm);
+  background: var(--fg);
+  color: var(--bg);
+  white-space: nowrap;
+  font: 12px var(--mono);
+}
+
 /* pen bar */
 #penbar {
   width: max-content;
@@ -925,20 +940,30 @@ body.busy #ctxbar { opacity: 0; pointer-events: none; transition: none; }
   left: 50%;
   bottom: 74px;
   transform: translateX(-50%);
-  display: flex;
-  align-items: center;
+  display: grid;
   padding: 5px;
   z-index: 20;
   border-radius: var(--r);
   animation: rise 0.14s ease-out;
 }
+.brush-controls { display: flex; justify-content: center; align-items: center; }
 #pen-presets, .pen-stepper { display: flex; align-items: center; }
 #pen-size { min-width: 5ch; text-align: center; white-space: nowrap; font: 12px var(--mono); }
 .pen-stepper button:disabled { opacity: 0.35; cursor: default; }
+.brush-scale { display: flex; align-items: center; gap: 8px; margin: 5px 8px 0; color: var(--fg-2); font: 11px var(--mono); }
+.brush-ruler {
+  flex: 1; height: 8px; position: relative; border-bottom: 1px solid var(--line-strong);
+  background: repeating-linear-gradient(to right, var(--line-strong) 0 1px, transparent 1px 12.5%);
+}
+.brush-ruler b { display: block; height: 100%; width: var(--size-percent); border-bottom: 2px solid var(--accent); position: relative; }
+.brush-ruler b::after { content: ''; position: absolute; right: -1px; bottom: -2px; width: 3px; height: 10px; background: var(--accent); }
+#brush-size-hint { margin: 5px 8px 2px; color: var(--fg-2); font-size: 12px; text-align: center; }
+#brush-size-hint kbd { font: 600 12px var(--font); }
 @media (max-width: 500px) {
-  #penbar { flex-wrap: wrap; justify-content: center; width: 280px; }
-  #penbar > .swatches { flex-basis: 100%; justify-content: center; }
-  #penbar > .swatches + .sep { display: none; }
+  #penbar { width: 280px; }
+  .brush-controls { flex-wrap: wrap; }
+  .brush-controls > .swatches { flex-basis: 100%; justify-content: center; }
+  .brush-controls > .swatches + .sep { display: none; }
 }
 #penbar[data-tool="eraser"] { width: max-content; }
 #penbar[data-tool="eraser"] :is(#pen-colors, #pen-colors + .sep) { display: none; }
