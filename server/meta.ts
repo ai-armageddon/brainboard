@@ -10,7 +10,7 @@ const clip = (s: string, n: number) => (s.length > n ? `${s.slice(0, n - 1).trim
 
 /** Replace the content of <meta name|property="key">. Leaves the page alone if the tag isn't there. */
 function setMeta(html: string, key: string, value: string) {
-  return html.replace(new RegExp(`(<meta (?:name|property)="${key}" content=")[^"]*(")`), `$1${value}$2`);
+  return html.replace(new RegExp(`(<meta (?:name|property)="${key}" content=")[^"]*(")`), (_, before, after) => before + value + after);
 }
 
 /**
@@ -33,12 +33,12 @@ export async function shareMeta(html: string, requestUrl: string, origin: string
   const desc = esc(`${who} “${name}” on Brainboard, the infinite whiteboard for notes, sketches and flow charts.`);
   const link = esc(`${origin}/?invite=${encodeURIComponent(token)}`);
 
-  let out = html.replace(/<title>[^<]*<\/title>/, `<title>${title}</title>`);
+  let out = html.replace(/<title>[^<]*<\/title>/, () => `<title>${title}</title>`);
   for (const [k, v] of [
     ['description', desc], ['og:title', title], ['og:description', desc], ['og:url', link],
     ['twitter:title', title], ['twitter:description', desc],
     // A private board: fine to preview in a chat, not something for search engines to index.
     ['robots', 'noindex, nofollow'],
   ] as const) out = setMeta(out, k, v);
-  return out.replace(/<link rel="canonical" href="[^"]*" \/>/, `<link rel="canonical" href="${link}" />`);
+  return out.replace(/<link rel="canonical" href="[^"]*" \/>/, () => `<link rel="canonical" href="${link}" />`);
 }
