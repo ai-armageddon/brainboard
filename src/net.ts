@@ -156,6 +156,7 @@ export function collect() {
   const ops = diffItems(known, knownOrder, S.items, itemKey);
   if (!ops.length) return;
   noteLocalChange(ops.flatMap((o) => (o.k === 'put' ? [o.item.id] : o.k === 'del' ? [o.id] : [])), ops.some((o) => o.k === 'order'));
+  emit('local-change');
   if (!ws || ws.readyState !== WebSocket.OPEN || !canEdit()) return; // kept pending until we reconnect
   const s = ++seq;
   for (const o of ops) {

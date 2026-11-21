@@ -8,7 +8,7 @@ import {
 } from './actions';
 import { clamp } from './geometry';
 import { account, api, events, saveProfile, session, type BoardMeta } from './net';
-import { openBoard, saveCamera } from './boards';
+import { openBoard, saveCamera, showBoardInUrl } from './boards';
 import { paintLogos } from './brand';
 import { userMovedCamera } from './collab';
 import { isVimMode, setVimMode } from './vim';
@@ -351,6 +351,7 @@ function startRename() {
     if (!save || !name || name === before) { el.textContent = before; return; }
     session.boardName = name;
     document.title = `${name} · Brainboard`;
+    showBoardInUrl();
     try { await api.renameBoard(id, name); } catch { toast('Rename failed'); }
   };
   const onKey = (e: KeyboardEvent) => {

@@ -104,7 +104,7 @@ async function main() {
   let last: string | null = null;
   try { last = localStorage.getItem('bb-last-board'); } catch { /* ignore */ }
   const id = boards.find((b) => b.id === hashId)?.id ?? boards.find((b) => b.id === last)?.id ?? boards[0].id;
-  openBoard(id);
+  openBoard(id, { quiet: id !== hashId });
 
   window.addEventListener('hashchange', () => {
     const next = location.hash.slice(1);
