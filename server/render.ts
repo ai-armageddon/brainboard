@@ -1,7 +1,7 @@
 // Render a board (or part of it) to PNG so multimodal agents can see what the user sees.
 import { Resvg } from '@resvg/resvg-js';
 import { textSpans } from '../src/text-runs.ts';
-import { FONTS, type Box, type ColorKey, type Item, type NodeItem, type TextualItem, type EdgeItem } from '../src/types.ts';
+import { FONTS, cornerRadius, type Box, type ColorKey, type Item, type NodeItem, type TextualItem, type EdgeItem } from '../src/types.ts';
 import { edgeGeom, shapePath, inkPath, unionBox } from '../src/geometry.ts';
 import { imageSize, readImage, type Board } from './store.ts';
 import { SHAPE_TEXT_W, isEdge, isNode, wrapLines } from './agent.ts';
@@ -75,9 +75,12 @@ async function nodeSvg(it: NodeItem, P: (typeof PALETTE)[Theme]): Promise<string
     }
     case 'image': {
       const img = await readImage(it.blob);
-      const ph = `<rect x="${n(it.x)}" y="${n(it.y)}" width="${n(it.w)}" height="${n(it.h)}" rx="2" fill="${P.placeholder}"/>`;
+      const r = cornerRadius(it);
+      const box = `x="${n(it.x)}" y="${n(it.y)}" width="${n(it.w)}" height="${n(it.h)}"`;
+      const ph = `<rect ${box} rx="${n(r || 2)}" fill="${P.placeholder}"/>`;
       if (!img) return ph;
-      return ph + `<image x="${n(it.x)}" y="${n(it.y)}" width="${n(it.w)}" height="${n(it.h)}" preserveAspectRatio="xMidYMid slice" href="data:${img.mime};base64,${img.buf.toString('base64')}"/>`;
+      const clip = r ? `<clipPath id="corners-${it.id}"><rect ${box} rx="${n(r)}"/></clipPath>` : '';
+      return ph + clip + `<image ${box}${r ? ` clip-path="url(#corners-${it.id})"` : ''} preserveAspectRatio="xMidYMid slice" href="data:${img.mime};base64,${img.buf.toString('base64')}"/>`;
     }
     case 'stroke':
       if (it.outline) return `<path transform="translate(${n(it.x)} ${n(it.y)})" d="${inkPath(it)}" fill="${P.ink[it.color]}" fill-rule="evenodd"/>`;

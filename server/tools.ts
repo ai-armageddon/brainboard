@@ -263,7 +263,7 @@ export function registerBoardTools(server: McpServer, a: BoardAccess) {
 
   server.registerTool('update_items', {
     title: 'Update items',
-    description: 'Change existing items by id: text, arrow labels, color, shape kind, position (absolute x/y or relative dx/dy) or size. All updates apply together or none do.',
+    description: 'Change existing items by id: text, arrow labels, color, shape kind, image corners, position (absolute x/y or relative dx/dy) or size. All updates apply together or none do.',
     inputSchema: {
       board: BOARD,
       updates: z.array(z.object({
@@ -276,6 +276,7 @@ export function registerBoardTools(server: McpServer, a: BoardAccess) {
         dx: z.number().optional().describe('Move right by this much (negative = left)'),
         dy: z.number().optional().describe('Move down by this much (negative = up)'),
         w: z.number().optional(), h: z.number().optional(),
+        corners: z.enum(['square', 'soft', 'round', 'full']).optional().describe('Image corners: square, soft (slightly rounded), round, or full (pill / circle)'),
       })).min(1),
     },
   }, guard(async ({ board, updates }) => {

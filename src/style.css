@@ -259,6 +259,8 @@ kbd {
 .item.shape[data-shape="diamond"] .txt { padding: 0.4em 22%; }
 
 .item.image { border-radius: 1px; background: var(--f-gray); box-shadow: var(--note-shadow); }
+@media (prefers-reduced-motion: no-preference) { .item.image { transition: border-radius 0.16s ease-out; } }
+.corners { display: flex; gap: 1px; }
 .item.image img {
   display: block;
   width: 100%;

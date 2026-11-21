@@ -1,5 +1,5 @@
 import { S, setRenderer, scheduleSave } from './state';
-import type { Box, Item, NodeItem } from './types';
+import { cornerRadius, type Box, type Item, type NodeItem } from './types';
 import { edgeGeom, shapePath, inkPath, unionBox } from './geometry';
 import { drawText } from './format';
 import { imageUrl } from './net';
@@ -115,6 +115,7 @@ function updateNodeEl(el: NodeEl, it: NodeItem, z: number) {
     case 'image': {
       st.width = `${it.w}px`;
       st.height = `${it.h}px`;
+      st.borderRadius = it.round ? `${cornerRadius(it)}px` : '';
       const img = el.firstElementChild as HTMLImageElement;
       const u = imageUrl(it.blob);
       if (img.getAttribute('src') !== u) img.src = u;
