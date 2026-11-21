@@ -68,6 +68,39 @@ Try asking: *"Read my Launch plan board and add the next steps as a flow chart"*
 
 Press `?` in the app for every shortcut.
 
+## Vim keys
+
+Some vim keys work all the time, because they don't clash with anything:
+
+| | |
+|---|---|
+| `:` (or `;`) | Command line. `Tab` completes, `↑`/`↓` scroll history |
+| `/` | Search the board's text as you type. `Enter` keeps the match |
+| `u` · `⌃R` | Undo / redo |
+| `w` `b` · `gg` `G` | Next / previous item, first / last item (reading order) |
+| `a` | Edit the selected item, cursor at the end |
+| `yy` · `x` | Yank / cut the selection |
+| `zz` · `zi` `zo` | Centre the selection, zoom in / out |
+| `ma` · `'a` · `''` | Mark this view as `a`, jump back to it, jump back to where you were before |
+| `gt` · `gT` | Next / previous board |
+
+Turn on **vim mode** with `:set vim` (or **Vim keys** in the menu). It adds the keys that normally pick a tool, so tools move to `:pen`, `:note`, `:bubble` and so on:
+
+| | |
+|---|---|
+| `h` `j` `k` `l` | Hop to the nearest item in that direction |
+| `H` `J` `K` `L` | Pan the view |
+| `i` · `cc` | Edit text, cursor at the start / replacing it |
+| `o` · `O` | New connected bubble below / above |
+| `dd` · `p` `P` | Delete (and yank) / put after or before the selection |
+| `n` · `N` | Next / previous search match |
+
+Useful commands:
+- `:e {board}` opens a board, with name completion. `:new`, `:file {name}`, `:bn` and `:bp` manage boards.
+- `:%s/old/new/g` finds and replaces across the board; `:s/…` does the same for the selection. Patterns are JavaScript regular expressions; `&` and `\1` work in the replacement.
+- `:color red`, `:shape decision`, `:zoom 150`, `:fit`, `:theme dark`, `:follow Sam`, `:present`, `:share`, `:export`, `:marks`, `:help`.
+- `:w` and `:q` work too, but brainboard saves as you go.
+
 ## Code map
 
 - `src/`: the app (vanilla TypeScript and Vite)

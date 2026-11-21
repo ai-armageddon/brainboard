@@ -69,6 +69,7 @@
       <button data-action="export">Export board…</button>
       <button data-action="import" class="owner-only">Import board…</button>
       <button data-action="theme">Theme <span id="theme-label" class="muted">Auto</span></button>
+      <button data-action="vim">Vim keys <span id="vim-label" class="muted">Off</span></button>
       <button data-action="shortcuts">Keyboard shortcuts <kbd>?</kbd></button>
       <hr />
       <div class="owner-only">
@@ -93,20 +94,26 @@
 
     <nav id="toolbar" class="panel" aria-label="Tools">
       <button class="tbtn" data-tool="select" data-icon="select" data-tip="Select · V" aria-label="Select"></button>
-      <button class="tbtn" data-tool="hand" data-icon="hand" data-tip="Pan · H or hold Space" aria-label="Pan"></button>
+      <button class="tbtn" data-tool="hand" data-icon="hand" data-tip="Pan · H or hold Space" data-vim-tip="Pan · :hand or hold Space" aria-label="Pan"></button>
       <span class="sep"></span>
-      <button class="tbtn edit-tool" data-tool="pen" data-icon="pen" data-tip="Pen · P" aria-label="Pen"></button>
-      <button class="tbtn edit-tool" data-tool="eraser" data-icon="eraser" data-tip="Eraser · E" aria-label="Eraser"></button>
+      <button class="tbtn edit-tool" data-tool="pen" data-icon="pen" data-tip="Pen · P" data-vim-tip="Pen · :pen" aria-label="Pen"></button>
+      <button class="tbtn edit-tool" data-tool="eraser" data-icon="eraser" data-tip="Eraser · E" data-vim-tip="Eraser · :eraser" aria-label="Eraser"></button>
       <span class="sep"></span>
-      <button class="tbtn edit-tool" data-tool="note" data-icon="note" data-tip="Sticky note · N" aria-label="Sticky note"></button>
+      <button class="tbtn edit-tool" data-tool="note" data-icon="note" data-tip="Sticky note · N" data-vim-tip="Sticky note · :note" aria-label="Sticky note"></button>
       <button class="tbtn edit-tool" data-tool="text" data-icon="text" data-tip="Text · T" aria-label="Text"></button>
-      <button id="img-btn" class="tbtn edit-tool" data-icon="image" data-tip="Image · I (or just paste)" aria-label="Image"></button>
+      <button id="img-btn" class="tbtn edit-tool" data-icon="image" data-tip="Image · I (or just paste)" data-vim-tip="Image · :image (or just paste)" aria-label="Image"></button>
       <span class="sep"></span>
-      <button class="tbtn edit-tool" data-tool="ellipse" data-icon="ellipse" data-tip="Bubble · O" aria-label="Bubble"></button>
+      <button class="tbtn edit-tool" data-tool="ellipse" data-icon="ellipse" data-tip="Bubble · O" data-vim-tip="Bubble · :bubble" aria-label="Bubble"></button>
       <button class="tbtn edit-tool" data-tool="rect" data-icon="rect" data-tip="Box · R" aria-label="Box"></button>
-      <button class="tbtn edit-tool" data-tool="diamond" data-icon="diamond" data-tip="Decision · D" aria-label="Decision"></button>
-      <button class="tbtn edit-tool" data-tool="connect" data-icon="connect" data-tip="Connector · C" aria-label="Connector"></button>
+      <button class="tbtn edit-tool" data-tool="diamond" data-icon="diamond" data-tip="Decision · D" data-vim-tip="Decision · :decision" aria-label="Decision"></button>
+      <button class="tbtn edit-tool" data-tool="connect" data-icon="connect" data-tip="Connector · C" data-vim-tip="Connector · :connect" aria-label="Connector"></button>
     </nav>
+
+    <div id="cmdline" class="panel" hidden>
+      <div id="wildmenu" hidden></div>
+      <label class="cmd-row"><span id="cmd-prefix">:</span><input id="cmd-input" spellcheck="false" autocomplete="off" autocapitalize="off" aria-label="Command" /><span id="cmd-count"></span></label>
+    </div>
+    <div id="modeline" role="status" aria-live="polite" hidden></div>
 
     <div id="penbar" class="panel" hidden></div>
     <div id="ctxbar" class="panel"></div>
@@ -163,6 +170,33 @@
               <dt>Copy / Paste</dt><dd><kbd>⌘C</kbd> <kbd>⌘V</kbd></dd>
               <dt>Front / Back</dt><dd><kbd>]</kbd> <kbd>[</kbd></dd>
               <dt>Delete</dt><dd><kbd>⌫</kbd></dd>
+            </dl>
+          </section>
+          <section class="vim-keys">
+            <h3>Vim <span class="muted">· always on</span></h3>
+            <dl>
+              <dt>Command line / Search</dt><dd><kbd>:</kbd> <kbd>/</kbd></dd>
+              <dt>Undo / Redo</dt><dd><kbd>u</kbd> <kbd>⌃R</kbd></dd>
+              <dt>Next / Previous item</dt><dd><kbd>w</kbd> <kbd>b</kbd></dd>
+              <dt>First / Last item</dt><dd><kbd>gg</kbd> <kbd>G</kbd></dd>
+              <dt>Edit selected (append)</dt><dd><kbd>a</kbd></dd>
+              <dt>Yank / Cut</dt><dd><kbd>yy</kbd> <kbd>x</kbd></dd>
+              <dt>Center / Zoom in / out</dt><dd><kbd>zz</kbd> <kbd>zi</kbd> <kbd>zo</kbd></dd>
+              <dt>Mark view / Jump to mark</dt><dd><kbd>ma</kbd> <kbd>'a</kbd> <kbd>''</kbd></dd>
+              <dt>Next / Previous board</dt><dd><kbd>gt</kbd> <kbd>gT</kbd></dd>
+            </dl>
+          </section>
+          <section class="vim-keys">
+            <h3>Vim mode <span class="muted">· :set vim</span></h3>
+            <dl>
+              <dt>Move to nearest item</dt><dd><kbd>h</kbd> <kbd>j</kbd> <kbd>k</kbd> <kbd>l</kbd></dd>
+              <dt>Pan the view</dt><dd><kbd>H</kbd> <kbd>J</kbd> <kbd>K</kbd> <kbd>L</kbd></dd>
+              <dt>Insert / Change text</dt><dd><kbd>i</kbd> <kbd>cc</kbd></dd>
+              <dt>New bubble below / above</dt><dd><kbd>o</kbd> <kbd>O</kbd></dd>
+              <dt>Delete / Put</dt><dd><kbd>dd</kbd> <kbd>p</kbd> <kbd>P</kbd></dd>
+              <dt>Next / Previous match</dt><dd><kbd>n</kbd> <kbd>N</kbd></dd>
+              <dt>Find &amp; replace</dt><dd><kbd>:%s/old/new/g</kbd></dd>
+              <dt>Tools</dt><dd><kbd>:pen</kbd> <kbd>:note</kbd> <kbd>:bubble</kbd>…</dd>
             </dl>
           </section>
         </div>

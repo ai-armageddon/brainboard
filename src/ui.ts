@@ -11,6 +11,7 @@ import { api, events, saveProfile, session, type BoardMeta } from './net';
 import { openBoard, saveCamera } from './boards';
 import { paintLogos } from './brand';
 import { userMovedCamera } from './collab';
+import { isVimMode, setVimMode } from './vim';
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
 
@@ -120,11 +121,11 @@ function positionCtxBar() {
 
 // ---------------------------------------------------------------- menu, theme, shortcuts
 
-type Theme = 'auto' | 'light' | 'dark';
-function getTheme(): Theme {
+export type Theme = 'auto' | 'light' | 'dark';
+export function getTheme(): Theme {
   try { return (localStorage.getItem('bb-theme') as Theme) || 'auto'; } catch { return 'auto'; }
 }
-function applyTheme(t: Theme) {
+export function applyTheme(t: Theme) {
   if (t === 'auto') document.documentElement.removeAttribute('data-theme');
   else document.documentElement.dataset.theme = t;
   $('theme-label').textContent = t[0].toUpperCase() + t.slice(1);
@@ -196,7 +197,7 @@ export function buildUI() {
     const b = (e.target as Element).closest<HTMLElement>('button');
     if (!b) return;
     const act = b.dataset.action;
-    if (act !== 'theme') closePopovers();
+    if (act !== 'theme' && act !== 'vim') closePopovers();
     switch (act) {
       case 'fit': if (userMovedCamera()) zoomToFit(); break;
       case 'export': void exportBoard(); break;
@@ -207,6 +208,7 @@ export function buildUI() {
         break;
       }
       case 'shortcuts': toggleShortcuts(true); break;
+      case 'vim': setVimMode(!isVimMode()); break;
       case 'clear': clearBoard(); break;
       case 'new-board': void newBoard(); break;
       case 'rename': startRename(); break;
@@ -304,7 +306,7 @@ async function refreshBoardList() {
     </button>`).join('');
 }
 
-async function newBoard() {
+export async function newBoard() {
   closePopovers();
   try {
     const b = await api.createBoard('Untitled board');

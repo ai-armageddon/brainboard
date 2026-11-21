@@ -11,6 +11,7 @@ import { clamp, contains, distToSeg, edgeGeom, strokePath, unionBox } from './ge
 import { closePopovers, openImagePicker, toggleShortcuts } from './ui';
 import { canEdit } from './net';
 import { userMovedCamera } from './collab';
+import { vimKey } from './vim';
 
 type Drag =
   | { kind: 'pan'; lx: number; ly: number }
@@ -431,6 +432,7 @@ function onKeyDown(e: KeyboardEvent) {
   if (mod) {
     const k = e.key.toLowerCase();
     if (ro && ['z', 'y', 'd', 'x'].includes(k)) { e.preventDefault(); return; }
+    if (k === 'r' && e.ctrlKey && !e.metaKey && !e.shiftKey) { e.preventDefault(); if (!ro) redo(); return; } // vim redo
     if (['=', '+', '-', '0'].includes(k) && !userMovedCamera()) { e.preventDefault(); return; }
     switch (k) {
       case 'z': e.preventDefault(); if (e.shiftKey) redo(); else undo(); return;
@@ -451,6 +453,7 @@ function onKeyDown(e: KeyboardEvent) {
     if (!S.space) { S.space = true; viewport.classList.add('space'); }
     return;
   }
+  if (vimKey(e)) return;
 
   if (ro && ['Delete', 'Backspace', 'Enter', 'Tab', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', '[', ']'].includes(e.key)) {
     if (e.key === 'Tab') e.preventDefault();
@@ -507,7 +510,23 @@ function onKeyUp(e: KeyboardEvent) {
 
 // ------------------------------------------------------------------ clipboard & drop
 
-function pointerWorld() {
+/** Put items in the internal clipboard (vim's unnamed register) and, when allowed, the system one. */
+export function yank(items: Item[]) {
+  internalClip = structuredClone(items);
+  navigator.clipboard?.writeText(MARK + JSON.stringify(items)).catch(() => { /* not focused / not allowed */ });
+}
+
+/** Size of what's in the internal clipboard, or null when it's empty. */
+export function clipBounds(): Box | null {
+  const nodes = internalClip?.filter(isNode) ?? [];
+  return nodes.length ? unionBox(nodes) : null;
+}
+
+export function putClip(at: { x: number; y: number }) {
+  if (internalClip) pasteItems(internalClip, at);
+}
+
+export function pointerWorld() {
   const inside = pointer.x > 0 && pointer.y > 0 && pointer.x < innerWidth && pointer.y < innerHeight;
   return screenToWorld(inside ? pointer.x : innerWidth / 2, inside ? pointer.y : innerHeight / 2);
 }

@@ -215,7 +215,7 @@ export function createSibling(id: string, side: Side = 'e') {
   else panIntoView(n);
 }
 
-function panIntoView(b: Box) {
+export function panIntoView(b: Box) {
   const { x, y, z } = S.cam;
   const L = b.x * z + x, T = b.y * z + y, R = L + b.w * z, B = T + b.h * z;
   const m = 80;

@@ -2,6 +2,7 @@ import '@fontsource-variable/geist';
 import '@fontsource-variable/geist-mono';
 import './style.css';
 import { paintLogos } from './brand';
+import { initVim } from './vim';
 import { loadPrefs, requestRender } from './state';
 import { applyCamera, render } from './render';
 import { buildUI, showOverlay, updateToolUI } from './ui';
@@ -37,6 +38,7 @@ async function main() {
   paintLogos();
   buildUI();
   initCollab();
+  initVim();
   initInput();
   updateToolUI();
   applyCamera();

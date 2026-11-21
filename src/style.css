@@ -1075,6 +1075,67 @@ button.primary:hover { opacity: 0.86; }
 .link-btn { border: 0; background: transparent; font-size: 13px; cursor: pointer; padding: 4px 6px; border-radius: 2px; }
 .link-btn:hover { background: var(--hover); }
 
+/* ---------------------------------------------------------------- vim: command line & mode line */
+#cmdline {
+  position: fixed;
+  left: 50%;
+  bottom: 16px;
+  transform: translateX(-50%);
+  width: min(620px, calc(100vw - 32px));
+  z-index: 35;
+  padding: 0;
+  overflow: hidden;
+  font-family: var(--mono);
+  animation: rise 0.12s ease-out;
+}
+#cmdline[hidden] { display: none; }
+body.cmd-open #toolbar, body.cmd-open #penbar { visibility: hidden; }
+.cmd-row { display: flex; align-items: center; gap: 8px; height: 44px; padding: 0 14px; }
+#cmd-prefix { font-weight: 600; color: var(--fg); font-size: 15px; }
+#cmd-input {
+  flex: 1;
+  min-width: 0;
+  border: 0;
+  outline: none;
+  background: transparent;
+  color: var(--fg);
+  font: 400 14px/1 var(--mono);
+  caret-color: var(--fg);
+}
+#cmd-input::placeholder { color: var(--fg-3); }
+#cmd-count { font-size: 11.5px; color: var(--fg-3); white-space: nowrap; }
+#cmd-count.err { color: var(--danger); }
+#wildmenu { border-bottom: 1px solid var(--line-strong); padding: 4px; display: flex; flex-direction: column; }
+#wildmenu[hidden] { display: none; }
+.wm { display: flex; justify-content: space-between; gap: 16px; padding: 6px 10px; border-radius: var(--r-sm); font-size: 13px; cursor: pointer; }
+.wm em { font-style: normal; font-family: var(--font); font-size: 12.5px; color: var(--fg-3); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.wm:hover { background: var(--hover); }
+.wm.on { background: var(--accent); color: var(--on-accent); }
+.wm.on em { color: inherit; opacity: 0.7; }
+
+#modeline {
+  position: fixed;
+  left: 16px;
+  bottom: 66px;
+  z-index: 20;
+  max-width: calc(100vw - 32px);
+  padding: 4px 7px;
+  border-radius: 2px;
+  background: var(--panel-solid);
+  border: 1px solid var(--line-strong);
+  color: var(--fg-2);
+  font: 500 11px/1.3 var(--mono);
+  letter-spacing: 0.02em;
+  white-space: pre;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  pointer-events: none;
+}
+#modeline[hidden] { display: none; }
+#modeline.err { color: var(--danger); border-color: color-mix(in srgb, var(--danger) 45%, transparent); }
+body.viewer #modeline { bottom: 16px; }
+.sheet h3 .muted { text-transform: none; letter-spacing: 0; }
+
 /* view-only */
 body.viewer #toolbar .edit-tool,
 body.viewer #toolbar .sep,
@@ -1088,4 +1149,6 @@ body.viewer #viewport[data-tool="select"] .item:hover::after { display: none; }
 @media (max-width: 760px) {
   #collab { top: auto; bottom: 120px; }
   #follow-banner { top: 64px; }
+  #modeline { bottom: 122px; }
+  #cmdline { bottom: 72px; }
 }
