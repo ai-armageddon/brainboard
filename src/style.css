@@ -1812,7 +1812,7 @@ body.viewer #modeline { bottom: 16px; }
 .voice-details svg { width: 13px; }
 .voice-details[aria-expanded="true"] { background: var(--hover); }
 .voice-details[aria-expanded="true"] svg { rotate: 180deg; }
-#voice-count { font: 550 11px var(--mono); }
+#voice-count { padding: 2px 5px; border-radius: 4px; background: var(--accent-soft); color: var(--fg); font: 550 11px var(--font); white-space: nowrap; }
 .voice.live { background: color-mix(in srgb, #2fb36d 9%, var(--panel-solid)); border-color: color-mix(in srgb, #2fb36d 36%, var(--line)); }
 .voice-mic.off { color: var(--danger); }
 .voice-mic[aria-disabled="true"] { cursor: not-allowed; }

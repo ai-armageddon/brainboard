@@ -3,6 +3,7 @@
 // Mutes are honoured by every listener (they silence that person locally), not just by the muted browser.
 import { account, events, isOwner, muteUser, sendRtc, sendVoice, session } from './net';
 import type { PeerInfo, RtcSignal } from './protocol';
+import { CallAudio } from './call-audio';
 import { avatarFace } from './avatar';
 import { icon } from './icons';
 import { toast } from './ui';
@@ -24,7 +25,7 @@ let joinError = '';
 let selfMuted = false;
 let boardOfCall: string | null = null;
 let local: MediaStream | null = null;
-let ctx: AudioContext | null = null;
+let callAudio: CallAudio | null = null;
 let localMeter: Meter | null = null;
 const conns = new Map<string, Conn>();
 
@@ -40,6 +41,7 @@ interface Meter { analyser: AnalyserNode; buf: Float32Array<ArrayBuffer>; loudAt
 const speaking = new Set<string>(); // peer ids, plus "me"
 
 function meterFor(stream: MediaStream): Meter | null {
+  const ctx = callAudio?.context;
   if (!ctx) return null;
   try {
     const source = ctx.createMediaStreamSource(stream);
@@ -161,32 +163,16 @@ async function onSignal(from: string, data: RtcSignal) {
 
 // ---------------------------------------------------------------- join / leave / mute
 
-function playMembershipChime(joined: boolean) {
-  if (!inVoice || !ctx || ctx.state !== 'running') return;
-  const notes = joined ? [440, 660] : [660, 440];
-  const start = ctx.currentTime;
-  for (const [i, frequency] of notes.entries()) {
-    const at = start + i * 0.1;
-    const tone = ctx.createOscillator();
-    const volume = ctx.createGain();
-    tone.frequency.value = frequency;
-    volume.gain.setValueAtTime(0, at);
-    volume.gain.linearRampToValueAtTime(0.075, at + 0.012);
-    volume.gain.exponentialRampToValueAtTime(0.0001, at + 0.15);
-    tone.connect(volume);
-    volume.connect(ctx.destination);
-    tone.onended = () => { tone.disconnect(); volume.disconnect(); };
-    tone.start(at);
-    tone.stop(at + 0.15);
-  }
-}
-
 export async function joinVoice() {
   if (inVoice || joining) return;
   joinError = '';
   joining = true;
   render();
+  let audio: CallAudio | undefined;
   try {
+    try { audio = new CallAudio(); }
+    catch { return toast('Couldn’t start audio in this browser'); }
+    const speakerReady = applySpeaker(audio.device);
     const board = await ensureBoard();
     if (!board) return toast('Couldn’t open the board for voice chat');
     if (!(await ensureScreenName('talk')) || session.boardId !== board) return;
@@ -201,18 +187,17 @@ export async function joinVoice() {
       return toast(joinError);
     }
     if (session.boardId !== board) { stream.getTracks().forEach(t => t.stop()); return; }
-    try { ctx = new AudioContext(); }
-    catch { stream.getTracks().forEach(t => t.stop()); return toast('Couldn’t start audio in this browser'); }
+    callAudio = audio;
     local = stream;
     watchMic();
-    void applySpeaker(ctx);
-    if (ctx.state === 'suspended') void ctx.resume().catch(() => {});
     localMeter = meterFor(local);
     inVoice = true;
     boardOfCall = board;
     selfMuted = $<HTMLInputElement>('voice-join-muted').checked || !canSpeak();
     applyLocalMute();
     sendVoice(true, selfMuted);
+    const joinedAudio = callAudio;
+    void speakerReady.then(() => { if (callAudio === joinedAudio) void joinedAudio.play('join'); });
     // The newcomer calls everyone already in the chat.
     for (const p of session.peers.values()) if (p.voice) void call(p.id);
     meterTimer = window.setInterval(measure, 100);
@@ -221,6 +206,7 @@ export async function joinVoice() {
     console.warn('[brainboard voice]', err);
     toast('Couldn’t join voice. Try again.');
   } finally {
+    if (audio && audio !== callAudio) audio.close();
     joining = false;
     render();
     if (!$('voice-panel').hidden && document.activeElement === document.body) {
@@ -239,8 +225,8 @@ export function leaveVoice(silent = false) {
   local = null;
   try { localMeter?.source.disconnect(); } catch { /* ignore */ }
   localMeter = null;
-  void ctx?.close();
-  ctx = null;
+  callAudio?.close(!silent);
+  callAudio = null;
   clearInterval(meterTimer);
   speaking.clear();
   sendVoice(false, true);
@@ -252,11 +238,17 @@ function applyLocalMute() {
   for (const t of local?.getAudioTracks() ?? []) t.enabled = !selfMuted && canSpeak();
 }
 
+function setMuted(muted: boolean) {
+  if (selfMuted === muted) return;
+  selfMuted = muted;
+  applyLocalMute();
+  void callAudio?.play(muted ? 'mute' : 'unmute');
+}
+
 export function toggleMute() {
   if (!inVoice) return;
   if (!canSpeak()) return toast('Stage mode: only the owner and presenter can talk');
-  selfMuted = !selfMuted;
-  applyLocalMute();
+  setMuted(!selfMuted);
   sendVoice(true, selfMuted);
   render();
 }
@@ -348,7 +340,7 @@ async function applySpeaker(output: HTMLMediaElement | AudioContext) {
 
 async function switchSpeaker(deviceId: string, label: string) {
   setPref(SPEAKER_KEY, deviceId);
-  if (ctx) await applySpeaker(ctx);
+  if (callAudio) await applySpeaker(callAudio.device);
   for (const c of conns.values()) await applySpeaker(c.audio);
   toast(`Speaker: ${label}`);
   if ($<HTMLDetailsElement>('voice-audio').open) void renderDevices();
@@ -467,8 +459,10 @@ function render() {
   mic.title = !canSpeak() ? 'Stage mode: only the owner and presenter can speak' : off ? 'Unmute microphone' : 'Mute microphone';
   mic.innerHTML = icon(off ? 'micOff' : 'mic', 16) + `<span>${off ? 'Muted' : 'Mic on'}</span>`;
   box.querySelector<HTMLButtonElement>('[data-voice="leave"]')!.hidden = !inVoice;
-  $('voice-count').textContent = total ? String(total) : '';
-  $('voice-count').hidden = !total;
+  const badge = $('voice-count');
+  const countLabel = total ? `${total} in call` : '';
+  if (badge.textContent !== countLabel) badge.textContent = countLabel;
+  badge.hidden = total === 0;
   if (!$('voice-panel').hidden) {
     $('voice-board').textContent = session.boardName || 'Untitled board';
     $('voice-total').textContent = String(total);
@@ -540,7 +534,7 @@ function syncPeers() {
     // Stage mode or a presenter change can take my mic away. Stay muted afterwards until I unmute myself,
     // so nobody goes back on air without knowing it.
     if (!canSpeak() && !selfMuted) {
-      selfMuted = true;
+      setMuted(true);
       sendVoice(true, true);
     }
     applyLocalMute();
@@ -573,7 +567,9 @@ export function initVoice() {
     if (e.key === 'Escape' && !$('voice-panel').hidden) { e.stopPropagation(); closePanel(true); }
   });
   initDevices();
-  events.addEventListener('voice-membership', (e) => playMembershipChime((e as CustomEvent<boolean>).detail));
+  events.addEventListener('voice-membership', (e) => {
+    if (inVoice) void callAudio?.play((e as CustomEvent<boolean>).detail ? 'join' : 'leave');
+  });
   events.addEventListener('rtc', (e) => {
     const { from, data } = (e as CustomEvent<{ from: string; data: RtcSignal }>).detail;
     void onSignal(from, data);
@@ -582,8 +578,7 @@ export function initVoice() {
     const by = String((e as CustomEvent).detail);
     if (!inVoice) return;
     if (by !== 'stage') {
-      selfMuted = true;
-      applyLocalMute();
+      setMuted(true);
       toast(`${by} muted you`);
     }
     render();
