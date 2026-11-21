@@ -589,7 +589,8 @@ export function initInput() {
 
   viewport.addEventListener('dblclick', (e) => {
     if (!canEdit()) return;
-    const t = e.target as Element;
+    // Pointer capture from the first click can retarget dblclick to the viewport, so hit-test the point too.
+    const t = (document.elementFromPoint(e.clientX, e.clientY) ?? e.target) as Element;
     if (t.closest('.txt.editing') || t.closest('.handle, .port')) return;
     const id = t.closest<HTMLElement>('[data-id]')?.dataset.id;
     if (id) {
