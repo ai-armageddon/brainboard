@@ -292,11 +292,20 @@ function handle(m: ServerMsg) {
     case 'meta': session.boardName = m.name; emit('meta'); return;
     case 'deleted': emit('fatal', 'This board was deleted.'); return;
     case 'join': session.peers.set(m.peer.id, m.peer); emit('peers'); emit('join', m.peer); return;
-    case 'leave': session.peers.delete(m.id); if (session.presenter === m.id) session.presenter = null; emit('peers'); emit('presenter'); return;
+    case 'leave': {
+      const wasInVoice = session.peers.get(m.id)?.voice;
+      session.peers.delete(m.id);
+      if (session.presenter === m.id) session.presenter = null;
+      if (wasInVoice) emit('voice-membership', false);
+      emit('peers');
+      emit('presenter');
+      return;
+    }
     case 'peer': {
       if (m.peer.id === session.you?.id) { session.you = m.peer; emit('peers'); return; }
       const prev = session.peers.get(m.peer.id);
       session.peers.set(m.peer.id, { ...m.peer, p: prev?.p });
+      if (!!prev?.voice !== !!m.peer.voice) emit('voice-membership', !!m.peer.voice);
       emit('peers');
       return;
     }
