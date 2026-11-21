@@ -26,6 +26,7 @@
     "mcp": "node server/mcp.ts"
   },
   "devDependencies": {
+    "@types/clipper-lib": "^6.4.0",
     "@types/node": "^26.6.6",
     "@types/ws": "^8.18.2",
     "typescript": "^5.9.3",
@@ -38,6 +39,7 @@
     "@resvg/resvg-js": "^2.6.2",
     "@simplewebauthn/browser": "^14.0.0",
     "@simplewebauthn/server": "^14.1.0",
+    "clipper-lib": "^6.4.2",
     "ws": "^8.23.0",
     "zod": "^4.6.7"
   },

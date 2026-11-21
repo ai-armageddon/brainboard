@@ -2,7 +2,7 @@
 import { replaceItemText } from '../src/text-runs.ts';
 import type { Box, ColorKey, EdgeItem, Item, NodeItem, ShapeKind, TextualItem } from '../src/types.ts';
 import { COLORS } from '../src/types.ts';
-import { intersects, unionBox } from '../src/geometry.ts';
+import { intersects, resizeStroke, unionBox } from '../src/geometry.ts';
 import { newId, type Board } from './store.ts';
 
 export const isNode = (it: Item): it is NodeItem => it.type !== 'edge';
@@ -161,6 +161,7 @@ export function boardJson(b: Board) {
       const o: Record<string, unknown> = {};
       for (const [k, v] of Object.entries(it)) {
         if (k === 'points') o.pointCount = (v as number[]).length / 2;
+        else if (k === 'outline') o.outlineCount = (v as number[][]).length;
         else if (k === 'blob') continue;
         else o[k] = round(v);
       }
@@ -443,12 +444,12 @@ export function updateItems(board: Board, updates: UpdateSpec[]): string[] {
       if (u.dy) it.y += u.dy;
       if (u.x !== undefined || u.y !== undefined || u.dx || u.dy) changes.push('position');
       if (u.w !== undefined && u.w > 0) {
-        if (it.type === 'stroke') it.points = it.points.map((v, i) => (i % 2 ? v : (v * u.w!) / it.w));
+        if (it.type === 'stroke') resizeStroke(it, it, u.w / it.w, 1);
         it.w = u.w;
         changes.push('width');
       }
       if (u.h !== undefined && u.h > 0) {
-        if (it.type === 'stroke') it.points = it.points.map((v, i) => (i % 2 ? (v * u.h!) / it.h : v));
+        if (it.type === 'stroke') resizeStroke(it, it, 1, u.h / it.h);
         it.h = u.h;
         changes.push('height');
       }

@@ -35,8 +35,8 @@ export interface NoteItem extends Base, FormattedText { type: 'note'; text: stri
 export interface TextItem extends Base, FormattedText { type: 'text'; text: string; color: ColorKey; fs: number }
 export interface ShapeItem extends Base, FormattedText { type: 'shape'; shape: ShapeKind; text: string; color: ColorKey; fs: number }
 export interface ImageItem extends Base { type: 'image'; blob: string }
-/** points are a flat [x0, y0, x1, y1, …] list relative to the item's x/y */
-export interface StrokeItem extends Base { type: 'stroke'; points: number[]; color: ColorKey; size: number }
+/** Local x/y pairs. Drawn ink has a centerline; clipped ink has closed outline rings (including holes). */
+export interface StrokeItem extends Base { type: 'stroke'; points: number[]; color: ColorKey; size: number; outline?: number[][] }
 
 export interface EdgeItem extends FormattedText {
   id: string; type: 'edge';

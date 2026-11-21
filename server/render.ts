@@ -2,7 +2,7 @@
 import { Resvg } from '@resvg/resvg-js';
 import { textSpans } from '../src/text-runs.ts';
 import { FONTS, type Box, type ColorKey, type Item, type NodeItem, type TextualItem, type EdgeItem } from '../src/types.ts';
-import { edgeGeom, shapePath, strokePath, unionBox } from '../src/geometry.ts';
+import { edgeGeom, shapePath, inkPath, unionBox } from '../src/geometry.ts';
 import { imageSize, readImage, type Board } from './store.ts';
 import { SHAPE_TEXT_W, isEdge, isNode, wrapLines } from './agent.ts';
 
@@ -80,7 +80,8 @@ async function nodeSvg(it: NodeItem, P: (typeof PALETTE)[Theme]): Promise<string
       return ph + `<image x="${n(it.x)}" y="${n(it.y)}" width="${n(it.w)}" height="${n(it.h)}" preserveAspectRatio="xMidYMid slice" href="data:${img.mime};base64,${img.buf.toString('base64')}"/>`;
     }
     case 'stroke':
-      return `<path transform="translate(${n(it.x)} ${n(it.y)})" d="${strokePath(it.points)}" fill="none" stroke="${P.ink[it.color]}" stroke-width="${n(it.size)}" stroke-linecap="round" stroke-linejoin="round"/>`;
+      if (it.outline) return `<path transform="translate(${n(it.x)} ${n(it.y)})" d="${inkPath(it)}" fill="${P.ink[it.color]}" fill-rule="evenodd"/>`;
+      return `<path transform="translate(${n(it.x)} ${n(it.y)})" d="${inkPath(it)}" fill="none" stroke="${P.ink[it.color]}" stroke-width="${n(it.size)}" stroke-linecap="round" stroke-linejoin="round"/>`;
   }
 }
 

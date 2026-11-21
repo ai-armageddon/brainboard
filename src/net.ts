@@ -159,7 +159,7 @@ const arrIds = new WeakMap<object, number>();
 let nextArr = 1;
 export function itemKey(it: Item): string {
   return JSON.stringify(it, (k, v) => {
-    if (k === 'points' && Array.isArray(v)) {
+    if ((k === 'points' || k === 'outline') && Array.isArray(v)) {
       let n = arrIds.get(v);
       if (!n) { n = nextArr++; arrIds.set(v, n); }
       return `#${n}`;

@@ -8,7 +8,7 @@ export const S = {
   editing: null as string | null,
   space: false,
   pen: { color: 'ink' as ColorKey, size: 3 },
-  eraser: { size: 16 },
+  eraser: { size: 16, mode: 'partial' as 'partial' | 'whole' },
   last: { note: 'yellow', shape: 'ink', text: 'ink', edge: 'gray' } as Record<'note' | 'shape' | 'text' | 'edge', ColorKey>,
 };
 
@@ -144,6 +144,7 @@ export function loadPrefs() {
     const p = JSON.parse(localStorage.getItem(prefKey) ?? '{}');
     if (p.pen) S.pen = { ...S.pen, ...p.pen };
     if (Number.isFinite(p.eraser?.size)) S.eraser.size = Math.max(1, Math.round(p.eraser.size));
+    S.eraser.mode = p.eraser?.mode === 'whole' ? 'whole' : 'partial';
     if (p.last) S.last = { ...S.last, ...p.last };
   } catch { /* ignore */ }
 }

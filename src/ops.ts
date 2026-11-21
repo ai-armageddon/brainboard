@@ -59,6 +59,10 @@ export function validOp(op: unknown): op is Op {
   if (o.k === 'put') {
     const it = o.item as Record<string, unknown> | undefined;
     if (!it || typeof it.id !== 'string' || !ID.test(it.id) || !TYPES.has(String(it.type))) return false;
+    if (it.type === 'stroke' && it.outline !== undefined) {
+      if (!Array.isArray(it.outline) || !it.outline.length || !it.outline.every(ring =>
+        Array.isArray(ring) && ring.length >= 6 && ring.length % 2 === 0 && ring.every(Number.isFinite))) return false;
+    }
     if (it.type === 'edge') return typeof it.from === 'string' && typeof it.to === 'string';
     return ['x', 'y', 'w', 'h'].every((k) => typeof it[k] === 'number' && Number.isFinite(it[k] as number));
   }

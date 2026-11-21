@@ -279,6 +279,8 @@ kbd {
 .item.stroke path { fill: none; stroke-linecap: round; stroke-linejoin: round; }
 .item.stroke .ink { stroke: var(--s); }
 .item.stroke .hit { stroke: transparent; pointer-events: stroke; }
+.item.stroke.clipped .ink { fill: var(--s); fill-rule: evenodd; stroke: none; }
+.item.stroke.clipped .hit { fill: transparent; fill-rule: evenodd; stroke: none; pointer-events: fill; }
 #viewport:not([data-tool="select"]):not([data-tool="hand"]) .item.stroke .hit { pointer-events: none; }
 .item.stroke.selected .ink { filter: drop-shadow(0 0 calc(2px * var(--iz)) var(--accent-line)); }
 
@@ -965,6 +967,10 @@ body.busy #ctxbar { opacity: 0; pointer-events: none; transition: none; }
   .brush-controls > .swatches { flex-basis: 100%; justify-content: center; }
   .brush-controls > .swatches + .sep { display: none; }
 }
+.eraser-modes { display: none; justify-self: center; gap: 2px; padding: 2px; margin-bottom: 3px; background: var(--hover); border-radius: var(--r); }
+#penbar[data-tool="eraser"] .eraser-modes { display: flex; }
+.eraser-modes button { padding: 5px 10px; font: 500 13px var(--font); color: var(--fg-2); border: 0; background: transparent; border-radius: var(--r-sm); cursor: pointer; }
+.eraser-modes button[aria-pressed="true"] { color: var(--on-accent); background: var(--accent); }
 #penbar[data-tool="eraser"] { width: max-content; }
 #penbar[data-tool="eraser"] :is(#pen-colors, #pen-colors + .sep) { display: none; }
 #penbar[hidden] { display: none; }

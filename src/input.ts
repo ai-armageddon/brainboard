@@ -7,13 +7,14 @@ import {
   selectionItems, setTool, siblingOf, startEditing, stopCamAnim, stopEditing, uid, zoomAt, zoomBy,
   zoomToFit, setZoom, type Side,
 } from './actions';
-import { clamp, contains, distToSeg, edgeGeom, strokePath, unionBox } from './geometry';
+import { clamp, contains, resizeStroke, edgeGeom, strokePath, unionBox } from './geometry';
 import { closePopovers, openImagePicker, setBrushSize, toggleShortcuts } from './ui';
 import { canEdit } from './net';
 import { userMovedCamera } from './collab';
 import { vimKey } from './vim';
 import { openExport } from './export';
 import { inkEnd, inkMove, inkStart } from './ink';
+import { eraseStroke } from './erase';
 import { IS_MAC } from './keys';
 
 type Drag =
@@ -231,9 +232,13 @@ function onMove(e: PointerEvent) {
       return;
     }
 
-    case 'erase':
-      eraseAlong(drag, p);
+    case 'erase': {
+      const samples = e.getCoalescedEvents?.();
+      if (samples?.length) {
+        for (const sample of samples) eraseAlong(drag, screenToWorld(sample.clientX, sample.clientY));
+      } else eraseAlong(drag, p);
       return;
+    }
 
     case 'create': {
       if (drag.tool === 'text') return;
@@ -305,7 +310,7 @@ function doResize(d: Extract<Drag, { kind: 'resize' }>, p: { x: number; y: numbe
     it.y = y0 + (o.y - s.y) * sy;
     it.w = o.w * sx;
     it.h = o.h * sy;
-    if (it.type === 'stroke' && o.type === 'stroke') it.points = o.points.map((v, i) => (i % 2 ? v * sy : v * sx));
+    if (it.type === 'stroke' && o.type === 'stroke') resizeStroke(it, o, sx, sy);
     if (it.type === 'text' && o.type === 'text') it.fs = o.fs * sx;
     else if (multi && 'fs' in it && 'fs' in o) it.fs = o.fs * Math.min(sx, sy);
   }
@@ -325,6 +330,9 @@ function onUp(e: PointerEvent) {
   const p = screenToWorld(e.clientX, e.clientY);
 
   switch (d.kind) {
+    case 'erase':
+      if (e.type === 'pointerup' && (d.last.x !== p.x || d.last.y !== p.y)) eraseAlong(d, p);
+      break;
     case 'move':
       if (!d.started && !d.shift && d.wasSelected && S.selected.size > 1) S.selected = new Set([d.clickId]);
       break;
@@ -415,30 +423,18 @@ function finishStroke({ pts, id, size, color }: Extract<Drag, { kind: 'draw' }>)
 }
 
 function eraseAlong(d: Extract<Drag, { kind: 'erase' }>, p: { x: number; y: number }) {
-  const z = S.cam.z;
-  const dist = Math.hypot(p.x - d.last.x, p.y - d.last.y);
-  const steps = Math.max(1, Math.ceil((dist * z) / Math.min(4, S.eraser.size / 2)));
-  const hits = new Set<string>();
-  for (let s = 0; s <= steps; s++) {
-    const qx = d.last.x + ((p.x - d.last.x) * s) / steps;
-    const qy = d.last.y + ((p.y - d.last.y) * s) / steps;
-    for (const it of S.items) {
-      if (it.type !== 'stroke' || hits.has(it.id)) continue;
-      const r = it.size / 2 + S.eraser.size / (2 * z);
-      if (qx < it.x - r || qx > it.x + it.w + r || qy < it.y - r || qy > it.y + it.h + r) continue;
-      const pt = it.points;
-      for (let i = 0; i + 3 < pt.length; i += 2) {
-        if (distToSeg(qx, qy, it.x + pt[i], it.y + pt[i + 1], it.x + pt[i + 2], it.y + pt[i + 3]) <= r) {
-          hits.add(it.id);
-          break;
-        }
-      }
-    }
+  const radius = S.eraser.size / (2 * S.cam.z);
+  const result: Item[] = [];
+  let hit = false;
+  for (const item of S.items) {
+    const remaining = item.type === 'stroke' ? eraseStroke(item, d.last, p, radius, S.eraser.mode === 'whole') : item;
+    if (remaining !== item) hit = true;
+    if (remaining) result.push(remaining);
   }
   d.last = p;
-  if (!hits.size) return;
+  if (!hit) return;
   if (!d.did) { checkpoint(); d.did = true; }
-  S.items = S.items.filter((i) => !hits.has(i.id));
+  S.items = result;
   changed();
 }
 

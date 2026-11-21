@@ -1,6 +1,6 @@
 import { S, setRenderer, scheduleSave } from './state';
 import type { Box, Item, NodeItem } from './types';
-import { edgeGeom, shapePath, strokePath, unionBox } from './geometry';
+import { edgeGeom, shapePath, inkPath, unionBox } from './geometry';
 import { drawText } from './format';
 import { imageUrl } from './net';
 
@@ -126,9 +126,11 @@ function updateNodeEl(el: NodeEl, it: NodeItem, z: number) {
       const svg = el.firstElementChild as SVGSVGElement;
       const hit = svg.firstElementChild as SVGPathElement;
       const ink = svg.lastElementChild as SVGPathElement;
-      if (el._k !== it.points) {
-        el._k = it.points;
-        const d = strokePath(it.points);
+      const geometry = it.outline ?? it.points;
+      if (el._k !== geometry) {
+        el._k = geometry;
+        el.classList.toggle('clipped', !!it.outline);
+        const d = inkPath(it);
         hit.setAttribute('d', d);
         ink.setAttribute('d', d);
       }

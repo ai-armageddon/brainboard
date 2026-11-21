@@ -217,6 +217,10 @@
     <div id="modeline" role="status" aria-live="polite" hidden></div>
 
     <div id="penbar" class="panel" hidden>
+      <div class="eraser-modes" role="group" aria-label="Eraser mode">
+        <button type="button" data-erase-mode="partial" aria-pressed="true" title="Erase just the ink under the brush">Partial</button>
+        <button type="button" data-erase-mode="whole" aria-pressed="false" title="Remove the entire pen stroke you touch">Whole stroke</button>
+      </div>
       <div class="brush-controls">
         <div id="pen-colors" class="swatches"></div>
         <span class="sep"></span>

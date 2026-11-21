@@ -1,4 +1,4 @@
-import type { Box, Pt, ShapeKind } from './types';
+import type { Box, Pt, ShapeKind, StrokeItem } from './types';
 
 export const clamp = (v: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, v));
 const r2 = (n: number) => Math.round(n * 100) / 100;
@@ -37,6 +37,17 @@ export function strokePath(p: number[]): string {
     d += `Q${r2(p[i])} ${r2(p[i + 1])} ${r2(mx)} ${r2(my)}`;
   }
   return d + `L${r2(p[n - 2])} ${r2(p[n - 1])}`;
+}
+
+export function inkPath(stroke: StrokeItem): string {
+  if (!stroke.outline) return strokePath(stroke.points);
+  return stroke.outline.map(ring => `M${ring.map(r2).join(' ')}Z`).join('');
+}
+
+export function resizeStroke(target: StrokeItem, source: StrokeItem, sx: number, sy: number) {
+  const scale = (coords: number[]) => coords.map((v, i) => v * (i % 2 ? sy : sx));
+  target.points = scale(source.points);
+  if (source.outline) target.outline = source.outline.map(scale);
 }
 
 function roundRect(w: number, h: number, r: number, i: number) {

@@ -52,6 +52,11 @@ export function updateToolUI() {
   if (!isBrushTool(S.tool)) return;
   const tool = S.tool;
   penbar.dataset.tool = tool;
+  if (tool === 'eraser') {
+    for (const button of penbar.querySelectorAll<HTMLElement>('[data-erase-mode]')) {
+      button.setAttribute('aria-pressed', String(button.dataset.eraseMode === S.eraser.mode));
+    }
+  }
   for (const b of penbar.querySelectorAll<HTMLButtonElement>('[data-step]')) {
     const action = b.dataset.step === '1' ? 'Increase' : 'Decrease';
     b.setAttribute('aria-label', `${action} ${tool} size`);
@@ -256,7 +261,11 @@ export function buildUI() {
     const b = (e.target as Element).closest<HTMLElement>('button');
     if (!b) return;
     if (!isBrushTool(S.tool)) return;
-    if (b.dataset.size) setBrushSize(Number(b.dataset.size));
+    if (b.dataset.eraseMode === 'partial' || b.dataset.eraseMode === 'whole') {
+      S.eraser.mode = b.dataset.eraseMode;
+      updateToolUI();
+      savePrefs();
+    } else if (b.dataset.size) setBrushSize(Number(b.dataset.size));
     else if (b.dataset.step) setBrushSize(S[S.tool].size + Number(b.dataset.step));
     else if (b.dataset.color) {
       S.pen.color = b.dataset.color as ColorKey;
