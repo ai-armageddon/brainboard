@@ -47,6 +47,14 @@ function positionBrushCursor(e: MouseEvent) {
   brushCursor.style.left = `${e.clientX}px`;
   brushCursor.style.top = `${e.clientY}px`;
 }
+/** The pointer that owns `drag`, and when it went down. Other pointers can't steer it. */
+let dragPointer = -1;
+let dragSince = 0;
+
+// Fingers on the canvas. One finger uses the current tool; two pan and zoom, whatever the tool.
+const touches = new Map<number, { x: number; y: number }>();
+/** Where the fingers' midpoint is now, plus their spread and the zoom when the gesture (re)started. */
+let pinch: { cx: number; cy: number; d0: number; z0: number; ok: boolean } | null = null;
 
 /** Hold this and drag to pan: ⌘ on Mac (Ctrl-click is right-click there), Ctrl elsewhere. */
 const PAN_KEY = IS_MAC ? 'Meta' : 'Control';
@@ -60,6 +68,8 @@ const isEditableTarget = (t: EventTarget | null) =>
 
 function begin(d: Drag, e: PointerEvent) {
   drag = d;
+  dragPointer = e.pointerId;
+  dragSince = e.timeStamp;
   viewport.setPointerCapture(e.pointerId);
   if (d.kind === 'pan') viewport.classList.add('panning');
 }
@@ -71,8 +81,23 @@ function setBusy(on: boolean) {
 // ------------------------------------------------------------------ pointer down
 
 function onDown(e: PointerEvent) {
-  if (drag?.kind === 'brush-size' || (isBrushTool(S.tool) && !e.isPrimary)) return;
+  if (e.pointerType !== 'touch' && (drag?.kind === 'brush-size' || (isBrushTool(S.tool) && !e.isPrimary))) return;
   const t = e.target as Element;
+  if (e.pointerType === 'touch') {
+    // A hand resting on the screen while a stylus or mouse is at work is not a gesture.
+    if (drag && !touches.has(dragPointer)) return;
+    touches.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    try { viewport.setPointerCapture(e.pointerId); } catch { /* already gone */ }
+    if (touches.size > 1) {
+      e.preventDefault();
+      beginPinch(e);
+      return;
+    }
+  }
+  if (drag) {
+    if (e.pointerId !== dragPointer) return; // a second pointer can't take over a drag that's under way
+    dropDrag(e); // the same pointer pressing again means we missed its release
+  }
   if (t.closest('.txt.editing')) return;
   closePopovers();
   if (S.editing) stopEditing();
@@ -173,10 +198,14 @@ function beginResize(corner: string, e: PointerEvent) {
 
 function onMove(e: PointerEvent) {
   if (drag?.kind === 'brush-size' && drag.pointerId !== e.pointerId) return;
-  if (isBrushTool(S.tool) && e.isPrimary) positionBrushCursor(e);
   pointer.x = e.clientX;
   pointer.y = e.clientY;
-  if (!drag) return;
+  if (touches.has(e.pointerId)) {
+    touches.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    if (pinch) { movePinch(); return; }
+  }
+  if (isBrushTool(S.tool) && e.isPrimary) positionBrushCursor(e);
+  if (!drag || e.pointerId !== dragPointer) return;
   const z = S.cam.z;
   const p = screenToWorld(e.clientX, e.clientY);
 
@@ -338,13 +367,104 @@ function doResize(d: Extract<Drag, { kind: 'resize' }>, p: { x: number; y: numbe
   changed();
 }
 
+// ------------------------------------------------------------------ two-finger pan & zoom
+
+function pinchPoint() {
+  const [a, b] = [...touches.values()];
+  return { cx: (a.x + b.x) / 2, cy: (a.y + b.y) / 2, d: Math.hypot(a.x - b.x, a.y - b.y) };
+}
+
+/** Anchor the gesture on the fingers as they are now (at the start, and whenever one is added or lifted). */
+function anchorPinch(ok: boolean) {
+  const { cx, cy, d } = pinchPoint();
+  pinch = { cx, cy, d0: d, z0: S.cam.z, ok };
+}
+
+function beginPinch(e: PointerEvent) {
+  if (pinch) { anchorPinch(pinch.ok); return; } // a third finger
+  if (drag) dropDrag(e);
+  closePopovers();
+  if (S.editing) stopEditing();
+  stopCamAnim();
+  brushCursor.hidden = true;
+  anchorPinch(userMovedCamera());
+  viewport.classList.add('panning');
+}
+
+function movePinch() {
+  const o = pinch!;
+  if (!o.ok) return;
+  const n = pinchPoint();
+  S.cam.x += n.cx - o.cx;
+  S.cam.y += n.cy - o.cy;
+  o.cx = n.cx;
+  o.cy = n.cy;
+  // Zoom against the spread the gesture started with, so small jitters never add up to a drift.
+  // Fingers that start almost touching give a wild ratio: leave the zoom alone then.
+  if (o.d0 > 24) zoomAt(n.cx, n.cy, o.z0 * (n.d / o.d0));
+  else applyCamera();
+}
+
+/**
+ * A second finger landed while the first was mid-gesture: that first touch was the start of a pinch,
+ * not a stroke. Undo what it began. A stroke that was clearly under way is kept (a stray palm
+ * shouldn't eat your handwriting).
+ */
+function dropDrag(e: PointerEvent) {
+  const d = drag!;
+  drag = null;
+  setBusy(false);
+  viewport.classList.remove('panning');
+  const brief = e.timeStamp - dragSince < 400;
+  switch (d.kind) {
+    case 'draw': {
+      clearTimeout(d.hold);
+      live.stroke.style.removeProperty('opacity');
+      live.stroke.setAttribute('d', '');
+      const keep = !brief && d.pts.length > 16;
+      if (keep) finishStroke(d);
+      inkEnd(keep ? 'done' : 'cancel');
+      break;
+    }
+    case 'erase':
+      if (brief && d.did) undo();
+      break;
+    case 'create':
+      if (brief && d.id) { undo(); S.selected.clear(); }
+      break;
+    case 'marquee':
+      marquee.style.display = 'none';
+      S.selected = new Set(d.base);
+      break;
+    case 'move':
+      for (const [id, o] of d.orig) {
+        const it = getItem(id) as NodeItem | undefined;
+        if (it) { it.x = o.x; it.y = o.y; }
+      }
+      if (d.started) changed();
+      break;
+    case 'connect':
+      live.edge.setAttribute('d', '');
+      live.arrow.setAttribute('d', '');
+      if (d.target) nodeElOf(d.target)?.classList.remove('connect-target');
+      break;
+    // pan and resize simply stop where they are
+  }
+  requestRender();
+}
+
 // ------------------------------------------------------------------ pointer up
 
 function onUp(e: PointerEvent) {
+  if (touches.delete(e.pointerId) && pinch) {
+    // Fewer than two fingers left: the gesture is over. The finger still down does nothing more.
+    if (touches.size > 1) anchorPinch(pinch.ok);
+    else { pinch = null; viewport.classList.remove('panning'); }
+    return;
+  }
   const d = drag;
-  if (d?.kind === 'brush-size' && d.pointerId !== e.pointerId) return;
   if (e.pointerType === 'touch' || e.type === 'pointercancel') brushCursor.hidden = true;
-  if (!d) return;
+  if (!d || e.pointerId !== dragPointer) return;
   drag = null;
   setBusy(false);
   viewport.classList.remove('panning');
@@ -733,7 +853,7 @@ export function initInput() {
   window.addEventListener('pointermove', (e) => { pointer.x = e.clientX; pointer.y = e.clientY; }, { passive: true });
   viewport.addEventListener('pointerup', onUp);
   viewport.addEventListener('pointercancel', onUp);
-  viewport.addEventListener('lostpointercapture', (e) => { if (drag) onUp(e); });
+  viewport.addEventListener('lostpointercapture', (e) => { if (drag || touches.has(e.pointerId)) onUp(e); });
 
   viewport.addEventListener('dblclick', (e) => {
     if (!canEdit() || (e.shiftKey && isBrushTool(S.tool))) return;
@@ -798,11 +918,15 @@ export function initInput() {
   // stop browser page-zoom when pinching over floating panels
   window.addEventListener('wheel', (e) => { if (e.ctrlKey) e.preventDefault(); }, { passive: false });
 
+  // Safari: keep a pinch that starts on a toolbar or menu from zooming the whole page.
+  document.addEventListener('gesturestart', (e) => e.preventDefault());
+
   // Safari trackpad pinch
   let gz = 1;
   viewport.addEventListener('gesturestart', (e) => { e.preventDefault(); gz = S.cam.z; });
   viewport.addEventListener('gesturechange', (e) => {
     e.preventDefault();
+    if (touches.size) return; // fingers on a touch screen: the pointer events above already handle it
     if (!userMovedCamera()) return;
     const ge = e as unknown as { scale: number; clientX: number; clientY: number };
     zoomAt(ge.clientX, ge.clientY, gz * ge.scale);

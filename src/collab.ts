@@ -143,7 +143,7 @@ function avatar(p: PeerInfo, extra = '') {
 function renderAvatars() {
   const box = $('avatars');
   const others = [...session.peers.values()];
-  const shown = others.slice(0, 5);
+  const shown = others.slice(0, matchMedia('(max-width: 600px)').matches ? 2 : 5); // a phone has room for a couple
   let html = shown.map((p) => avatar(p, `${p.id === following ? 'followed' : ''} ${p.id === session.presenter ? 'presenting' : ''}`)).join('');
   if (others.length > shown.length) html += `<span class="avatar more">+${others.length - shown.length}</span>`;
   if (session.you || session.draft) html += avatar(myAvatar(), 'me');

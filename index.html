@@ -2,7 +2,7 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover" />
     <meta name="color-scheme" content="light dark" />
     <title>Brainboard · The infinite whiteboard</title>
     <meta name="description" content="An infinite whiteboard for notes, images, sketches and flow charts. Live with your team, and with AI agents over MCP." />
@@ -106,9 +106,11 @@
         <div class="hint-title">Empty board</div>
         <div class="hint-sub">Paste, type or draw anywhere.</div>
         <div class="hint-chips">
-          <span><kbd>⌘V</kbd> paste an image</span>
-          <span>double-click to write</span>
-          <span><kbd>O</kbd> then <kbd>Tab</kbd> to map a flow</span>
+          <span class="mouse-only"><kbd>⌘V</kbd> paste an image</span>
+          <span class="mouse-only">double-click to write</span>
+          <span class="mouse-only"><kbd>O</kbd> then <kbd>Tab</kbd> to map a flow</span>
+          <span class="touch-only">double-tap to write</span>
+          <span class="touch-only">two fingers to move and zoom</span>
         </div>
       </div>
     </div>

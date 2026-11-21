@@ -237,9 +237,15 @@ function positionCtxBar(glide: boolean) {
   const L = b.x * z + x, T = b.y * z + y, R = (b.x + b.w) * z + x, B = (b.y + b.h) * z + y;
   const w = ctx.offsetWidth, h = ctx.offsetHeight;
   const left = clamp((L + R) / 2 - w / 2, 12, Math.max(12, innerWidth - w - 12));
+  // Stay clear of the bars along the bottom, however many rows they stack into on this screen.
+  let floor = innerHeight - 72;
+  for (const id of ['toolbar', 'undobar', 'collab']) {
+    const r = $(id).getBoundingClientRect();
+    if (r.height && r.top > innerHeight / 2) floor = Math.min(floor, r.top);
+  }
   let top = T - h - 18;
   if (top < 64) top = B + 18;
-  top = clamp(top, 64, Math.max(64, innerHeight - h - 84));
+  top = clamp(top, 64, Math.max(64, floor - h - 12));
   const roomBelow = innerHeight - top - h;
   ctx.classList.toggle('fonts-above', roomBelow < 210 ? top > roomBelow : top < T && top >= 210);
   ctx.style.transform = `translate(${Math.round(left)}px,${Math.round(top)}px)`;
