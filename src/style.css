@@ -1173,6 +1173,11 @@ button.primary:hover { opacity: 0.86; }
   cursor: pointer;
 }
 #follow-banner button:hover { background: var(--line-strong); }
+#follow-banner .segs { display: inline-flex; padding: 2px; gap: 2px; border-radius: var(--r-sm); background: var(--hover); }
+#follow-banner .seg { position: relative; padding: 4px 9px; border-radius: 3px; background: transparent; color: var(--fg-2); font: 500 11px/1.2 var(--mono); letter-spacing: 0.04em; text-transform: uppercase; }
+#follow-banner .seg:hover { background: var(--line); color: var(--fg); }
+#follow-banner .seg.on { background: var(--accent); color: var(--on-accent); }
+#follow-banner [data-tip]:hover::before { bottom: auto; top: calc(100% + 10px); }
 
 /* person popover */
 #peer-pop {

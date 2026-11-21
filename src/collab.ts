@@ -8,6 +8,7 @@ import {
   type Invite,
 } from './net';
 import { addPasskey, ensureScreenName, openAuth, signOut } from './account';
+import { directorRunning, getFollowMode, observe, setFollowMode, startDirector, stopDirector, type FollowMode } from './director';
 import { animateCam, setTool, stopEditing } from './actions';
 import { toast } from './ui';
 import type { PeerInfo, Role } from './protocol';
@@ -37,7 +38,9 @@ export function follow(id: string | null, auto = false) {
   const p = id ? session.peers.get(id) : undefined;
   viewport.classList.toggle('following', !!p);
   viewport.style.setProperty('--follow', p?.color ?? 'transparent');
-  if (p?.p?.view) followView(p);
+  stopDirector();
+  if (p && getFollowMode() === 'cinematic') startDirector(p);
+  else if (p?.p?.view) followView(p);
   renderBanner();
   renderAvatars();
 }
@@ -148,7 +151,11 @@ function renderBanner() {
   const p = following ? session.peers.get(following) : undefined;
   if (!p) { el.hidden = true; return; }
   const presenting = session.presenter === p.id;
+  const mode = getFollowMode();
+  const seg = (m: FollowMode, label: string, tip: string) =>
+    `<button class="seg ${mode === m ? 'on' : ''}" data-act="mode" data-mode="${m}" aria-pressed="${mode === m}" data-tip="${tip}">${label}</button>`;
   el.innerHTML = `<i style="background:${p.color}"></i>${presenting ? `${esc(p.name)} is presenting` : `Following ${esc(p.name)}`}` +
+    `<span class="segs" role="group" aria-label="Camera">${seg('cinematic', 'Cinematic', 'Smoothly frames what they’re working on')}${seg('exact', 'Exact', 'Mirrors their screen exactly')}</span>` +
     (followLocked() ? '<span class="muted">· view locked</span>' : `<button data-act="unfollow">${presenting ? 'Look around' : 'Stop'}</button>`);
   el.hidden = false;
 }
@@ -397,6 +404,10 @@ export function initCollab() {
   $('follow-banner').addEventListener('click', (e) => {
     const b = (e.target as Element).closest<HTMLElement>('[data-act]');
     if (b?.dataset.act === 'unfollow') follow(null);
+    if (b?.dataset.act === 'mode' && following) {
+      setFollowMode(b.dataset.mode as FollowMode);
+      follow(following, followAuto);
+    }
     if (b?.dataset.act === 'stop-present') present(false);
   });
 
@@ -443,7 +454,10 @@ export function initCollab() {
     if (p.p?.cursor) lastMove.set(id, Date.now());
     placeCursors();
     decoratePeers();
-    if (following === id) followView(p);
+    if (following === id) {
+      if (directorRunning()) observe(p);
+      else followView(p);
+    }
   });
   events.addEventListener('presenter', () => {
     const pid = session.presenter;
