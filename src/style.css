@@ -589,8 +589,14 @@ body.busy .port { opacity: 0 !important; pointer-events: none !important; }
   z-index: 70;
   transition: opacity 0.35s, visibility 0.35s;
 }
-#splash .logo { animation: breathe 1.4s ease-in-out infinite; }
+#splash { grid-template-rows: auto auto; align-content: center; gap: 18px; }
+#splash .logo { animation: breathe 1.4s ease-in-out infinite; justify-self: center; }
+.splash-label { font-size: 14px; font-weight: 500; color: var(--fg-3); text-align: center; max-width: min(420px, calc(100vw - 32px)); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.splash-label:empty { display: none; }
 body.loaded #splash { opacity: 0; visibility: hidden; }
+/* Switching to another board: the splash returns (after a beat, so quick loads don't flash) until it arrives. */
+body.loaded.switching #splash { opacity: 1; visibility: visible; transition: opacity 0.2s 0.12s, visibility 0s 0.12s; }
+body.switching #hint.show { opacity: 0; transition: none; }
 @keyframes breathe { 50% { transform: scale(0.92); opacity: 0.75; } }
 
 /* ---------------------------------------------------------------- floating panels */

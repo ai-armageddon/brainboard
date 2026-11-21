@@ -388,7 +388,7 @@ async function cycleBoard(delta: number) {
   if (list.length < 2) return message('Only one board');
   const i = list.findIndex((b) => b.id === session.boardId);
   const next = list[(i + delta + list.length) % list.length];
-  openBoard(next.id);
+  openBoard(next.id, next.name);
   message(`"${next.name}"`);
 }
 
@@ -401,7 +401,7 @@ async function editBoard(name: string) {
   const pre = list.filter((b) => b.name.toLowerCase().startsWith(q));
   const sub = list.filter((b) => b.name.toLowerCase().includes(q));
   const pick = exact.length === 1 ? exact : pre.length ? pre : sub;
-  if (pick.length === 1) { openBoard(pick[0].id); message(`"${pick[0].name}"`); return; }
+  if (pick.length === 1) { openBoard(pick[0].id, pick[0].name); message(`"${pick[0].name}"`); return; }
   if (!pick.length) return fail(`E94: No matching board for ${name}`);
   fail(`E93: More than one match for ${name}`);
 }
@@ -465,7 +465,7 @@ const COMMANDS: Cmd[] = [
   { names: ['new', 'enew', 'tabnew', 'tabe'], usage: '[name]', desc: 'Create a board', run: async (a) => {
     if (!ownerOnly()) return;
     if (!a) { void newBoard(); return; }
-    try { const b = await api.createBoard(a); openBoard(b.id); message(`"${b.name}" created`); } catch (e) { fail((e as Error).message); }
+    try { const b = await api.createBoard(a); openBoard(b.id, b.name); message(`"${b.name}" created`); } catch (e) { fail((e as Error).message); }
   } },
   { names: ['file', 'f', 'rename', 'saveas', 'sav'], usage: '[name]', desc: 'Rename this board (or show its info)', run: (a) => {
     if (a) return renameTo(a);

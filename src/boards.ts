@@ -71,9 +71,20 @@ export function openDraft() {
   startDraft();
 }
 
-/** Open a board you own or were invited to. */
-export function openBoard(id: string) {
+/** Cover the canvas while a board loads, so you never see a half-empty board or the "Empty board" scene. */
+function showLoading(name?: string) {
+  const label = document.querySelector<HTMLElement>('#splash .splash-label');
+  if (label) label.textContent = name ? `Opening “${name}”…` : 'Opening board…';
+  document.body.classList.add('switching');
+}
+const hideLoading = () => document.body.classList.remove('switching');
+events.addEventListener('welcome', hideLoading);
+events.addEventListener('fatal', hideLoading);
+
+/** Open a board you own or were invited to. `name`, when known, is shown while it loads. */
+export function openBoard(id: string, name?: string) {
   if (id === session.boardId) return;
+  showLoading(name);
   leaveBoard();
   setHash(id);
   if (!session.invite) try { localStorage.setItem('bb-last-board', id); } catch { /* ignore */ }
