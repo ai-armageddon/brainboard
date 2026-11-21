@@ -1,4 +1,4 @@
-import { S, changed, checkpoint, getItem, requestRender } from './state';
+import { S, changed, checkpoint, getItem, requestRender, scheduleSave } from './state';
 import type { Box, Camera, ColorKey, EdgeItem, Item, NodeItem, ShapeKind, TextualItem, Tool } from './types';
 import { applyCamera, render, textElOf, viewport } from './render';
 import { api, canEdit, imageUrl, session } from './net';
@@ -229,12 +229,16 @@ export function panIntoView(b: Box) {
 
 // ---------------------------------------------------------------- text editing
 
+/** One undo step per editing session, taken at the first keystroke. */
+let liveSession = false;
+
 export function startEditing(id: string) {
   if (!canEdit()) return;
   const it = getItem(id);
   if (!canEditText(it)) return;
   if (S.editing && S.editing !== id) stopEditing();
   S.editing = id;
+  liveSession = false;
   S.selected = new Set([id]);
   render();
   const t = textElOf(id);
@@ -250,6 +254,26 @@ export function startEditing(id: string) {
   if (isNode(it)) panIntoView(it);
 }
 
+/** While typing: copy the text into the board so collaborators see it keystroke by keystroke. */
+export function liveText() {
+  const id = S.editing;
+  if (!id) return;
+  const it = getItem(id);
+  const t = textElOf(id);
+  if (!it || !t) return;
+  const text = t.innerText.replace(/\n+$/, '');
+  if (it.type === 'edge') {
+    if (text === it.label) return;
+    if (!liveSession) { checkpoint(); liveSession = true; }
+    it.label = text;
+  } else if (isTextual(it)) {
+    if (text === it.text) return;
+    if (!liveSession) { checkpoint(); liveSession = true; }
+    it.text = text;
+  } else return;
+  scheduleSave();
+}
+
 export function stopEditing() {
   const id = S.editing;
   if (!id) return;
@@ -263,15 +287,16 @@ export function stopEditing() {
   if (it && t) {
     const text = t.innerText.replace(/\n+$/, '');
     if (it.type === 'edge') {
-      if (text !== it.label) { checkpoint(); it.label = text; }
+      if (text !== it.label) { if (!liveSession) checkpoint(); it.label = text; }
     } else if (isTextual(it)) {
-      if (text !== it.text) { checkpoint(); it.text = text; }
+      if (text !== it.text) { if (!liveSession) checkpoint(); it.text = text; }
       if (it.type === 'text' && !text.trim()) {
         S.items = S.items.filter((i) => i !== it && !(i.type === 'edge' && (i.from === it.id || i.to === it.id)));
         S.selected.delete(it.id);
       }
     }
   }
+  liveSession = false;
   getSelection()?.removeAllRanges();
   changed();
 }

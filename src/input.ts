@@ -3,7 +3,7 @@ import type { Box, Item, NodeItem, StrokeItem, Tool } from './types';
 import { applyCamera, live, marquee, nodeElOf, viewport } from './render';
 import {
   addImages, canEditText, createNode, createSibling, defaultSize, deleteSelection, duplicateSelection,
-  importBoard, isNode, isTextual, makeEdge, nudge, pasteItems, reorder, screenToWorld, selectAll,
+  importBoard, isNode, isTextual, liveText, makeEdge, nudge, pasteItems, reorder, screenToWorld, selectAll,
   selectionItems, setTool, siblingOf, startEditing, stopCamAnim, stopEditing, uid, zoomAt, zoomBy,
   zoomToFit, setZoom, type Side,
 } from './actions';
@@ -636,7 +636,7 @@ export function initInput() {
   viewport.addEventListener('focusout', (e) => {
     if ((e.target as Element).classList?.contains('txt') && S.editing && document.hasFocus()) stopEditing();
   });
-  viewport.addEventListener('input', () => requestRender());
+  viewport.addEventListener('input', () => { liveText(); requestRender(); });
   viewport.addEventListener('scroll', () => { viewport.scrollTop = 0; viewport.scrollLeft = 0; });
 
   window.addEventListener('keydown', onKeyDown);
