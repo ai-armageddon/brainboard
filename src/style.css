@@ -1057,7 +1057,9 @@ button.primary:hover { opacity: 0.86; }
   border: 2px solid var(--panel-solid);
 }
 .avatar.more { background: var(--hover); color: var(--fg-2); cursor: default; }
-#collab [data-tip]:hover::before { bottom: auto; top: calc(100% + 10px); }
+/* The bar hugs the right edge, so its tips grow leftwards from the button instead of spilling off screen. */
+#collab [data-tip]:hover::before { bottom: auto; top: calc(100% + 10px); left: auto; right: 0; transform: none; animation-name: tip-in-flush; }
+@keyframes tip-in-flush { from { opacity: 0; transform: translateY(3px); } }
 #present-btn.on { background: #f2555a; color: #fff; }
 #present-btn[hidden] { display: none; }
 .share-btn {
