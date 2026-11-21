@@ -1305,7 +1305,7 @@ button.primary:hover { opacity: 0.86; }
 .note.warn { background: color-mix(in srgb, #e0b400 14%, transparent); }
 .note code, .share-body code { font-family: var(--mono); font-size: 11.5px; }
 .invite-form { display: flex; gap: 8px; flex-wrap: wrap; }
-.invite-form select, .invite-form input, .invite select {
+.invite-form select, .invite-form input, .member select {
   font: inherit;
   font-size: 14px;
   color: var(--fg);
@@ -1319,15 +1319,20 @@ button.primary:hover { opacity: 0.86; }
 .invite-form select:focus, .invite-form input:focus { border-color: var(--fg); }
 .invite-form .primary { width: auto; margin: 0; display: inline-flex; align-items: center; gap: 7px; padding: 8px 14px; }
 .field.base input { font-size: 12.5px; padding: 7px 10px; font-family: var(--mono); }
-.invites { display: flex; flex-direction: column; gap: 6px; }
-.invite { display: flex; align-items: center; gap: 6px; padding: 8px 8px 8px 12px; border: 1px solid var(--line-strong); border-radius: var(--r-sm); }
-.invite-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; font-size: 13.5px; }
-.invite-main code { color: var(--fg-3); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.invite select { padding: 5px 8px; font-size: 13px; }
-.people { display: flex; flex-direction: column; gap: 6px; }
-.person { display: flex; align-items: center; gap: 10px; font-size: 14px; }
-.person .avatar { margin: 0; width: 28px; height: 28px; cursor: default; }
-.person b { font-weight: 500; flex: 1; }
+.members { display: flex; flex-direction: column; }
+.member { display: flex; align-items: center; gap: 8px; padding: 8px 0; border-top: 1px solid var(--line); }
+.member:first-child { border-top: 0; }
+.member .avatar { margin: 0 2px 0 0; width: 30px; height: 30px; cursor: default; }
+.member .avatar.away { opacity: 0.45; }
+.member-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; font-size: 14px; }
+.member-main b { font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.member-main .sub { font-size: 12.5px; display: flex; align-items: center; gap: 6px; }
+.member-main b .muted { font-weight: 400; }
+.member select { padding: 5px 8px; font-size: 13px; }
+.member .link-btn.danger { min-width: 68px; }
+.member .link-btn.armed { background: var(--danger); color: #fff; }
+.live-dot { width: 7px; height: 7px; border-radius: 50%; background: #2fb36d; flex: none; }
+.pop-btn small { display: block; font-size: 11.5px; font-weight: 400; opacity: 0.75; margin-top: 2px; }
 .link-btn { border: 0; background: transparent; font-size: 13px; cursor: pointer; padding: 4px 6px; border-radius: 2px; }
 .link-btn:hover { background: var(--hover); }
 

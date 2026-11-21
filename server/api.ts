@@ -13,7 +13,7 @@ import {
   createInvite, findInvite, getOwner, getSharing, revokeInvite, setOwner, tokenBoards, transferOwnership, updateInvite,
   type InviteRole,
 } from './sharing.ts';
-import { liveBoard, liveCounts, refreshAccess } from './realtime.ts';
+import { liveBoard, liveCounts, onlineByInvite, refreshAccess } from './realtime.ts';
 import { EXPORT_TYPES, exportBoard, type ExportFormat } from './export.ts';
 import {
   checkPassword, cleanEmail, cleanName, createSession, createUser, endSession, getUser, limited, publicUser, updateUser, userByEmail,
@@ -195,7 +195,8 @@ export async function handleApi(req: IncomingMessage, res: ServerResponse): Prom
       if (parts[2] === 'share') {
         if (method === 'GET') {
           const s = await getSharing(id);
-          return send(res, 200, { invites: s.invites, settings: s.settings }), true;
+          const online = await onlineByInvite(id);
+          return send(res, 200, { invites: s.invites.map((i) => ({ ...i, online: online[i.token] ?? [] })), settings: s.settings }), true;
         }
       } else if (parts[2] === 'invites') {
         const token = parts[3];

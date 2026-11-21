@@ -14,6 +14,8 @@ export interface Invite {
   name?: string;
   /** the inviter's screen name, shown on the join screen */
   from?: string;
+  /** who last used the link and when they were last here (for the owner's People list) */
+  seen?: { name: string; at: string };
   created: string;
 }
 export interface Sharing {
@@ -46,7 +48,7 @@ export async function getSharing(boardId: string): Promise<Sharing> {
 async function save(boardId: string, s: Sharing) {
   mkdirSync(DIR, { recursive: true });
   cache.set(boardId, s);
-  const tmp = `${file(boardId)}.${process.pid}.tmp`;
+  const tmp = `${file(boardId)}.${process.pid}.${crypto.randomBytes(4).toString('hex')}.tmp`;
   await fs.writeFile(tmp, JSON.stringify(s, null, 2));
   await fs.rename(tmp, file(boardId));
 }
@@ -108,6 +110,15 @@ export async function updateInvite(boardId: string, token: string, patch: { role
 export async function revokeInvite(boardId: string, token: string) {
   const s = await getSharing(boardId);
   s.invites = s.invites.filter((i) => i.token !== token);
+  await save(boardId, s);
+}
+
+/** Remember who used a link and when, so the owner can tell their links apart. */
+export async function noteInviteUse(boardId: string, token: string, name: string) {
+  const s = await getSharing(boardId);
+  const inv = s.invites.find((i) => i.token === token);
+  if (!inv) return;
+  inv.seen = { name: cleanPerson(name) || inv.seen?.name || inv.name || 'Guest', at: new Date().toISOString() };
   await save(boardId, s);
 }
 
