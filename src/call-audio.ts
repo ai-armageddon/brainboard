@@ -1,11 +1,65 @@
 // Call cues are local output. Microphone tracks are attached to peer connections separately.
-const notes = {
-  join: [440, 660],
-  leave: [660, 440],
-  mute: [350, 262],
-  unmute: [392, 523],
-} as const;
-type Cue = keyof typeof notes;
+type Cue = 'join' | 'leave' | 'mute' | 'unmute';
+interface Strike {
+  at: number;
+  hz: number;
+  length: number;
+  level: number;
+  // Initial pitch relative to the settled note. Larger bends give the mic switch its tactile snap.
+  bend: number;
+}
+
+// Join opens into a D-major voicing. Leave resolves downward with a lower, softer resonance.
+const score: Record<Cue, Strike[]> = {
+  join: [
+    { at: 0, hz: 587.33, length: 0.18, level: 0.19, bend: 1.014 },
+    { at: 0.082, hz: 880, length: 0.29, level: 0.21, bend: 1.009 },
+    { at: 0.091, hz: 739.99, length: 0.21, level: 0.069, bend: 1 },
+  ],
+  leave: [
+    { at: 0, hz: 739.99, length: 0.15, level: 0.16, bend: 1.01 },
+    { at: 0.096, hz: 493.88, length: 0.24, level: 0.20, bend: 1.025 },
+    { at: 0.099, hz: 369.99, length: 0.17, level: 0.065, bend: 1 },
+  ],
+  mute: [
+    { at: 0, hz: 330, length: 0.105, level: 0.18, bend: 1.57 },
+    { at: 0.003, hz: 220, length: 0.069, level: 0.075, bend: 1.06 },
+  ],
+  unmute: [
+    { at: 0, hz: 440, length: 0.071, level: 0.135, bend: 0.88 },
+    { at: 0.042, hz: 659.25, length: 0.125, level: 0.16, bend: 0.90 },
+  ],
+};
+
+// Render once per cue. A rounded body sustains after the brighter struck overtones die away.
+// The same mono mix plays on a phone speaker, a headset, or either earbud.
+const buffers = new Map<Cue, AudioBuffer>();
+function cueBuffer(ctx: AudioContext, cue: Cue) {
+  const cached = buffers.get(cue);
+  if (cached) return cached;
+  const strikes = score[cue];
+  const rate = 32000;
+  const end = Math.max(...strikes.map(s => s.at + s.length));
+  const buffer = ctx.createBuffer(1, Math.ceil(end * rate) + 1, rate);
+  const pcm = buffer.getChannelData(0);
+  for (const { at, hz, length, level, bend } of strikes) {
+    const offset = Math.round(at * rate);
+    const frames = Math.round(length * rate);
+    for (let i = 0; i < frames; i++) {
+      const t = i / rate;
+      // Integral of a pitch bend settling exponentially over the first few milliseconds.
+      const phase = 2 * Math.PI * hz * (t + (bend - 1) * 0.018 * -Math.expm1(-t / 0.018));
+      const attack = Math.min(1, t / 0.004);
+      const release = Math.min(1, (frames - 1 - i) / (rate * 0.012));
+      const body = Math.sin(phase) * Math.exp(-4.2 * t / length);
+      const overtone = 0.30 * Math.sin(2.007 * phase) * Math.exp(-9 * t / length);
+      const strike = 0.16 * Math.sin(3.93 * phase) * Math.exp(-t / 0.014);
+      pcm[offset + i] += level * attack * release * (body + overtone + strike);
+    }
+  }
+  buffers.set(cue, buffer);
+  return buffer;
+}
 
 export class CallAudio {
   readonly context = new AudioContext();
@@ -37,28 +91,12 @@ export class CallAudio {
       if (ctx.state !== 'running') await ctx.resume();
       if (this.device instanceof HTMLMediaElement && this.device.paused) await this.device.play();
       if (ctx.state !== 'running' || (this.closing && cue !== 'leave')) return;
-      const micCue = cue === 'mute' || cue === 'unmute';
-      const spacing = micCue ? 0.075 : 0.13;
-      const duration = micCue ? 0.1 : 0.18;
-      const peak = micCue ? 0.14 : 0.2;
-      const start = ctx.currentTime + 0.01;
-      const tone = ctx.createOscillator();
-      const gain = ctx.createGain();
-      tone.type = 'sine';
-      tone.connect(gain);
-      gain.connect(this.output);
-      for (const [i, frequency] of notes[cue].entries()) {
-        const at = start + spacing * i;
-        tone.frequency.setValueAtTime(frequency, at);
-        gain.gain.setValueAtTime(0, at);
-        gain.gain.linearRampToValueAtTime(peak, at + 0.012);
-        gain.gain.setValueAtTime(peak, at + 0.036);
-        gain.gain.exponentialRampToValueAtTime(0.0001, at + (i === 0 ? spacing - 0.004 : duration));
-      }
+      const source = ctx.createBufferSource();
+      source.buffer = cueBuffer(ctx, cue);
+      source.connect(this.output);
       await new Promise<void>(resolve => {
-        tone.onended = () => { tone.disconnect(); gain.disconnect(); resolve(); };
-        tone.start(start);
-        tone.stop(start + spacing + duration);
+        source.onended = () => { source.disconnect(); resolve(); };
+        source.start();
       });
     } catch { /* An interrupted or closing audio device must not interrupt the call. */ }
   }
