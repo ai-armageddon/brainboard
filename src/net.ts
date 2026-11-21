@@ -23,13 +23,15 @@ export const session = {
   /** invite token when visiting as a guest */
   invite: null as string | null,
   boardId: null as string | null,
+  /** a blank board that exists only in this tab until the first edit */
+  draft: false,
   boardName: '',
   role: 'owner' as Role,
   you: null as PeerInfo | null,
   peers: new Map<string, PeerInfo>(),
   presenter: null as string | null,
   settings: { ...DEFAULT_SETTINGS } as BoardSettings,
-  status: 'offline' as 'offline' | 'connecting' | 'live',
+  status: 'offline' as 'offline' | 'connecting' | 'live' | 'draft',
   profile: loadProfile(),
 };
 
@@ -163,7 +165,7 @@ const setKnown = (items: Item[]) => {
 export function collect() {
   clearTimeout(flushTimer);
   flushTimer = 0;
-  if (!session.boardId) return;
+  if (!session.boardId && !session.draft) return;
   const ops = diffItems(known, knownOrder, S.items, itemKey);
   if (!ops.length) return;
   noteLocalChange(ops.flatMap((o) => (o.k === 'put' ? [o.item.id] : o.k === 'del' ? [o.id] : [])), ops.some((o) => o.k === 'order'));
@@ -305,10 +307,57 @@ function handle(m: ServerMsg) {
   }
 }
 
+function resetBoardState() {
+  clearTimeout(retryTimer);
+  if (ws) { const old = ws; ws = null; old.close(); }
+  session.peers.clear();
+  session.presenter = null;
+  firstWelcome = true;
+  retry = 0;
+  known = new Map();
+  knownOrder = [];
+  pending.clear();
+  pendingOrder = 0;
+  S.items = [];
+  S.selected.clear();
+  S.editing = null;
+  resetHistory();
+  requestRender();
+}
+
+/**
+ * A blank board that lives only in this tab. Nothing is created on the server for a mere visit,
+ * so nobody lands on (or leaves behind) a board until they actually put something on it.
+ */
+export function startDraft() {
+  resetBoardState();
+  session.boardId = null;
+  session.draft = true;
+  session.boardName = 'Untitled board';
+  session.role = 'owner';
+  session.you = null;
+  session.settings = { ...DEFAULT_SETTINGS };
+  session.status = 'draft';
+  emit('welcome', true);
+  emit('status');
+  emit('peers');
+}
+
+/** The draft now has a real board on the server: connect and upload what's been drawn so far. */
+export function adoptDraft(id: string) {
+  session.boardId = id;
+  session.draft = false;
+  // Treat it like a reconnect: the (empty) server board gets our local edits replayed on top.
+  firstWelcome = false;
+  retry = 0;
+  connect();
+}
+
 /** Switch to a board (closes any previous connection). */
 export function joinBoard(id: string) {
   clearTimeout(retryTimer);
   if (ws) { const old = ws; ws = null; old.close(); }
+  session.draft = false;
   session.boardId = id;
   session.peers.clear();
   session.presenter = null;

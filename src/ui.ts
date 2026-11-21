@@ -8,7 +8,7 @@ import {
 } from './actions';
 import { clamp } from './geometry';
 import { account, api, events, saveProfile, session, type BoardMeta } from './net';
-import { openBoard, saveCamera, showBoardInUrl } from './boards';
+import { ensureBoard, openBoard, openDraft, saveCamera, showBoardInUrl } from './boards';
 import { paintLogos } from './brand';
 import { userMovedCamera } from './collab';
 import { isVimMode, setVimMode } from './vim';
@@ -282,7 +282,9 @@ export function buildUI() {
   const syncStatus = () => {
     const dot = $('status-dot');
     dot.dataset.status = session.status;
-    dot.title = session.status === 'live' ? 'Live · changes save automatically' : session.status === 'connecting' ? 'Connecting…' : 'Offline · reconnecting';
+    dot.title = session.status === 'live' ? 'Live · changes save automatically'
+      : session.status === 'draft' ? 'Not saved yet · it saves once you add something'
+      : session.status === 'connecting' ? 'Connecting…' : 'Offline · reconnecting';
   };
   events.addEventListener('welcome', syncTitle);
   events.addEventListener('meta', syncTitle);
@@ -329,10 +331,9 @@ export async function newBoard() {
 
 let renaming = false;
 function startRename() {
-  if (!session.boardId || session.invite) return;
+  if ((!session.boardId && !session.draft) || session.invite) return;
   closePopovers();
   const el = $('board-name');
-  const id = session.boardId;
   const before = session.boardName;
   renaming = true;
   el.contentEditable = 'true';
@@ -351,8 +352,9 @@ function startRename() {
     if (!save || !name || name === before) { el.textContent = before; return; }
     session.boardName = name;
     document.title = `${name} · Brainboard`;
+    if (!session.boardId) { await ensureBoard(); return; } // a blank draft is created with this name
     showBoardInUrl();
-    try { await api.renameBoard(id, name); } catch { toast('Rename failed'); }
+    try { await api.renameBoard(session.boardId, name); } catch { toast('Rename failed'); }
   };
   const onKey = (e: KeyboardEvent) => {
     e.stopPropagation();
@@ -381,7 +383,8 @@ async function deleteCurrentBoard() {
   try {
     await api.deleteBoard(id);
     const rest = (await api.boards()).filter((b) => b.id !== id);
-    openBoard(rest[0]?.id ?? (await api.createBoard('My board')).id);
+    if (rest[0]) openBoard(rest[0].id);
+    else openDraft();
     toast('Board moved to ~/.brainboard/trash');
   } catch (err) {
     toast(`Couldn’t delete: ${(err as Error).message}`);

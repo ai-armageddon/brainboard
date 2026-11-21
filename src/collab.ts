@@ -8,6 +8,7 @@ import {
   type Invite,
 } from './net';
 import { addPasskey, ensureScreenName, openAuth, signOut } from './account';
+import { ensureBoard } from './boards';
 import { canModerate, decorateVoice, mute } from './voice';
 import { directorRunning, getFollowMode, observe, setFollowMode, startDirector, stopDirector, type FollowMode } from './director';
 import { animateCam, setTool, stopEditing } from './actions';
@@ -247,7 +248,8 @@ let linkBase = '';
 const inviteUrl = (inv: Invite) => `${linkBase.replace(/\/+$/, '')}/?invite=${encodeURIComponent(inv.token)}#${session.boardId}`;
 
 async function openShare() {
-  if (!session.boardId) return;
+  const boardId = await ensureBoard();
+  if (!boardId) return;
   if (!(await ensureScreenName('share'))) return;
   const sheet = $('share');
   sheet.hidden = false;
@@ -255,7 +257,7 @@ async function openShare() {
   body.innerHTML = '<p class="muted">Loading…</p>';
   $('share-title').textContent = `Share “${session.boardName}”`;
   try {
-    const [sharing, net] = await Promise.all([api.sharing(session.boardId), api.net()]);
+    const [sharing, net] = await Promise.all([api.sharing(boardId), api.net()]);
     let saved = '';
     try { saved = localStorage.getItem(linkBaseKey) ?? ''; } catch { /* ignore */ }
     const local = /^(localhost|127\.0\.0\.1|\[::1\])$/.test(location.hostname);
@@ -483,6 +485,7 @@ export function initCollab() {
   });
 
   $('present-btn').addEventListener('click', async () => {
+    if (!(await ensureBoard())) return;
     const on = session.presenter !== session.you?.id;
     if (on && !(await ensureScreenName('present'))) return;
     present(on);
