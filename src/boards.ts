@@ -1,7 +1,7 @@
 // Which board is open, and where each board's camera was left (per viewer).
 import { S } from './state';
 import { applyCamera } from './render';
-import { joinBoard, leaveBoard, session } from './net';
+import { events, joinBoard, leaveBoard, session } from './net';
 import { zoomToFit } from './actions';
 import type { Camera } from './types';
 
@@ -25,10 +25,23 @@ export function saveCamera() {
   }, 300);
 }
 
-export function openBoard(id: string) {
+const setHash = (id: string) => history.replaceState(null, '', `${location.pathname}${location.search}${id ? `#${id}` : ''}`);
+
+/** Put the open board in the URL (once it has been worked on, or picked on purpose). */
+export function showBoardInUrl() {
+  if (session.boardId && location.hash.slice(1) !== session.boardId) setHash(session.boardId);
+}
+events.addEventListener('local-change', showBoardInUrl);
+
+/**
+ * Open a board. `quiet` is for the board picked automatically on landing:
+ * the URL stays clean until the user changes something.
+ */
+export function openBoard(id: string, { quiet = false } = {}) {
   if (id === session.boardId) return;
   leaveBoard();
-  history.replaceState(null, '', `${location.pathname}${location.search}#${id}`);
+  if (!quiet) setHash(id);
+  else if (location.hash && location.hash.slice(1) !== id) setHash('');
   if (!session.invite) try { localStorage.setItem('bb-last-board', id); } catch { /* ignore */ }
   joinBoard(id);
 }
