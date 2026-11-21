@@ -1205,6 +1205,19 @@ button.primary {
 button.primary:hover { opacity: 0.86; }
 
 .menu-foot { display: flex; justify-content: space-between; align-items: center; padding: 8px 10px 4px; margin-top: 4px; border-top: 1px solid var(--line); font-size: 12px; }
+#menu .menu-foot button, .version-badge {
+  background: transparent; color: var(--fg-2); border: 0; border-radius: var(--r-sm);
+  padding: 5px 7px; height: auto; font: 500 12px var(--font); cursor: pointer;
+}
+#menu .menu-foot button:hover, .version-badge:hover { background: var(--hover); color: var(--fg); }
+.version-badge, #release-notes [data-version], .menu-foot [data-version] { font-family: var(--mono); font-variant-numeric: tabular-nums; }
+#release-notes { width: min(460px, calc(100vw - 28px)); color: var(--fg); box-shadow: var(--shadow); }
+#release-notes::backdrop { background: rgb(0 0 0 / 35%); }
+#release-notes [data-version] { font-size: 12px; color: var(--fg-2); letter-spacing: 0; }
+#release-notes h3 { font: 600 16px var(--font); text-transform: none; letter-spacing: -.02em; color: var(--fg); }
+.release-changes { padding-left: 18px; margin: 12px 0 18px; }
+.release-changes li { margin: 8px 0; color: var(--fg-2); font-size: 14px; line-height: 1.45; }
+#release-notes a { color: var(--fg); font-size: 14px; text-underline-offset: 3px; }
 .menu-foot .wordmark { font-size: 13px; }
 .tbtn.active { background: var(--accent); color: var(--on-accent); }
 

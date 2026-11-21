@@ -1,0 +1,21 @@
+[
+  {
+    "version": "0.4.0",
+    "title": "Drawing, layout and touch",
+    "changes": [
+      "Hold the pen still in Beautify mode to snap a sketch into a clean shape. Select several items to align them, space them evenly or tidy up their layout.",
+      "Pasted images appear while they upload. Select an image to change its corners from square to fully rounded.",
+      "On a phone, use one finger to draw and two to pan or zoom. The compact toolbar keeps all drawing tools within reach.",
+      "Invite previews show the board name. Voice chat shows how many people are in a call before you join."
+    ]
+  },
+  {
+    "version": "0.3.0",
+    "title": "Text, saved views and collaboration",
+    "changes": [
+      "Apply bold or underline to individual words, preview fonts by hovering, and resize selected text with + and −.",
+      "Save a board area as a named view. Open Views with gv, or choose Follow to see where a collaborator is working.",
+      "Adjust the pen and eraser in one-pixel steps. Erase just the ink under the brush or switch to whole strokes."
+    ]
+  }
+]

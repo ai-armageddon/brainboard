@@ -1,4 +1,5 @@
 import { icon } from './icons';
+import { initReleaseNotes } from './release-notes';
 import { clearFontPreview, previewFont } from './font-preview';
 import { S, canRedo, canUndo, checkpoint, getItem, isBrushTool, redo, requestRender, savePrefs, undo } from './state';
 import { hooks, selBounds, viewport } from './render';
@@ -286,6 +287,7 @@ export function toggleShortcuts(force?: boolean) {
 // ---------------------------------------------------------------- build
 
 export function buildUI() {
+  initReleaseNotes();
   // ⌘Z, ⌥N… read Ctrl+Z, Alt+N… on Windows and Linux.
   localizeKeys();
   document.querySelectorAll<HTMLElement>('[data-icon]').forEach((el) => {

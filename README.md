@@ -186,6 +186,7 @@ npm run prod   # builds, then serves on $PORT (default 5317) with BRAINBOARD_PUB
 | Variable | Default | Purpose |
 |---|---|---|
 | `BRAINBOARD_PUBLIC_URL` | unset (local mode) | The public address, e.g. `https://brainboard.ink` |
+| `VITE_CHANGELOG_URL` | `/changelog/` | Optional full changelog address on your platform. Set before starting Vite or building the app. |
 | `PORT` | `5317` | Port to listen on |
 | `HOST` | `0.0.0.0` when hosted | Interface to listen on |
 | `BRAINBOARD_DIR` | `~/.brainboard` | Boards, images, accounts and sessions. Back this up |
@@ -200,6 +201,10 @@ brainboard.ink {
 ```
 
 Passkeys only work on the real domain (and on `localhost` in development), not on raw IP addresses. Email sign-in works everywhere.
+
+### Release notes
+
+Click the version by the zoom controls, or **What’s new** in the board menu, for recent changes. The full changelog opens in a separate tab. The board and the standalone changelog page both read `src/releases.json`, newest release first. When preparing a release, add its notes there and update the package version and lockfile together.
 
 ### Link previews
 

@@ -14,9 +14,10 @@ import {
 import { COLOR_HELP, addItems, boardJson, deleteItems, describeBoard, updateItems, type AddSpec } from './agent.ts';
 import { imageForModel, renderBoard } from './render.ts';
 import type { ImageItem } from '../src/types.ts';
+import metadata from '../package.json' with { type: 'json' };
 
 const server = new McpServer(
-  { name: 'brainboard', title: 'Brainboard', version: '0.3.0' },
+  { name: 'brainboard', title: 'Brainboard', version: metadata.version },
   {
     instructions: [
       "Brainboard is the user's infinite whiteboard: sticky notes, text, flow-chart shapes (bubble, box, pill, decision) joined by arrows, pasted images and pen drawings.",

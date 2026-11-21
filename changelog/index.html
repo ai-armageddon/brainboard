@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="color-scheme" content="light dark" />
+    <title>Changelog · Brainboard</title>
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <style>
+      :root { color-scheme: light dark; font-family: system-ui, sans-serif; }
+      body { margin: 0; background: light-dark(#fafafa, #111); color: light-dark(#191919, #eee); }
+      main { max-width: 44rem; margin: 0 auto; padding: clamp(24px, 6vw, 64px) 22px; }
+      header a { display: inline-flex; gap: 8px; align-items: center; color: inherit; font-weight: 650; text-decoration: none; }
+      header a:hover { text-decoration: underline; }
+      h1 { margin: 32px 0; font-size: clamp(2.25rem, 7vw, 3.5rem); letter-spacing: -.055em; }
+      article { border-top: 1px solid light-dark(#d4d4d4, #444); padding: 24px 0 16px; }
+      small { font: 500 .85rem ui-monospace, monospace; }
+      h2 { margin: 6px 0 16px; font-size: 1.45rem; letter-spacing: -.03em; }
+      ul { padding-inline-start: 1.2rem; } li { margin-block: .65rem; line-height: 1.55; }
+    </style>
+  </head>
+  <body>
+    <main>
+      <header><a href="/"><img src="/favicon.svg" width="24" height="24" alt="" />Brainboard</a><h1>Changelog</h1></header>
+      <div id="releases"></div>
+    </main>
+    <script type="module" src="./index.ts"></script>
+  </body>
+</html>
