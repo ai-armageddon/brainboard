@@ -3,6 +3,7 @@
 // Mutes are honoured by every listener (they silence that person locally), not just by the muted browser.
 import { account, events, isOwner, muteUser, sendRtc, sendVoice, session } from './net';
 import type { PeerInfo, RtcSignal } from './protocol';
+import { avatarFace } from './avatar';
 import { icon } from './icons';
 import { toast } from './ui';
 import { ensureScreenName } from './account';
@@ -18,6 +19,8 @@ interface Conn {
 }
 
 let inVoice = false;
+let joining = false;
+let joinError = '';
 let selfMuted = false;
 let boardOfCall: string | null = null;
 let local: MediaStream | null = null;
@@ -43,7 +46,7 @@ function meterFor(stream: MediaStream): Meter | null {
     const analyser = ctx.createAnalyser();
     analyser.fftSize = 512;
     source.connect(analyser);
-    return { analyser, source, buf: new Float32Array(analyser.fftSize), loudAt: 0 };
+    return { analyser, source, buf: new Float32Array(analyser.fftSize), loudAt: -Infinity };
   } catch { return null; }
 }
 
@@ -179,36 +182,58 @@ function playMembershipChime(joined: boolean) {
 }
 
 export async function joinVoice() {
-  if (inVoice || !(await ensureBoard())) return;
-  if (!(await ensureScreenName('talk'))) return;
-  if (!navigator.mediaDevices?.getUserMedia) return toast('Voice needs a secure (https) connection');
-  try {
-    local = await openMic(pref(MIC_KEY));
-  } catch {
-    return toast('Microphone blocked. Allow it in your browser’s site settings to talk');
-  }
-  watchMic();
-  ctx = new AudioContext();
-  void applySpeaker(ctx);
-  if (ctx.state === 'suspended') void ctx.resume().catch(() => {});
-  localMeter = meterFor(local);
-  inVoice = true;
-  boardOfCall = session.boardId;
-  selfMuted = !canSpeak();
-  applyLocalMute();
-  sendVoice(true, selfMuted);
-  // The newcomer calls everyone already in the chat.
-  for (const p of session.peers.values()) if (p.voice) void call(p.id);
-  meterTimer = window.setInterval(measure, 100);
-  toast(selfMuted ? 'Joined voice. Only the presenter can talk right now' : 'Joined voice. You’re live');
+  if (inVoice || joining) return;
+  joinError = '';
+  joining = true;
   render();
+  try {
+    const board = await ensureBoard();
+    if (!board) return toast('Couldn’t open the board for voice chat');
+    if (!(await ensureScreenName('talk')) || session.boardId !== board) return;
+    if (!navigator.mediaDevices?.getUserMedia) return toast('Voice needs a secure (https) connection');
+    let stream: MediaStream;
+    try { stream = await openMic(pref(MIC_KEY)); }
+    catch (err) {
+      const reason = (err as Error).name;
+      if (reason === 'NotFoundError') joinError = 'No microphone found. Connect one and try again.';
+      else if (reason === 'NotAllowedError') joinError = 'Allow microphone access in your browser, then try again.';
+      else joinError = 'Couldn’t open your microphone. Check that it’s available and try again.';
+      return toast(joinError);
+    }
+    if (session.boardId !== board) { stream.getTracks().forEach(t => t.stop()); return; }
+    try { ctx = new AudioContext(); }
+    catch { stream.getTracks().forEach(t => t.stop()); return toast('Couldn’t start audio in this browser'); }
+    local = stream;
+    watchMic();
+    void applySpeaker(ctx);
+    if (ctx.state === 'suspended') void ctx.resume().catch(() => {});
+    localMeter = meterFor(local);
+    inVoice = true;
+    boardOfCall = board;
+    selfMuted = $<HTMLInputElement>('voice-join-muted').checked || !canSpeak();
+    applyLocalMute();
+    sendVoice(true, selfMuted);
+    // The newcomer calls everyone already in the chat.
+    for (const p of session.peers.values()) if (p.voice) void call(p.id);
+    meterTimer = window.setInterval(measure, 100);
+    toast(selfMuted ? 'Joined voice with your mic muted' : 'Joined voice. Your mic is on');
+  } catch (err) {
+    console.warn('[brainboard voice]', err);
+    toast('Couldn’t join voice. Try again.');
+  } finally {
+    joining = false;
+    render();
+    if (!$('voice-panel').hidden && document.activeElement === document.body) {
+      $('voice-panel').querySelector<HTMLButtonElement>('[data-voice="close"]')!.focus();
+    }
+  }
 }
 
 export function leaveVoice(silent = false) {
   if (!inVoice) return;
   inVoice = false;
   boardOfCall = null;
-  closeDevices();
+  closePanel();
   for (const id of [...conns.keys()]) close(id);
   for (const t of local?.getTracks() ?? []) t.stop();
   local = null;
@@ -310,7 +335,7 @@ async function switchMic(deviceId: string, note?: string) {
     toast('Couldn’t switch microphones');
   } finally {
     switching = false;
-    if (!$('mic-pop').hidden) void renderDevices();
+    if ($<HTMLDetailsElement>('voice-audio').open) void renderDevices();
   }
 }
 
@@ -326,7 +351,7 @@ async function switchSpeaker(deviceId: string, label: string) {
   if (ctx) await applySpeaker(ctx);
   for (const c of conns.values()) await applySpeaker(c.audio);
   toast(`Speaker: ${label}`);
-  void renderDevices();
+  if ($<HTMLDetailsElement>('voice-audio').open) void renderDevices();
 }
 
 /** Chrome lists 'default' and 'communications' aliases; show one "System default" row instead. */
@@ -342,10 +367,13 @@ function deviceRows(all: MediaDeviceInfo[], kind: MediaDeviceKind, current: stri
 
 const esc = (s: string) => s.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]!);
 
+let deviceListVersion = 0;
 async function renderDevices() {
   const pop = $('mic-pop');
+  const version = ++deviceListVersion;
   let all: MediaDeviceInfo[] = [];
   try { all = await navigator.mediaDevices.enumerateDevices(); } catch { /* ignore */ }
+  if (version !== deviceListVersion || !$<HTMLDetailsElement>('voice-audio').open || !inVoice) return;
   const outputs = canPickSpeaker && all.some((d) => d.kind === 'audiooutput');
   const speaker = pref(SPEAKER_KEY);
   pop.innerHTML = `
@@ -370,63 +398,96 @@ function meterLoop() {
   levelRaf = requestAnimationFrame(meterLoop);
 }
 
-function toggleDevices(anchor: HTMLElement) {
-  if (!$('mic-pop').hidden) return closeDevices();
-  const pop = $('mic-pop');
-  pop.hidden = false;
-  void renderDevices();
-  const r = anchor.getBoundingClientRect();
-  pop.style.right = `${Math.max(12, innerWidth - r.right)}px`;
-  // The bar sits at the bottom on small screens: open upwards there.
-  if (r.top > innerHeight / 2) { pop.style.top = ''; pop.style.bottom = `${innerHeight - r.top + 10}px`; }
-  else { pop.style.bottom = ''; pop.style.top = `${r.bottom + 10}px`; }
-  cancelAnimationFrame(levelRaf);
-  levelRaf = requestAnimationFrame(meterLoop);
+function positionPanel() {
+  const panel = $('voice-panel');
+  if (panel.hidden) return;
+  const r = $('collab').getBoundingClientRect();
+  const above = r.top > innerHeight / 2;
+  panel.style.right = `${Math.max(8, innerWidth - r.right)}px`;
+  panel.style.top = above ? 'auto' : `${r.bottom + 8}px`;
+  panel.style.bottom = above ? `${innerHeight - r.top + 8}px` : 'auto';
+  panel.style.maxHeight = `${Math.max(80, (above ? r.top : innerHeight - r.bottom) - 16)}px`;
 }
 
-function closeDevices() {
-  const pop = document.getElementById('mic-pop');
-  if (pop) pop.hidden = true;
+function openPanel() {
+  $('voice-panel').hidden = false;
+  $('voice').querySelector('[data-voice="details"]')!.setAttribute('aria-expanded', 'true');
+  render();
+  positionPanel();
+}
+
+function closePanel(restoreFocus = false) {
+  $('voice-panel').hidden = true;
+  const trigger = $('voice').querySelector<HTMLButtonElement>('[data-voice="details"]')!;
+  trigger.setAttribute('aria-expanded', 'false');
+  $<HTMLDetailsElement>('voice-audio').open = false;
   cancelAnimationFrame(levelRaf);
+  if (restoreFocus) trigger.focus();
 }
 
 function initDevices() {
-  const pop = document.createElement('div');
-  pop.id = 'mic-pop';
-  pop.className = 'panel';
-  pop.hidden = true;
-  document.body.append(pop);
-  pop.addEventListener('click', (e) => {
+  const audio = $<HTMLDetailsElement>('voice-audio');
+  audio.addEventListener('toggle', () => {
+    cancelAnimationFrame(levelRaf);
+    if (audio.open && inVoice && !$('voice-panel').hidden) {
+      void renderDevices();
+      levelRaf = requestAnimationFrame(meterLoop);
+    }
+  });
+  $('mic-pop').addEventListener('click', (e) => {
     const b = (e.target as Element).closest<HTMLElement>('[data-mic], [data-speaker]');
     if (!b) return;
     if (b.dataset.mic !== undefined) { if (b.dataset.mic !== micChoice) void switchMic(b.dataset.mic); }
     else void switchSpeaker(b.dataset.speaker!, b.querySelector('.dev-name')!.firstChild!.textContent!);
   });
   document.addEventListener('pointerdown', (e) => {
-    if (pop.hidden) return;
-    const t = e.target as Element;
-    if (!pop.contains(t) && !t.closest('[data-voice="devices"]')) closeDevices();
+    if (!$('voice-panel').hidden && !(e.target as Element).closest('#voice, #voice-panel')) closePanel();
   });
-  window.addEventListener('keydown', (e) => { if (e.key === 'Escape' && !pop.hidden) closeDevices(); });
-  // Headset plugged in or out: keep the list current.
-  navigator.mediaDevices?.addEventListener?.('devicechange', () => { if (!pop.hidden) void renderDevices(); });
+  window.addEventListener('resize', positionPanel);
+  new ResizeObserver(positionPanel).observe($('collab'));
+  navigator.mediaDevices?.addEventListener?.('devicechange', () => { if (audio.open) void renderDevices(); });
 }
 
 // ---------------------------------------------------------------- UI
 
 function render() {
   const box = $('voice');
-  const others = [...session.peers.values()].filter((p) => p.voice);
+  const others = [...session.peers.values()].filter(p => p.voice);
+  const total = others.length + Number(inVoice);
   box.classList.toggle('live', inVoice);
-  if (!inVoice) {
-    box.innerHTML = `<button class="cbtn voice-join" data-voice="join" data-tip="${others.length ? `Join voice · ${others.length} in the call` : 'Join voice chat'}" aria-label="Join voice">${icon('headphones', 18)}${others.length ? `<b class="voice-count">${others.length}</b>` : ''}</button>`;
-  } else {
-    const blocked = !canSpeak();
-    const off = selfMuted || blocked;
-    box.innerHTML =
-      `<button class="cbtn voice-mic ${off ? 'off' : ''} ${speaking.has('me') ? 'talking' : ''}" data-voice="mic" ${blocked ? 'aria-disabled="true"' : ''} data-tip="${blocked ? 'Stage mode: only the owner and presenter can talk' : off ? 'Unmute' : 'Mute'}" aria-label="${off ? 'Unmute' : 'Mute'}">${icon(off ? 'micOff' : 'mic', 18)}</button>` +
-      `<button class="cbtn voice-dev" data-voice="devices" data-tip="Microphone & speaker" aria-label="Choose microphone and speaker" aria-haspopup="menu">${icon('chevron', 15)}</button>` +
-      `<button class="cbtn voice-leave" data-voice="leave" data-tip="Leave voice" aria-label="Leave voice">${icon('phoneOff', 18)}</button>`;
+  for (const b of document.querySelectorAll<HTMLButtonElement>('[data-voice="join"]')) b.disabled = joining;
+  box.querySelector<HTMLButtonElement>('[data-voice="join"]')!.hidden = inVoice;
+  $('voice-join-label').textContent = joining ? 'Joining…' : 'Join voice';
+  const off = selfMuted || !canSpeak();
+  const mic = box.querySelector<HTMLButtonElement>('[data-voice="mic"]')!;
+  mic.hidden = !inVoice;
+  mic.classList.toggle('off', off);
+  mic.setAttribute('aria-label', off ? 'Unmute' : 'Mute');
+  mic.setAttribute('aria-disabled', String(!canSpeak()));
+  mic.title = !canSpeak() ? 'Stage mode: only the owner and presenter can speak' : off ? 'Unmute microphone' : 'Mute microphone';
+  mic.innerHTML = icon(off ? 'micOff' : 'mic', 16) + `<span>${off ? 'Muted' : 'Mic on'}</span>`;
+  box.querySelector<HTMLButtonElement>('[data-voice="leave"]')!.hidden = !inVoice;
+  $('voice-count').textContent = total ? String(total) : '';
+  $('voice-count').hidden = !total;
+  if (!$('voice-panel').hidden) {
+    $('voice-board').textContent = session.boardName || 'Untitled board';
+    $('voice-total').textContent = String(total);
+    $('voice-empty').hidden = !!total;
+    $('voice-stage').hidden = !session.settings.stage;
+    const error = $('voice-error');
+    error.hidden = !joinError;
+    error.textContent = joinError;
+    $<HTMLInputElement>('voice-join-muted').closest('label')!.hidden = !canSpeak();
+    $('voice-prejoin').hidden = inVoice;
+    $('voice-prejoin').querySelector('button')!.textContent = joining ? 'Joining…' : 'Join call';
+    $('voice-audio').hidden = !inVoice;
+    const row = (id: string, name: string, color: string, picture: string | undefined, muted: boolean, me: boolean) =>
+      `<li data-caller="${esc(id)}" data-muted="${muted}"><span class="avatar" style="--c:${esc(color)}">${avatarFace(name, picture)}</span>
+        <div class="caller-info"><b>${esc(name)}${me ? ' <small>(you)</small>' : ''}</b><span class="caller-state"></span></div>
+        <span class="caller-mic" aria-hidden="true">${icon(muted ? 'micOff' : 'mic', 16)}</span></li>`;
+    const profile = session.you ?? session.profile;
+    $('voice-roster').innerHTML = (inVoice ? row('me', profile.name || 'You', profile.color, profile.picture, off, true) : '')
+      + others.map(p => row(p.id, p.name, p.color, p.picture, !!p.muted, false)).join('');
   }
   decorate();
 }
@@ -447,7 +508,17 @@ function decorate() {
   document.querySelectorAll<HTMLElement>('#cursors .cursor[data-peer]').forEach((c) => {
     c.classList.toggle('speaking', isSpeaking(c.dataset.peer!));
   });
-  $('voice').querySelector('.voice-mic')?.classList.toggle('talking', speaking.has('me'));
+  $('voice').querySelector('.voice-mic')?.classList.toggle('talking', !selfMuted && canSpeak() && speaking.has('me'));
+  if (!$('voice-panel').hidden) {
+    for (const row of $('voice-roster').querySelectorAll<HTMLElement>('[data-caller]')) {
+      const muted = row.dataset.muted === 'true';
+      const talking = !muted && speaking.has(row.dataset.caller!);
+      row.classList.toggle('talking', talking);
+      const label = row.querySelector('.caller-state')!;
+      const state = muted ? 'Muted' : talking ? 'Speaking' : 'Mic on';
+      if (label.textContent !== state) label.textContent = state;
+    }
+  }
 }
 
 /** Keep connections and local mutes in step with who's in the call. */
@@ -478,12 +549,28 @@ function syncPeers() {
 }
 
 export function initVoice() {
-  $('voice').addEventListener('click', (e) => {
+  const action = (e: Event) => {
     const act = (e.target as Element).closest<HTMLElement>('[data-voice]')?.dataset.voice;
-    if (act === 'join') void joinVoice();
+    if (act === 'join') { openPanel(); void joinVoice(); }
     else if (act === 'mic') toggleMute();
-    else if (act === 'leave') leaveVoice();
-    else if (act === 'devices') toggleDevices((e.target as Element).closest<HTMLElement>('[data-voice]')!);
+    else if (act === 'leave') { leaveVoice(); $('voice').querySelector<HTMLButtonElement>('[data-voice="join"]')!.focus(); }
+    else if (act === 'close') closePanel(true);
+    else if (act === 'details') {
+      if ($('voice-panel').hidden) {
+        openPanel();
+        $('voice-panel').querySelector<HTMLButtonElement>('[data-voice="close"]')!.focus();
+      } else closePanel(true);
+    }
+  };
+  $('voice').addEventListener('click', action);
+  $('voice-panel').addEventListener('click', action);
+  $('voice-panel').addEventListener('keydown', e => {
+    e.stopPropagation();
+    if (e.key === 'Escape') { e.preventDefault(); closePanel(true); }
+  });
+  $('voice').addEventListener('keydown', e => {
+    if ([' ', 'Enter', 'Tab'].includes(e.key)) e.stopPropagation();
+    if (e.key === 'Escape' && !$('voice-panel').hidden) { e.stopPropagation(); closePanel(true); }
   });
   initDevices();
   events.addEventListener('voice-membership', (e) => playMembershipChime((e as CustomEvent<boolean>).detail));

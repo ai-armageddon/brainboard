@@ -124,11 +124,36 @@
     <div id="collab" class="panel solo">
       <div id="avatars"></div>
       <span id="role-badge" class="role-badge" hidden></span>
-      <div id="voice" class="voice"></div>
+      <div id="voice" class="voice">
+        <button class="cbtn voice-join" data-voice="join" aria-label="Join voice"><span data-icon="headphones"></span><span id="voice-join-label">Join voice</span></button>
+        <button class="cbtn voice-mic" data-voice="mic" aria-label="Mute" hidden></button>
+        <button class="cbtn voice-details" data-voice="details" aria-label="Voice chat details" aria-controls="voice-panel" aria-expanded="false"><span id="voice-count"></span><span data-icon="chevron"></span></button>
+        <button class="cbtn voice-leave" data-voice="leave" data-icon="phoneOff" aria-label="Leave voice" title="Leave call" hidden></button>
+      </div>
       <button id="present-btn" class="cbtn" data-tip="Present · everyone follows you" aria-label="Present"></button>
       <button id="save-btn" class="save-btn" data-tip="Save to an account · ⌘S" aria-label="Save" hidden>Save</button>
       <button id="share-btn" class="share-btn owner-only" aria-label="Share">Share</button>
     </div>
+    <section id="voice-panel" class="panel" role="dialog" aria-labelledby="voice-title" hidden>
+      <header class="voice-heading">
+        <span class="voice-symbol" data-icon="headphones" aria-hidden="true"></span>
+        <div><h2 id="voice-title">Voice chat</h2><span id="voice-board"></span></div>
+        <button class="cbtn" data-voice="close" data-icon="close" aria-label="Close voice chat details"></button>
+      </header>
+      <p id="voice-stage" hidden>Stage mode · Only the owner and presenter can speak.</p>
+      <h3>In the call <span id="voice-total"></span></h3>
+      <ul id="voice-roster"></ul>
+      <p id="voice-empty">Nobody is in the call yet.</p>
+      <p id="voice-error" role="alert" hidden></p>
+      <div id="voice-prejoin">
+        <label class="toggle"><input type="checkbox" id="voice-join-muted"><span>Join muted</span></label>
+        <button class="primary" data-voice="join">Join call</button>
+      </div>
+      <details id="voice-audio" hidden>
+        <summary>Audio settings</summary>
+        <div id="mic-pop"></div>
+      </details>
+    </section>
     <div id="follow-banner" class="panel" hidden></div>
     <div id="elsewhere" aria-hidden="true"></div>
     <button id="catch-up" type="button" hidden></button>
