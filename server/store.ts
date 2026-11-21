@@ -5,6 +5,7 @@ import os from 'node:os';
 import path from 'node:path';
 import crypto from 'node:crypto';
 import type { Item } from '../src/types.ts';
+import type { BoardView } from '../src/protocol.ts';
 
 export const DATA_DIR = process.env.BRAINBOARD_DIR
   ? path.resolve(process.env.BRAINBOARD_DIR.replace(/^~(?=$|\/)/, os.homedir()))
@@ -24,6 +25,8 @@ export interface Board {
   created: string;
   updated: string;
   items: Item[];
+  /** named areas people can jump between */
+  views?: BoardView[];
 }
 export interface BoardMeta {
   id: string;

@@ -64,6 +64,7 @@ pm2 save
 | | Drag a shape's dot onto another shape to connect them, or onto empty space to grow a new bubble. `Tab` adds a connected bubble to the right, even while you type. |
 | **Organise** | `⌘D` duplicate · `]` / `[` bring to front or send to back · `⌫` delete |
 | **Boards** | Open the menu at the top left · `⌥N` new board · double-click the board name to rename it |
+| **Views** | `{` `}` previous / next view · `⌥1`–`⌥9` jump to a view |
 | **Export** | `⇧⌘E`, or **Export…** in the menu: PNG (1–3×, transparent if you like), PDF, SVG, a Markdown outline of the text and flow, or a brainboard file you can import again. Pick the whole board or just the selection, and a light or dark theme. **Save as…** lets you choose the folder and file name in Chrome, Edge and Opera. Other browsers save to Downloads |
 | **Undo** | `⌘Z` / `⇧⌘Z` undo only *your* changes, never anyone else's |
 
@@ -89,6 +90,7 @@ Click **Share** to create an invite link for each person. Each link either **can
 
 - **Presence.** Everyone's cursor, selection and "typing" marker appear in their colour. Click an avatar to follow that person's view.
 - **Present.** Everyone follows your view while you walk through the board. You can lock the view so nobody wanders off.
+- **Views.** Save spots on a big board as named views from the views menu next to the board name, then hop between them with the arrows or `{` `}`. Views are saved with the board, so everyone sees the same ones. When you aren't following anyone, faces next to the view name show who's working in other views, with a pulse for whoever is active right now. The menu shows who is in each view, and clicking a face takes you to them.
 - **Voice chat.** Click the headphones to join. Audio goes directly between browsers. The **▾** next to the mic switches microphone or speaker mid-call, with a level meter to check which mic hears you. Your choice is remembered, and if that mic is unplugged you fall back to the system default. Avatars light up and cursors show sound bars while someone talks. The board owner and the presenter can mute anyone, mute everyone, or turn on **Stage mode** in Share so only they can talk. Mutes apply on every listener's side, not just the muted person's. Peer-to-peer audio suits small groups of up to about 8 people.
 - **Cinematic follow.** Followers get a calm camera by default. Instead of mirroring every twitch, it frames what the presenter is working on: the note they're typing in, what they just selected, or the item their cursor rests on. It holds still while that's already in view, eases over when it isn't, and flies across the board for long jumps. Switch to **Exact** in the follow banner to mirror their screen instead.
 - **Session controls.** *Pause editing* makes everyone else view-only. *Show viewers' cursors* can be turned off for big audiences. Each person has a **Remove** button.

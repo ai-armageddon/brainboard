@@ -1,7 +1,7 @@
 // Server connection: REST helpers + the live socket (item sync, presence, collaboration).
 import { S, getItem, noteLocalChange, pruneSelection, requestRender, resetHistory, setCollector, setSyncScheduler } from './state';
 import type { Item } from './types';
-import type { BoardSettings, ClientMsg, Ink, Op, PeerInfo, Presence, Role, RtcSignal, ServerMsg } from './protocol';
+import type { BoardSettings, BoardView, ClientMsg, Ink, Op, PeerInfo, Presence, Role, RtcSignal, ServerMsg } from './protocol';
 import { DEFAULT_SETTINGS } from './protocol';
 import { applyOps, diffItems } from './ops';
 
@@ -26,6 +26,8 @@ export const session = {
   /** a blank board that exists only in this tab until the first edit */
   draft: false,
   boardName: '',
+  /** named areas of the board to jump between */
+  views: [] as BoardView[],
   role: 'owner' as Role,
   you: null as PeerInfo | null,
   peers: new Map<string, PeerInfo>(),
@@ -249,6 +251,7 @@ function handle(m: ServerMsg) {
       session.you = m.you;
       session.role = m.you.role;
       session.boardName = m.board.name;
+      session.views = m.board.views ?? [];
       session.peers = new Map(m.peers.map((p) => [p.id, p]));
       session.presenter = m.presenter;
       session.settings = m.settings;
@@ -294,6 +297,8 @@ function handle(m: ServerMsg) {
     }
     case 'presenter': session.presenter = m.id; emit('presenter'); return;
     case 'ink': emit('ink', { from: m.from, ink: m.ink }); return;
+    case 'view': applyView(m); emit('views'); return;
+    case 'views': session.views = m.views; emit('views'); return;
     case 'settings': session.settings = m.s; emit('settings'); return;
     case 'role': {
       const was = session.role;
@@ -335,6 +340,7 @@ export function startDraft() {
   session.boardId = null;
   session.draft = true;
   session.boardName = 'Untitled board';
+  session.views = [];
   session.role = 'owner';
   session.you = null;
   session.settings = { ...DEFAULT_SETTINGS };
@@ -360,6 +366,7 @@ export function joinBoard(id: string) {
   if (ws) { const old = ws; ws = null; old.close(); }
   session.draft = false;
   session.boardId = id;
+  session.views = [];
   session.peers.clear();
   session.presenter = null;
   firstWelcome = true;
@@ -406,6 +413,23 @@ export const present = (on: boolean) => sendMsg({ t: 'present', on });
 export const sendVoice = (on: boolean, muted: boolean) => sendMsg({ t: 'voice', on, muted });
 export const sendRtc = (to: string, data: RtcSignal) => sendMsg({ t: 'rtc', to, data });
 export const sendInk = (ink: Ink) => sendMsg({ t: 'ink', ink });
+
+function applyView(m: { put?: BoardView; del?: string }) {
+  if (m.put) {
+    const i = session.views.findIndex((v) => v.id === m.put!.id);
+    if (i >= 0) session.views[i] = m.put;
+    else session.views.push(m.put);
+  } else if (m.del) {
+    session.views = session.views.filter((v) => v.id !== m.del);
+  }
+}
+
+/** Add, change or delete a view: applied here at once, then shared with everyone on the board. */
+export function changeView(m: { put?: BoardView; del?: string }) {
+  applyView(m);
+  sendMsg({ t: 'view', ...m });
+  emit('views');
+}
 export const muteUser = (id: string) => sendMsg({ t: 'mute', id });
 export const updateSettings = (s: Partial<BoardSettings>) => sendMsg({ t: 'settings', s });
 export const kick = (id: string) => sendMsg({ t: 'kick', id });
