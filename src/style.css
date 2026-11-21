@@ -139,7 +139,7 @@ kbd {
   background-image: radial-gradient(circle, var(--dot) 1px, transparent 1.3px);
   cursor: default;
 }
-#viewport[data-tool="hand"], #viewport.space { cursor: grab; }
+#viewport[data-tool="hand"], #viewport.space, #viewport.panmod { cursor: grab; }
 #viewport.panning { cursor: grabbing !important; }
 #viewport[data-tool="pen"] { cursor: crosshair; }
 #viewport[data-tool="text"] { cursor: text; }

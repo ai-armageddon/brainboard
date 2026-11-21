@@ -24,6 +24,11 @@ type Drag =
   | { kind: 'connect'; from: string; side: Side | null; sx: number; sy: number; moved: boolean; target: string | null };
 
 let drag: Drag | null = null;
+
+/** Hold this and drag to pan: ⌘ on Mac (Ctrl-click is right-click there), Ctrl elsewhere. */
+export const IS_MAC = /Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent);
+const PAN_KEY = IS_MAC ? 'Meta' : 'Control';
+const panModifier = (e: MouseEvent | KeyboardEvent) => (IS_MAC ? e.metaKey : e.ctrlKey);
 const pointer = { x: innerWidth / 2, y: innerHeight / 2 };
 let internalClip: Item[] | null = null;
 const MARK = 'brainboard/v1:';
@@ -51,7 +56,7 @@ function onDown(e: PointerEvent) {
   stopCamAnim();
   const p = screenToWorld(e.clientX, e.clientY);
 
-  if (e.button === 1 || (e.button === 0 && (S.space || S.tool === 'hand'))) {
+  if (e.button === 1 || (e.button === 0 && (S.space || S.tool === 'hand' || panModifier(e)))) {
     e.preventDefault();
     if (!userMovedCamera()) return;
     begin({ kind: 'pan', lx: e.clientX, ly: e.clientY }, e);
@@ -412,6 +417,7 @@ const TOOL_KEYS: Record<string, Tool> = {
 
 function onKeyDown(e: KeyboardEvent) {
   const mod = e.metaKey || e.ctrlKey;
+  if (e.key === PAN_KEY && !S.editing) viewport.classList.add('panmod');
 
   if (S.editing) {
     if (e.key === 'Escape' || (e.key === 'Enter' && mod)) {
@@ -502,6 +508,7 @@ function onKeyDown(e: KeyboardEvent) {
 }
 
 function onKeyUp(e: KeyboardEvent) {
+  if (e.key === PAN_KEY || !panModifier(e)) viewport.classList.remove('panmod');
   if (e.key === ' ') {
     S.space = false;
     viewport.classList.remove('space');
@@ -641,7 +648,7 @@ export function initInput() {
 
   window.addEventListener('keydown', onKeyDown);
   window.addEventListener('keyup', onKeyUp);
-  window.addEventListener('blur', () => { S.space = false; viewport.classList.remove('space'); });
+  window.addEventListener('blur', () => { S.space = false; viewport.classList.remove('space', 'panmod'); });
 
   document.addEventListener('copy', (e) => onCopy(e, false));
   document.addEventListener('cut', (e) => onCopy(e, true));

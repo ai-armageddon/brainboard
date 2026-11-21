@@ -146,6 +146,11 @@ export function toggleShortcuts(force?: boolean) {
 // ---------------------------------------------------------------- build
 
 export function buildUI() {
+  // Ctrl-drag pans on Windows and Linux; ⌘-drag on Mac.
+  if (!/Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent)) {
+    document.querySelectorAll('.pan-key').forEach((k) => { k.textContent = 'Ctrl'; });
+    document.querySelectorAll<HTMLElement>('[data-tip*="⌘-drag"]').forEach((b) => { b.dataset.tip = b.dataset.tip!.replace('⌘-drag', 'Ctrl-drag'); });
+  }
   document.querySelectorAll<HTMLElement>('[data-icon]').forEach((el) => {
     el.insertAdjacentHTML('afterbegin', icon(el.dataset.icon!));
   });

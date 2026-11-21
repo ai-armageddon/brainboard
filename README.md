@@ -43,7 +43,7 @@ Boards are saved in `~/.brainboard/`, with images next to them. Set `BRAINBOARD_
 
 | | |
 |---|---|
-| **Pan** | Scroll or drag with two fingers, hold `Space` and drag, or press `H` |
+| **Pan** | Scroll or drag with two fingers, hold `⌘` and drag (`Ctrl` on Windows), hold `Space` and drag, or press `H` |
 | **Zoom** | Pinch or `⌘` + scroll · `⇧1` fits everything · `⌘0` resets to 100% |
 | **Images** | `⌘V` to paste, drag files in, or press `I` |
 | **Write** | Double-click anywhere for text · `N` for a sticky note · `Enter` edits the selection |
