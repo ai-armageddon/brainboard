@@ -12,6 +12,7 @@ import { attachRealtime } from './realtime.ts';
 import { ownerSecret } from './auth.ts';
 import { HOSTED, PUBLIC_URL } from './config.ts';
 import { DATA_DIR, gcImages } from './store.ts';
+import { shareMeta } from './meta.ts';
 
 const DIST = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'dist');
 const PORT = Number(process.env.PORT ?? 5317);
@@ -33,7 +34,11 @@ const server = http.createServer(async (req, res) => {
     file = path.join(DIST, 'index.html');
   }
   try {
-    const body = await fs.readFile(file);
+    let body: Buffer | string = await fs.readFile(file);
+    // Invite links get a link preview with the board's name.
+    if (file === path.join(DIST, 'index.html') && url.searchParams.has('invite')) {
+      body = await shareMeta(body.toString('utf8'), req.url ?? '/', PUBLIC_URL ?? `http://${req.headers.host ?? `localhost:${PORT}`}`);
+    }
     const hashed = file.includes(`${path.sep}assets${path.sep}`);
     res.writeHead(200, {
       'content-type': TYPES[path.extname(file)] ?? 'application/octet-stream',
