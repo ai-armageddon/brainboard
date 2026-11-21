@@ -86,6 +86,7 @@ function connFor(id: string): Conn {
   const pc = new RTCPeerConnection({ iceServers: iceServers() });
   const audio = new Audio();
   audio.autoplay = true;
+  void applySpeaker(audio);
   c = { pc, audio, meter: null, queued: [] };
   conns.set(id, c);
   for (const t of local?.getTracks() ?? []) pc.addTrack(t, local!);
@@ -161,10 +162,11 @@ export async function joinVoice() {
   if (!(await ensureScreenName('talk'))) return;
   if (!navigator.mediaDevices?.getUserMedia) return toast('Voice needs a secure (https) connection');
   try {
-    local = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true } });
+    local = await openMic(pref(MIC_KEY));
   } catch {
     return toast('Microphone blocked. Allow it in your browser’s site settings to talk');
   }
+  watchMic();
   ctx = new AudioContext();
   localMeter = meterFor(local);
   inVoice = true;
@@ -183,6 +185,7 @@ export function leaveVoice(silent = false) {
   if (!inVoice) return;
   inVoice = false;
   boardOfCall = null;
+  closeDevices();
   for (const id of [...conns.keys()]) close(id);
   for (const t of local?.getTracks() ?? []) t.stop();
   local = null;
@@ -210,6 +213,180 @@ export function toggleMute() {
   render();
 }
 
+// ---------------------------------------------------------------- choosing the mic and speaker
+
+const MIC_KEY = 'bb-mic';
+const SPEAKER_KEY = 'bb-speaker';
+const pref = (k: string) => { try { return localStorage.getItem(k) ?? ''; } catch { return ''; } };
+const setPref = (k: string, v: string) => { try { if (v) localStorage.setItem(k, v); else localStorage.removeItem(k); } catch { /* ignore */ } };
+
+type Sinkable = HTMLMediaElement & { setSinkId?: (id: string) => Promise<void> };
+const canPickSpeaker = typeof HTMLMediaElement !== 'undefined' && 'setSinkId' in HTMLMediaElement.prototype;
+
+/** '' = whatever the system default is. */
+let micChoice = '';
+let switching = false;
+
+const micConstraints = (deviceId: string): MediaTrackConstraints => ({
+  echoCancellation: true, noiseSuppression: true, autoGainControl: true,
+  ...(deviceId ? { deviceId: { exact: deviceId } } : {}),
+});
+
+/** Open a mic; if the remembered one is gone (unplugged), use the default instead. */
+async function openMic(deviceId: string): Promise<MediaStream> {
+  try {
+    const s = await navigator.mediaDevices.getUserMedia({ audio: micConstraints(deviceId) });
+    micChoice = deviceId;
+    return s;
+  } catch (err) {
+    if (!deviceId || (err as DOMException).name === 'NotAllowedError') throw err;
+    micChoice = '';
+    return navigator.mediaDevices.getUserMedia({ audio: micConstraints('') });
+  }
+}
+
+/** If the mic disappears mid-call (headset unplugged, Bluetooth dropped), fall back to the default. */
+function watchMic() {
+  const track = local?.getAudioTracks()[0];
+  if (!track) return;
+  track.onended = () => {
+    if (switching || !inVoice || track !== local?.getAudioTracks()[0]) return;
+    void switchMic('', 'Microphone disconnected. Switched to the system default');
+  };
+}
+
+async function switchMic(deviceId: string, note?: string) {
+  if (!inVoice || switching) return;
+  switching = true;
+  const old = local;
+  try {
+    let next: MediaStream;
+    try {
+      // Some browsers (iOS) allow only one capture at a time: release the old mic first there.
+      next = await navigator.mediaDevices.getUserMedia({ audio: micConstraints(deviceId) });
+    } catch {
+      for (const t of old?.getTracks() ?? []) t.stop();
+      try { next = await navigator.mediaDevices.getUserMedia({ audio: micConstraints(deviceId) }); }
+      catch { next = await navigator.mediaDevices.getUserMedia({ audio: micConstraints('') }); deviceId = ''; toast('Couldn’t open that microphone. Using the default'); }
+    }
+    if (!inVoice) { for (const t of next.getTracks()) t.stop(); return; }
+    const track = next.getAudioTracks()[0];
+    for (const c of conns.values()) {
+      for (const s of c.pc.getSenders()) if (s.track?.kind === 'audio' || (!s.track && track)) await s.replaceTrack(track).catch(() => {});
+    }
+    for (const t of old?.getTracks() ?? []) t.stop();
+    try { localMeter?.source.disconnect(); } catch { /* ignore */ }
+    local = next;
+    localMeter = meterFor(next);
+    micChoice = deviceId;
+    setPref(MIC_KEY, deviceId);
+    applyLocalMute();
+    watchMic();
+    if (note) toast(note);
+    else toast(`Microphone: ${track.label.replace(/^Default - /, '') || 'system default'}`);
+  } catch {
+    toast('Couldn’t switch microphones');
+  } finally {
+    switching = false;
+    if (!$('mic-pop').hidden) void renderDevices();
+  }
+}
+
+async function applySpeaker(audio: Sinkable) {
+  const id = pref(SPEAKER_KEY);
+  if (canPickSpeaker && audio.setSinkId) await audio.setSinkId(id).catch(() => audio.setSinkId!('').catch(() => {}));
+}
+
+async function switchSpeaker(deviceId: string, label: string) {
+  setPref(SPEAKER_KEY, deviceId);
+  for (const c of conns.values()) await applySpeaker(c.audio);
+  toast(`Speaker: ${label}`);
+  void renderDevices();
+}
+
+/** Chrome lists 'default' and 'communications' aliases; show one "System default" row instead. */
+function deviceRows(all: MediaDeviceInfo[], kind: MediaDeviceKind, current: string, attr: string) {
+  const list = all.filter((d) => d.kind === kind);
+  const sys = list.find((d) => d.deviceId === 'default')?.label.replace(/^Default - /, '');
+  const real = list.filter((d) => d.deviceId && d.deviceId !== 'default' && d.deviceId !== 'communications');
+  const row = (id: string, label: string, sub = '') =>
+    `<button class="pop-btn dev ${id === current ? 'on' : ''}" data-${attr}="${esc(id)}" role="menuitemradio" aria-checked="${id === current}">` +
+    `<span class="dev-check">${id === current ? icon('check', 16) : ''}</span><span class="dev-name">${esc(label)}${sub ? `<small>${esc(sub)}</small>` : ''}</span></button>`;
+  return row('', 'System default', sys) + real.map((d, i) => row(d.deviceId, d.label || `${kind === 'audioinput' ? 'Microphone' : 'Speaker'} ${i + 1}`)).join('');
+}
+
+const esc = (s: string) => s.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]!);
+
+async function renderDevices() {
+  const pop = $('mic-pop');
+  let all: MediaDeviceInfo[] = [];
+  try { all = await navigator.mediaDevices.enumerateDevices(); } catch { /* ignore */ }
+  const outputs = canPickSpeaker && all.some((d) => d.kind === 'audiooutput');
+  const speaker = pref(SPEAKER_KEY);
+  pop.innerHTML = `
+    <div class="pop-title">Microphone</div>
+    <div role="menu" aria-label="Microphone">${deviceRows(all, 'audioinput', micChoice, 'mic')}</div>
+    <div class="mic-level" aria-hidden="true"><i></i></div>
+    <div class="mic-level-note muted"></div>
+    ${outputs ? `<div class="pop-title">Speaker</div><div role="menu" aria-label="Speaker">${deviceRows(all, 'audiooutput', all.some((d) => d.deviceId === speaker) ? speaker : '', 'speaker')}</div>` : ''}`;
+}
+
+let levelRaf = 0;
+function meterLoop() {
+  const bar = $('mic-pop').querySelector<HTMLElement>('.mic-level i');
+  if (bar) {
+    const live = !selfMuted && canSpeak();
+    const v = localMeter && live ? Math.min(1, level(localMeter) * 9) : 0;
+    bar.style.width = `${Math.round(v * 100)}%`;
+    const note = $('mic-pop').querySelector<HTMLElement>('.mic-level-note')!;
+    const text = live ? 'Speak to test your mic' : 'You’re muted. Unmute to test your mic';
+    if (note.textContent !== text) note.textContent = text;
+  }
+  levelRaf = requestAnimationFrame(meterLoop);
+}
+
+function toggleDevices(anchor: HTMLElement) {
+  if (!$('mic-pop').hidden) return closeDevices();
+  const pop = $('mic-pop');
+  pop.hidden = false;
+  void renderDevices();
+  const r = anchor.getBoundingClientRect();
+  pop.style.right = `${Math.max(12, innerWidth - r.right)}px`;
+  // The bar sits at the bottom on small screens: open upwards there.
+  if (r.top > innerHeight / 2) { pop.style.top = ''; pop.style.bottom = `${innerHeight - r.top + 10}px`; }
+  else { pop.style.bottom = ''; pop.style.top = `${r.bottom + 10}px`; }
+  cancelAnimationFrame(levelRaf);
+  levelRaf = requestAnimationFrame(meterLoop);
+}
+
+function closeDevices() {
+  const pop = document.getElementById('mic-pop');
+  if (pop) pop.hidden = true;
+  cancelAnimationFrame(levelRaf);
+}
+
+function initDevices() {
+  const pop = document.createElement('div');
+  pop.id = 'mic-pop';
+  pop.className = 'panel';
+  pop.hidden = true;
+  document.body.append(pop);
+  pop.addEventListener('click', (e) => {
+    const b = (e.target as Element).closest<HTMLElement>('[data-mic], [data-speaker]');
+    if (!b) return;
+    if (b.dataset.mic !== undefined) { if (b.dataset.mic !== micChoice) void switchMic(b.dataset.mic); }
+    else void switchSpeaker(b.dataset.speaker!, b.querySelector('.dev-name')!.firstChild!.textContent!);
+  });
+  document.addEventListener('pointerdown', (e) => {
+    if (pop.hidden) return;
+    const t = e.target as Element;
+    if (!pop.contains(t) && !t.closest('[data-voice="devices"]')) closeDevices();
+  });
+  window.addEventListener('keydown', (e) => { if (e.key === 'Escape' && !pop.hidden) closeDevices(); });
+  // Headset plugged in or out: keep the list current.
+  navigator.mediaDevices?.addEventListener?.('devicechange', () => { if (!pop.hidden) void renderDevices(); });
+}
+
 // ---------------------------------------------------------------- UI
 
 function render() {
@@ -223,6 +400,7 @@ function render() {
     const off = selfMuted || blocked;
     box.innerHTML =
       `<button class="cbtn voice-mic ${off ? 'off' : ''} ${speaking.has('me') ? 'talking' : ''}" data-voice="mic" ${blocked ? 'aria-disabled="true"' : ''} data-tip="${blocked ? 'Stage mode: only the owner and presenter can talk' : off ? 'Unmute' : 'Mute'}" aria-label="${off ? 'Unmute' : 'Mute'}">${icon(off ? 'micOff' : 'mic', 18)}</button>` +
+      `<button class="cbtn voice-dev" data-voice="devices" data-tip="Microphone & speaker" aria-label="Choose microphone and speaker" aria-haspopup="menu">${icon('chevron', 15)}</button>` +
       `<button class="cbtn voice-leave" data-voice="leave" data-tip="Leave voice" aria-label="Leave voice">${icon('phoneOff', 18)}</button>`;
   }
   decorate();
@@ -280,7 +458,9 @@ export function initVoice() {
     if (act === 'join') void joinVoice();
     else if (act === 'mic') toggleMute();
     else if (act === 'leave') leaveVoice();
+    else if (act === 'devices') toggleDevices((e.target as Element).closest<HTMLElement>('[data-voice]')!);
   });
+  initDevices();
   events.addEventListener('rtc', (e) => {
     const { from, data } = (e as CustomEvent<{ from: string; data: RtcSignal }>).detail;
     void onSignal(from, data);
