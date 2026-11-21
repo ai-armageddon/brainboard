@@ -22,6 +22,7 @@ const P: Record<string, string> = {
   back: '<rect x="4" y="4" width="11" height="11" rx="2" fill="currentColor" fill-opacity=".18"/><path d="M19 9h.5a.5.5 0 0 1 .5.5v10a.5.5 0 0 1-.5.5h-10a.5.5 0 0 1-.5-.5V19"/>',
   type: '<path d="M4 7V5h10v2"/><path d="M9 5v12"/><path d="M13 13h7M16.5 13v6"/>',
   chevron: '<path d="m8 10 4 4 4-4"/>',
+  sparkle: '<path d="M11 4.5 12.6 9l4.4 1.6-4.4 1.6L11 16.7l-1.6-4.5L5 10.6 9.4 9z"/><path d="m17.5 14.5.7 1.8 1.8.7-1.8.7-.7 1.8-.7-1.8-1.8-.7 1.8-.7z"/>',
   cornerSquare: '<path d="M6 19V6h13"/>',
   cornerSoft: '<path d="M6 19V10a4 4 0 0 1 4-4h9"/>',
   cornerRound: '<path d="M6 19v-5a8 8 0 0 1 8-8h5"/>',

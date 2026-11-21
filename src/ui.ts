@@ -52,6 +52,7 @@ export function updateToolUI() {
   if (!isBrushTool(S.tool)) return;
   const tool = S.tool;
   penbar.dataset.tool = tool;
+  if (tool === 'pen') $('beauty-btn').setAttribute('aria-pressed', String(S.pen.beauty));
   if (tool === 'eraser') {
     for (const button of penbar.querySelectorAll<HTMLElement>('[data-erase-mode]')) {
       button.setAttribute('aria-pressed', String(button.dataset.eraseMode === S.eraser.mode));
@@ -274,7 +275,12 @@ export function buildUI() {
     const b = (e.target as Element).closest<HTMLElement>('button');
     if (!b) return;
     if (!isBrushTool(S.tool)) return;
-    if (b.dataset.eraseMode === 'partial' || b.dataset.eraseMode === 'whole') {
+    if (b.id === 'beauty-btn') {
+      S.pen.beauty = !S.pen.beauty;
+      updateToolUI();
+      savePrefs();
+      toast(S.pen.beauty ? 'Beautify on: smoother ink, and shapes snap clean' : 'Beautify off: ink exactly as drawn');
+    } else if (b.dataset.eraseMode === 'partial' || b.dataset.eraseMode === 'whole') {
       S.eraser.mode = b.dataset.eraseMode;
       updateToolUI();
       savePrefs();

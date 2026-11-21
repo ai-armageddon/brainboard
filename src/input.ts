@@ -8,14 +8,15 @@ import {
   zoomToFit, setZoom, type Side,
 } from './actions';
 import { clamp, contains, resizeStroke, edgeGeom, strokePath, unionBox } from './geometry';
-import { closePopovers, openImagePicker, setBrushSize, toggleShortcuts } from './ui';
+import { closePopovers, openImagePicker, setBrushSize, toast, toggleShortcuts } from './ui';
 import { canEdit } from './net';
 import { userMovedCamera } from './collab';
 import { vimKey } from './vim';
 import { openExport } from './export';
 import { inkEnd, inkMove, inkStart } from './ink';
 import { eraseStroke } from './erase';
-import { IS_MAC } from './keys';
+import { IS_MAC, keyLabel } from './keys';
+import { recognize, steady, taper, type ShapeName } from './beautify';
 
 type Drag =
   | { kind: 'brush-size'; tool: 'pen' | 'eraser'; pointerId: number; startX: number; startSize: number }
@@ -23,7 +24,16 @@ type Drag =
   | { kind: 'move'; sx: number; sy: number; started: boolean; orig: Map<string, { x: number; y: number }>; clickId: string; wasSelected: boolean; shift: boolean }
   | { kind: 'marquee'; sx: number; sy: number; base: Set<string> }
   | { kind: 'resize'; corner: string; start: Box; origs: Map<string, NodeItem> ; lock: boolean }
-  | { kind: 'draw'; pts: number[]; id: string; size: number; color: StrokeItem['color'] }
+  | {
+    kind: 'draw'; pts: number[]; id: string; size: number; color: StrokeItem['color'];
+    /** beauty mode: steadied input, tapered ink, shapes snap */
+    beauty: boolean;
+    /** set while the user holds still at the end of a stroke and it snapped to a shape */
+    snap: { points: number[]; name: ShapeName } | null;
+    /** screen point the hold-still timer measures from */
+    anchor: { x: number; y: number };
+    hold: number;
+  }
   | { kind: 'erase'; last: { x: number; y: number }; did: boolean }
   | { kind: 'create'; tool: Tool; start: { x: number; y: number }; sx: number; sy: number; id: string | null }
   | { kind: 'connect'; from: string; side: Side | null; sx: number; sy: number; moved: boolean; target: string | null };
@@ -103,7 +113,8 @@ function onDown(e: PointerEvent) {
       const id = uid();
       const size = S.pen.size / S.cam.z;
       const color = S.pen.color;
-      begin({ kind: 'draw', pts, id, size, color }, e);
+      begin({ kind: 'draw', pts, id, size, color, beauty: S.pen.beauty, snap: null, anchor: { x: e.clientX, y: e.clientY }, hold: 0 }, e);
+      if (S.pen.beauty) armHold(drag as DrawDrag);
       live.stroke.style.strokeWidth = `${size}px`;
       live.stroke.style.stroke = `var(--s-${color})`;
       drawLive(pts);
@@ -219,11 +230,20 @@ function onMove(e: PointerEvent) {
       return;
 
     case 'draw': {
+      const d = drag;
+      const moved = Math.hypot(e.clientX - d.anchor.x, e.clientY - d.anchor.y);
+      if (d.beauty) {
+        // A snapped shape holds until the pen clearly moves on; then it's freehand again.
+        if (d.snap && moved < 10) return;
+        if (d.snap) { d.snap = null; live.stroke.style.removeProperty('opacity'); }
+        if (moved > 3) { d.anchor = { x: e.clientX, y: e.clientY }; armHold(d); }
+      }
       const evs = e.getCoalescedEvents?.() ?? [e];
-      const pts = drag.pts;
+      const pts = d.pts;
       for (const ev of evs) {
-        const q = screenToWorld(ev.clientX, ev.clientY);
+        let q = screenToWorld(ev.clientX, ev.clientY);
         const lx = pts[pts.length - 2], ly = pts[pts.length - 1];
+        if (d.beauty) q = steady(lx, ly, q.x, q.y);
         if (Math.hypot(q.x - lx, q.y - ly) * z < 1.5) continue;
         pts.push(q.x, q.y);
       }
@@ -340,8 +360,15 @@ function onUp(e: PointerEvent) {
       marquee.style.display = 'none';
       break;
     case 'draw':
+      clearTimeout(d.hold);
       live.stroke.setAttribute('d', '');
-      if (e.type !== 'pointercancel') finishStroke(d);
+      live.stroke.style.removeProperty('opacity');
+      if (e.type !== 'pointercancel') {
+        // Steadied ink trails the pen a little: finish where it actually lifted.
+        const lx = d.pts[d.pts.length - 2], ly = d.pts[d.pts.length - 1];
+        if (d.beauty && !d.snap && Math.hypot(p.x - lx, p.y - ly) * S.cam.z > 1) d.pts.push(p.x, p.y);
+        finishStroke(d);
+      }
       inkEnd(e.type === 'pointercancel' ? 'cancel' : 'done');
       break;
     case 'create': {
@@ -406,20 +433,68 @@ function drawLive(pts: number[]) {
   live.stroke.setAttribute('d', strokePath(pts.length === 2 ? [...pts, pts[0] + 0.01, pts[1]] : pts));
 }
 
-function finishStroke({ pts, id, size, color }: Extract<Drag, { kind: 'draw' }>) {
-  if (pts.length === 2) pts.push(pts[0] + 0.01, pts[1]);
+type DrawDrag = Extract<Drag, { kind: 'draw' }>;
+
+/** Beauty mode: holding still for a moment snaps what's been drawn so far to a clean shape. */
+function armHold(d: DrawDrag) {
+  clearTimeout(d.hold);
+  d.hold = window.setTimeout(() => {
+    if (drag !== d || d.snap) return;
+    const shape = recognize(d.pts, S.cam.z, true);
+    if (!shape) return;
+    d.snap = shape;
+    drawLive(shape.points);
+    live.stroke.style.opacity = '0.75';
+    requestAnimationFrame(() => live.stroke.style.removeProperty('opacity'));
+  }, 450);
+}
+
+/** A stroke item from world-space points, with an optional filled outline (also world space). */
+function strokeItem(id: string, pts: number[], size: number, color: StrokeItem['color'], outline?: number[][] | null): StrokeItem {
+  if (pts.length === 2) pts = [...pts, pts[0] + 0.01, pts[1]];
   let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
-  for (let i = 0; i < pts.length; i += 2) {
-    x0 = Math.min(x0, pts[i]); x1 = Math.max(x1, pts[i]);
-    y0 = Math.min(y0, pts[i + 1]); y1 = Math.max(y1, pts[i + 1]);
-  }
-  const pad = size / 2 + 1 / S.cam.z;
+  const grow = (xs: number[]) => {
+    for (let i = 0; i < xs.length; i += 2) {
+      x0 = Math.min(x0, xs[i]); x1 = Math.max(x1, xs[i]);
+      y0 = Math.min(y0, xs[i + 1]); y1 = Math.max(y1, xs[i + 1]);
+    }
+  };
+  if (outline) outline.forEach(grow); else grow(pts);
+  const pad = outline ? 0 : size / 2 + 1 / S.cam.z;
   const x = x0 - pad, y = y0 - pad;
-  const rel = pts.map((v, i) => Math.round((i % 2 ? v - y : v - x) * 100) / 100);
+  const rel = (xs: number[]) => xs.map((v, i) => Math.round((i % 2 ? v - y : v - x) * 100) / 100);
+  return {
+    id, type: 'stroke', x, y, w: x1 - x0 + pad * 2, h: y1 - y0 + pad * 2, points: rel(pts), color, size,
+    ...(outline ? { outline: outline.map(rel) } : {}),
+  };
+}
+
+const SHAPE_WORDS: Record<ShapeName, string> = {
+  line: 'a straight line', circle: 'a circle', ellipse: 'an ellipse', triangle: 'a triangle',
+  square: 'a square', rectangle: 'a rectangle', shape: 'a clean shape', lines: 'straight lines',
+};
+
+function finishStroke(d: DrawDrag) {
+  const { pts, id, size, color } = d;
+  const z = S.cam.z;
+  if (!d.beauty) {
+    checkpoint();
+    S.items.push(strokeItem(id, pts, size, color));
+    changed();
+    return;
+  }
+  const freehand = strokeItem(id, pts, size, color, taper(pts, size, z));
+  const shape = d.snap ?? recognize(pts, z);
   checkpoint();
-  const stroke: StrokeItem = { id, type: 'stroke', x, y, w: x1 - x0 + pad * 2, h: y1 - y0 + pad * 2, points: rel, color, size };
-  S.items.push(stroke);
+  S.items.push(freehand);
   changed();
+  if (!shape) return;
+  // Snapping is its own undo step: ⌘Z brings back the hand-drawn version.
+  checkpoint();
+  const i = S.items.findIndex((it) => it.id === id);
+  if (i >= 0) S.items[i] = strokeItem(id, shape.points, size, color);
+  changed();
+  toast(keyLabel(`Snapped to ${SHAPE_WORDS[shape.name]} · ⌘Z to keep your drawing`));
 }
 
 function eraseAlong(d: Extract<Drag, { kind: 'erase' }>, p: { x: number; y: number }) {

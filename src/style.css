@@ -971,6 +971,17 @@ body.busy #ctxbar { opacity: 0; pointer-events: none; transition: none; }
 }
 .eraser-modes { display: none; justify-self: center; gap: 2px; padding: 2px; margin-bottom: 3px; background: var(--hover); border-radius: var(--r); }
 #penbar[data-tool="eraser"] .eraser-modes { display: flex; }
+.pen-modes { display: none; justify-self: center; margin-bottom: 3px; }
+#penbar[data-tool="pen"] .pen-modes { display: flex; }
+#beauty-btn {
+  display: flex; align-items: center; gap: 5px; padding: 4px 11px 4px 8px;
+  font: 500 13px var(--font); color: var(--fg-2); background: var(--hover);
+  border: 0; border-radius: 999px; cursor: pointer;
+}
+#beauty-btn svg { width: 16px; height: 16px; }
+#beauty-btn:hover { color: var(--fg); }
+#beauty-btn[aria-pressed="true"] { color: var(--on-accent); background: var(--accent); }
+#beauty-btn[aria-pressed="true"] svg { fill: currentColor; fill-opacity: 0.25; }
 .eraser-modes button { padding: 5px 10px; font: 500 13px var(--font); color: var(--fg-2); border: 0; background: transparent; border-radius: var(--r-sm); cursor: pointer; }
 .eraser-modes button[aria-pressed="true"] { color: var(--on-accent); background: var(--accent); }
 #penbar[data-tool="eraser"] { width: max-content; }
