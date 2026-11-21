@@ -134,6 +134,7 @@
     <div id="peer-pop" class="panel" hidden></div>
 
     <div id="menu" class="panel" role="menu" hidden>
+      <button data-action="home" class="menu-home">All boards <kbd>⌥B</kbd></button>
       <div class="owner-only">
         <div class="menu-label">Boards</div>
         <div id="board-list"></div>
@@ -155,6 +156,16 @@
         <button data-action="delete-board" class="danger">Delete board</button>
       </div>
       <div class="menu-foot"><span class="wordmark">brain<span>board</span></span><span class="muted">v0.3</span></div>
+    </div>
+
+    <div id="home" hidden>
+      <div class="panel sheet home-sheet" role="dialog" aria-labelledby="home-title">
+        <div class="sheet-head">
+          <h2><span class="logo"></span><span id="home-title">Boards</span></h2>
+          <button class="close" aria-label="Close">Esc</button>
+        </div>
+        <div class="home-body"></div>
+      </div>
     </div>
 
     <div id="share" hidden>

@@ -16,6 +16,12 @@ export interface Invite {
   from?: string;
   /** who last used the link and when they were last here (for the owner's People list) */
   seen?: { name: string; at: string };
+  /** the email the owner addressed it to, if any */
+  email?: string;
+  /** the account that email belonged to when the invite was made: only that account sees it in "Shared with you" */
+  userId?: string;
+  /** browsers / accounts ("anon:<id>" / "user:<id>") that have joined with this link, so it shows in their boards */
+  members?: { key: string; at: string }[];
   created: string;
 }
 export interface Sharing {
@@ -78,7 +84,9 @@ export async function transferOwnership(from: string, to: string): Promise<numbe
 
 const cleanPerson = (s: unknown) => String(s ?? '').replace(/\s+/g, ' ').trim().slice(0, 40);
 
-export async function createInvite(boardId: string, role: InviteRole, label: string, from = ''): Promise<Invite> {
+export async function createInvite(
+  boardId: string, role: InviteRole, label: string, from = '', to: { email?: string; userId?: string } = {},
+): Promise<Invite> {
   const s = await getSharing(boardId);
   const name = cleanPerson(label);
   const inv: Invite = {
@@ -87,6 +95,8 @@ export async function createInvite(boardId: string, role: InviteRole, label: str
     label: label.trim().slice(0, 60) || (role === 'editor' ? 'Can edit' : 'Can view'),
     ...(name ? { name } : {}),
     ...(cleanPerson(from) ? { from: cleanPerson(from) } : {}),
+    ...(to.email ? { email: to.email } : {}),
+    ...(to.userId ? { userId: to.userId } : {}),
     created: new Date().toISOString(),
   };
   s.invites.push(inv);
@@ -113,13 +123,70 @@ export async function revokeInvite(boardId: string, token: string) {
   await save(boardId, s);
 }
 
-/** Remember who used a link and when, so the owner can tell their links apart. */
-export async function noteInviteUse(boardId: string, token: string, name: string) {
+/**
+ * Remember who used a link and when, so the owner can tell their links apart, and (with `key`) so the board
+ * shows up under "Shared with you" for that browser or account.
+ */
+export async function noteInviteUse(boardId: string, token: string, name: string, key?: string | null) {
   const s = await getSharing(boardId);
   const inv = s.invites.find((i) => i.token === token);
   if (!inv) return;
-  inv.seen = { name: cleanPerson(name) || inv.seen?.name || inv.name || 'Guest', at: new Date().toISOString() };
+  const at = new Date().toISOString();
+  inv.seen = { name: cleanPerson(name) || inv.seen?.name || inv.name || 'Guest', at };
+  if (key) {
+    inv.members ??= [];
+    const m = inv.members.find((x) => x.key === key);
+    if (m) m.at = at;
+    else inv.members.push({ key, at });
+  }
   await save(boardId, s);
+}
+
+async function allSharing(): Promise<{ boardId: string; s: Sharing }[]> {
+  let files: string[] = [];
+  try { files = await fs.readdir(DIR); } catch { return []; }
+  const out: { boardId: string; s: Sharing }[] = [];
+  for (const f of files) {
+    if (!f.endsWith('.json')) continue;
+    const boardId = f.slice(0, -5);
+    try { out.push({ boardId, s: await getSharing(boardId) }); } catch { /* skip bad ids */ }
+  }
+  return out;
+}
+
+/**
+ * Boards shared with this browser/account: invites it has joined, or ones addressed to its account.
+ * Never includes boards it owns. One entry per board (the best role wins).
+ */
+export async function sharedWith(keys: string[], userId: string | null): Promise<{ boardId: string; invite: Invite; lastHere: string | null }[]> {
+  const out = new Map<string, { boardId: string; invite: Invite; lastHere: string | null }>();
+  for (const { boardId, s } of await allSharing()) {
+    if (s.owner && keys.includes(s.owner)) continue;
+    for (const inv of s.invites) {
+      const mine = inv.members?.filter((m) => keys.includes(m.key)) ?? [];
+      if (!mine.length && !(userId && inv.userId === userId)) continue;
+      const lastHere = mine.map((m) => m.at).sort().pop() ?? null;
+      const prev = out.get(boardId);
+      if (!prev || (prev.invite.role === 'viewer' && inv.role === 'editor')) {
+        out.set(boardId, { boardId, invite: inv, lastHere: lastHere ?? prev?.lastHere ?? null });
+      }
+    }
+  }
+  return [...out.values()];
+}
+
+/** An anonymous browser signed in: the boards it joined follow it into the account. */
+export async function transferMemberships(from: string, to: string): Promise<void> {
+  for (const { boardId, s } of await allSharing()) {
+    let changed = false;
+    for (const inv of s.invites) {
+      if (!inv.members?.some((m) => m.key === from)) continue;
+      for (const m of inv.members) if (m.key === from) m.key = to;
+      inv.members = inv.members.filter((m, i, a) => a.findIndex((x) => x.key === m.key) === i);
+      changed = true;
+    }
+    if (changed) await save(boardId, s);
+  }
 }
 
 export async function setSettings(boardId: string, patch: Partial<BoardSettings>): Promise<BoardSettings> {

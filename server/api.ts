@@ -10,10 +10,10 @@ import {
   principal, sessionCookie, userKey, type Principal,
 } from './auth.ts';
 import {
-  createInvite, findInvite, getOwner, getSharing, revokeInvite, setOwner, tokenBoards, transferOwnership, updateInvite,
-  type InviteRole,
+  createInvite, findInvite, getOwner, getSharing, revokeInvite, setOwner, sharedWith, tokenBoards, transferMemberships,
+  transferOwnership, updateInvite, type Invite, type InviteRole,
 } from './sharing.ts';
-import { liveBoard, liveCounts, onlineByInvite, refreshAccess } from './realtime.ts';
+import { liveBoard, liveCounts, livePeople, onlineByInvite, refreshAccess } from './realtime.ts';
 import { EXPORT_TYPES, exportBoard, type ExportFormat } from './export.ts';
 import {
   checkPassword, cleanEmail, cleanName, createSession, createUser, endSession, getUser, limited, publicUser, updateUser, userByEmail,
@@ -41,6 +41,12 @@ function readBody(req: IncomingMessage): Promise<Buffer> {
   });
 }
 const readJson = async <T>(req: IncomingMessage) => JSON.parse((await readBody(req)).toString('utf8') || '{}') as T;
+
+/** What the owner sees of an invite: not who joined with it (browser keys) or which account it's bound to. */
+function publicInvite(i: Invite) {
+  const { members, userId, ...rest } = i;
+  return { ...rest, joined: members?.length ?? 0, forAccount: !!userId };
+}
 
 function send(res: ServerResponse, status: number, body: unknown) {
   res.writeHead(status, { 'content-type': 'application/json', 'cache-control': 'no-store' });
@@ -96,6 +102,25 @@ export async function handleApi(req: IncomingMessage, res: ServerResponse): Prom
       }), true;
     }
     if (parts[0] === 'auth') return await handleAuth(req, res, parts.slice(1), method, p), true;
+
+    // ---- boards shared with me: ones I joined with a link, or addressed to my account. Only ever my own.
+    if (parts[0] === 'shared' && method === 'GET') {
+      const keys = [p.user ? userKey(p.user.id) : null, p.anonId ? anonKey(p.anonId) : null].filter((k): k is string => !!k);
+      if (!keys.length) return send(res, 200, []), true;
+      const people = await livePeople();
+      const out = [];
+      for (const { boardId, invite, lastHere } of await sharedWith(keys, p.user?.id ?? null)) {
+        const b = await readBoard(boardId);
+        if (!b) continue;
+        const owner = await getOwner(boardId);
+        const ownerName = owner?.startsWith('user:') ? getUser(owner.slice(5))?.name : undefined;
+        out.push({
+          id: boardId, name: b.name, role: invite.role, from: ownerName ?? invite.from ?? null, token: invite.token,
+          updated: b.updated, lastHere, itemCount: b.items.length, people: people[boardId] ?? [],
+        });
+      }
+      return send(res, 200, out), true;
+    }
 
     // ---- images: anyone with a browser identity or an invite (guests read; editors upload)
     if (parts[0] === 'images') {
@@ -178,8 +203,11 @@ export async function handleApi(req: IncomingMessage, res: ServerResponse): Prom
       if (!id) {
         if (method === 'GET') {
           const live = await liveCounts();
+          const people = await livePeople();
           const mine = [];
-          for (const b of await listBoards()) if (ownsKey(p, await getOwner(b.id))) mine.push({ ...b, live: Math.max(0, live[b.id] ?? 0) });
+          for (const b of await listBoards()) {
+            if (ownsKey(p, await getOwner(b.id))) mine.push({ ...b, live: Math.max(0, live[b.id] ?? 0), people: people[b.id] ?? [] });
+          }
           return send(res, 200, mine), true;
         }
         if (method === 'POST') {
@@ -196,15 +224,23 @@ export async function handleApi(req: IncomingMessage, res: ServerResponse): Prom
         if (method === 'GET') {
           const s = await getSharing(id);
           const online = await onlineByInvite(id);
-          return send(res, 200, { invites: s.invites.map((i) => ({ ...i, online: online[i.token] ?? [] })), settings: s.settings }), true;
+          return send(res, 200, { invites: s.invites.map((i) => ({ ...publicInvite(i), online: online[i.token] ?? [] })), settings: s.settings }), true;
         }
       } else if (parts[2] === 'invites') {
         const token = parts[3];
         if (!token && method === 'POST') {
-          const body = await readJson<{ role?: InviteRole; label?: string; from?: string }>(req);
+          const body = await readJson<{ role?: InviteRole; label?: string; from?: string; email?: string }>(req);
           const inviter = p.user?.name ?? String(body.from ?? '');
-          const inv = await createInvite(id, body.role === 'editor' ? 'editor' : 'viewer', String(body.label ?? ''), inviter);
-          return send(res, 201, inv), true;
+          const email = cleanEmail(body.email);
+          if (email && !validEmail(email)) return send(res, 400, { error: 'That email doesn’t look right' }), true;
+          // Bind to the account that has this email right now. Emails aren't verified, so an account made later
+          // with the same address must not pick the board up; the link itself still works for whoever gets it.
+          const account = email ? userByEmail(email) : null;
+          const label = String(body.label ?? '').trim() || account?.name || email;
+          const inv = await createInvite(id, body.role === 'editor' ? 'editor' : 'viewer', label, inviter, {
+            email: email || undefined, userId: account?.id,
+          });
+          return send(res, 201, { ...publicInvite(inv), account: account ? { name: account.name } : null }), true;
         }
         if (token && method === 'PATCH') {
           const body = await readJson<{ role?: InviteRole; label?: string }>(req);
@@ -255,6 +291,7 @@ class AuthError extends Error {
 async function signIn(res: ServerResponse, p: Principal, user: User) {
   sessionCookie(res, await createSession(user.id));
   const claimed = p.anonId ? await transferOwnership(anonKey(p.anonId), userKey(user.id)) : 0;
+  if (p.anonId) await transferMemberships(anonKey(p.anonId), userKey(user.id));
   return { user: publicUser(user), claimed };
 }
 

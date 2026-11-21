@@ -7,7 +7,13 @@ import { applyOps, diffItems } from './ops';
 
 // ---------------------------------------------------------------- identity & session
 
-export interface BoardMeta { id: string; name: string; rev: number; updated: string; itemCount: number; live?: number }
+export interface LivePerson { name: string; color: string }
+export interface BoardMeta { id: string; name: string; rev: number; updated: string; itemCount: number; live?: number; people?: LivePerson[] }
+/** A board someone else owns that was shared with you (a link you opened, or an invite to your account). */
+export interface SharedBoard {
+  id: string; name: string; role: 'editor' | 'viewer'; from: string | null; token: string;
+  updated: string; lastHere: string | null; itemCount: number; people: LivePerson[];
+}
 
 const PEER_COLORS = ['#f2555a', '#f5871f', '#e0b400', '#2fb36d', '#14a3c7', '#4f6bff', '#9b5cf0', '#e0559c'];
 
@@ -95,8 +101,9 @@ export const api = {
   renameBoard: (id: string, name: string) => j<BoardMeta>('PATCH', `/api/boards/${id}`, { name }),
   deleteBoard: (id: string) => j<{ ok: true }>('DELETE', `/api/boards/${id}`),
   sharing: (id: string) => j<{ invites: Invite[]; settings: BoardSettings }>('GET', `/api/boards/${id}/share`),
-  createInvite: (id: string, role: 'editor' | 'viewer', label = '') =>
-    j<Invite>('POST', `/api/boards/${id}/invites`, { role, label, from: session.profile.name }),
+  createInvite: (id: string, role: 'editor' | 'viewer', label = '', email = '') =>
+    j<Invite & { account?: { name: string } | null }>('POST', `/api/boards/${id}/invites`, { role, label, email, from: session.profile.name }),
+  shared: () => j<SharedBoard[]>('GET', '/api/shared'),
   updateInvite: (id: string, token: string, patch: Partial<Pick<Invite, 'role' | 'label'>>) => j<Invite>('PATCH', `/api/boards/${id}/invites/${token}`, patch),
   revokeInvite: (id: string, token: string) => j<{ ok: true }>('DELETE', `/api/boards/${id}/invites/${token}`),
   net: () => j<{ lan: boolean; lanUrls: string[]; hosted: boolean; publicUrl: string | null }>('GET', '/api/net'),
@@ -122,6 +129,9 @@ export interface Invite {
   created: string;
   /** who last used it and when they were last here */
   seen?: { name: string; at: string };
+  /** the email it was addressed to, and whether that matched an account (it then shows in their boards) */
+  email?: string;
+  forAccount?: boolean;
   /** connected through this link right now */
   online?: { id: string; name: string; color: string }[];
 }

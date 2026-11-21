@@ -51,6 +51,7 @@ export function ensureBoard(): Promise<string | null> {
       });
       adoptDraft(b.id);
       setHash(b.id);
+      noteOpened(b.id);
       try { localStorage.setItem('bb-last-board', b.id); } catch { /* ignore */ }
       await welcomed;
       return b.id;
@@ -71,6 +72,21 @@ export function openDraft() {
   startDraft();
 }
 
+const OPENED_KEY = 'bb-opened';
+/** When this browser last opened each board (feeds "Recent" on the boards screen). */
+export function openedAt(): Record<string, number> {
+  try { return JSON.parse(localStorage.getItem(OPENED_KEY) ?? '{}') as Record<string, number>; } catch { return {}; }
+}
+function noteOpened(id: string) {
+  try {
+    const all = openedAt();
+    all[id] = Date.now();
+    // keep the 200 most recent
+    const keep = Object.entries(all).sort((a, b) => b[1] - a[1]).slice(0, 200);
+    localStorage.setItem(OPENED_KEY, JSON.stringify(Object.fromEntries(keep)));
+  } catch { /* ignore */ }
+}
+
 /** Cover the canvas while a board loads, so you never see a half-empty board or the "Empty board" scene. */
 function showLoading(name?: string) {
   const label = document.querySelector<HTMLElement>('#splash .splash-label');
@@ -87,6 +103,7 @@ export function openBoard(id: string, name?: string) {
   showLoading(name);
   leaveBoard();
   setHash(id);
+  noteOpened(id);
   if (!session.invite) try { localStorage.setItem('bb-last-board', id); } catch { /* ignore */ }
   joinBoard(id);
 }
