@@ -111,7 +111,18 @@ export const api = {
     return ((await res.json()) as { id: string }).id;
   },
 };
-export interface Invite { token: string; role: 'editor' | 'viewer'; label: string; created: string }
+export interface Invite {
+  token: string;
+  role: 'editor' | 'viewer';
+  label: string;
+  /** who the link is for, if the owner said */
+  name?: string;
+  created: string;
+  /** who last used it and when they were last here */
+  seen?: { name: string; at: string };
+  /** connected through this link right now */
+  online?: { id: string; name: string; color: string }[];
+}
 
 export const imageUrl = (id: string) =>
   `/api/images/${encodeURIComponent(id)}${session.invite ? `?invite=${encodeURIComponent(session.invite)}` : ''}`;

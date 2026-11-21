@@ -10,7 +10,7 @@ import { inviteToken, isCrossSite, owns, principal } from './auth.ts';
 
 /** How a client got in: as the board's owner, or with an invite token. */
 type Identity = { owner: true; token: null } | { owner: false; token: string };
-import { getSharing, inviteRole, setSettings } from './sharing.ts';
+import { getSharing, inviteRole, noteInviteUse, revokeInvite, setSettings } from './sharing.ts';
 import { applyOps, diffItems, validOp } from '../src/ops.ts';
 import type { BoardSettings, ClientMsg, Op, PeerInfo, Presence, Role, ServerMsg } from '../src/protocol.ts';
 import type { Item } from '../src/types.ts';
@@ -209,6 +209,16 @@ export async function refreshAccess(boardId: string) {
   }
 }
 
+/** Who is connected through each invite link right now (owner-only: feeds the Share dialog). */
+export async function onlineByInvite(boardId: string): Promise<Record<string, { id: string; name: string; color: string }[]>> {
+  const room = await rooms.get(boardId);
+  const out: Record<string, { id: string; name: string; color: string }[]> = {};
+  for (const c of room?.clients ?? []) {
+    if (c.identity.token) (out[c.identity.token] ??= []).push({ id: c.id, name: c.name, color: c.color });
+  }
+  return out;
+}
+
 /** The board as everyone currently sees it (the open room is newer than the file on disk). */
 export async function liveBoard(id: string): Promise<Board | null> {
   const p = rooms.get(id);
@@ -252,8 +262,10 @@ async function handle(room: Room, c: Client, raw: string) {
       return;
     }
     case 'profile': {
+      const was = c.name;
       c.name = cleanName(m.name) || c.name;
       c.color = cleanColor(m.color) ?? c.color;
+      if (c.identity.token && c.name !== was) void noteInviteUse(room.id, c.identity.token, c.name);
       broadcast(room, { t: 'peer', peer: info(room, c, false) });
       return;
     }
@@ -305,11 +317,15 @@ async function handle(room: Room, c: Client, raw: string) {
     }
     case 'kick': {
       if (c.baseRole !== 'owner') return;
+      const target = [...room.clients].find((o) => o.id === m.id);
+      if (!target || target.identity.owner) return;
+      // Retire their link too, or they could simply reload and walk back in.
+      const token = target.identity.token;
+      await revokeInvite(room.id, token);
       for (const o of room.clients) {
-        if (o.id === m.id && o.baseRole !== 'owner') {
-          send(o, { t: 'error', msg: 'The owner removed you from this board.' });
-          o.ws.close(4403, 'removed');
-        }
+        if (o.identity.token !== token) continue;
+        send(o, { t: 'error', msg: 'The owner removed you from this board.' });
+        o.ws.close(4403, 'removed');
       }
       return;
     }
@@ -333,6 +349,7 @@ async function onConnection(ws: WebSocket, identity: Identity, baseRole: Role, b
     selfMuted: true,
   };
   room.clients.add(c);
+  if (identity.token) void noteInviteUse(room.id, identity.token, c.name);
   send(c, {
     t: 'welcome',
     you: info(room, c, false),
@@ -347,6 +364,7 @@ async function onConnection(ws: WebSocket, identity: Identity, baseRole: Role, b
   ws.on('pong', () => { c.alive = true; });
   ws.on('close', () => {
     room.clients.delete(c);
+    if (c.identity.token) void noteInviteUse(room.id, c.identity.token, c.name);
     broadcast(room, { t: 'leave', id: c.id });
     if (room.presenter === c.id) {
       room.presenter = null;

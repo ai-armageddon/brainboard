@@ -216,12 +216,18 @@ function openPeerPop(anchor: HTMLElement, id: string) {
       <div class="pop-person"><span class="avatar" style="--c:${p.color}">${esc(initials(p.name))}</span><div><b>${esc(p.name)}</b><div class="muted">${ROLE_LABEL[p.role]}${session.presenter === p.id ? ' · presenting' : ''}</div></div></div>
       <button class="pop-btn" data-act="follow">${icon('eye', 18)}${following === p.id ? 'Stop following' : 'Follow their view'}</button>
       ${canModerate() && p.voice && !p.muted ? `<button class="pop-btn" data-act="mute">${icon('micOff', 18)}Mute</button>` : ''}
-      ${isOwner() && p.role !== 'owner' ? `<button class="pop-btn danger" data-act="kick">${icon('close', 18)}Remove from board</button>` : ''}`;
+      ${isOwner() && p.role !== 'owner' ? `<button class="pop-btn danger" data-act="kick">${icon('close', 18)}<span>Remove from board</span></button>` : ''}`;
+    let armed = false;
     pop.onclick = (e) => {
       const b = (e.target as Element).closest<HTMLElement>('[data-act]');
       if (!b) return;
+      if (b.dataset.act === 'kick' && !armed) {
+        armed = true;
+        b.querySelector('span')!.innerHTML = 'Click again to remove<small>Their invite link stops working</small>';
+        return;
+      }
       if (b.dataset.act === 'follow') follow(following === p.id ? null : p.id);
-      if (b.dataset.act === 'kick') { kick(p.id); toast(`Removed ${p.name}`); }
+      if (b.dataset.act === 'kick') { kick(p.id); toast(`Removed ${p.name}. Their link no longer works`); }
       if (b.dataset.act === 'mute') { mute(p); toast(`Muted ${p.name}`); }
       pop.hidden = true;
     };
@@ -282,15 +288,8 @@ function renderShare(invites: Invite[], net: { lan: boolean; lanUrls: string[]; 
       </label>
     </section>
     <section>
-      <h3>Links <span class="count">${invites.length}</span></h3>
-      ${invites.length ? '' : '<p class="muted small">No links yet. Anyone you send a link to can join with the permission you pick, until you revoke it.</p>'}
-      <div class="invites">${invites.map((inv) => `
-        <div class="invite" data-token="${esc(inv.token)}">
-          <div class="invite-main"><b>${esc(inv.label)}</b><code>${esc(inviteUrl(inv))}</code></div>
-          <select data-act="role" aria-label="Permission"><option value="editor" ${inv.role === 'editor' ? 'selected' : ''}>Can edit</option><option value="viewer" ${inv.role === 'viewer' ? 'selected' : ''}>Can view</option></select>
-          <button class="cbtn" data-act="copy" data-tip="Copy link" aria-label="Copy link">${icon('copy', 17)}</button>
-          <button class="cbtn danger" data-act="revoke" data-tip="Revoke" aria-label="Revoke link">${icon('trash', 17)}</button>
-        </div>`).join('')}</div>
+      <h3>People <span class="count">${invites.length + 1}</span></h3>
+      <div class="members"></div>
     </section>
     <section>
       <h3>Live session</h3>
@@ -300,15 +299,10 @@ function renderShare(invites: Invite[], net: { lan: boolean; lanUrls: string[]; 
       <label class="toggle"><input type="checkbox" data-setting="stage" ${session.settings.stage ? 'checked' : ''}/><span><b>Stage mode for voice</b><em>Only you and the presenter can talk; everyone else listens</em></span></label>
       ${people.some((x) => x.voice && !x.muted) ? '<button class="link-btn" data-mute-all>Mute everyone in voice</button>' : ''}
     </section>
-    <section>
-      <h3>Here now <span class="count">${people.length + 1}</span></h3>
-      <div class="people">
-        ${session.you ? `<div class="person"><span class="avatar" style="--c:${session.you.color}">${esc(initials(session.you.name))}</span><b>${esc(session.you.name)} <span class="muted">(you)</span></b><button class="link-btn" data-me>${session.profile.name ? 'Edit' : 'Set your name'}</button></div>` : ''}
-        ${people.map((p) => `<div class="person"><span class="avatar" style="--c:${p.color}">${esc(initials(p.name))}</span><b>${esc(p.name)}</b><span class="muted">${ROLE_LABEL[p.role]}</span>${p.role !== 'owner' ? `<button class="link-btn danger" data-kick="${p.id}">Remove</button>` : ''}</div>`).join('')}
-      </div>
-    </section>`;
+`;
 
   const reload = async () => renderShare((await api.sharing(session.boardId!)).invites, net);
+  renderMembers(invites);
 
   body.querySelector<HTMLFormElement>('.invite-form')!.addEventListener('submit', async (e) => {
     e.preventDefault();
@@ -324,32 +318,103 @@ function renderShare(invites: Invite[], net: { lan: boolean; lanUrls: string[]; 
     try { localStorage.setItem(linkBaseKey, v); } catch { /* ignore */ }
     void reload();
   });
-  body.querySelectorAll<HTMLElement>('.invite').forEach((row) => {
-    const token = row.dataset.token!;
-    const inv = invites.find((i) => i.token === token)!;
-    row.querySelector('[data-act="copy"]')!.addEventListener('click', () => void copy(inviteUrl(inv)));
-    row.querySelector('[data-act="revoke"]')!.addEventListener('click', async () => {
-      await api.revokeInvite(session.boardId!, token);
-      toast('Link revoked. Anyone using it was disconnected');
-      await reload();
-    });
-    row.querySelector<HTMLSelectElement>('[data-act="role"]')!.addEventListener('change', async (e) => {
-      await api.updateInvite(session.boardId!, token, { role: (e.target as HTMLSelectElement).value as 'editor' | 'viewer' });
-      toast('Permission updated for everyone using this link');
-    });
-  });
   body.querySelector('[data-mute-all]')?.addEventListener('click', () => { mute('*'); toast('Muted everyone in voice'); });
   body.querySelectorAll<HTMLInputElement>('[data-setting]').forEach((cb) => {
     cb.addEventListener('change', () => updateSettings({ [cb.dataset.setting!]: cb.checked }));
   });
-  body.querySelector<HTMLElement>('[data-me]')?.addEventListener('click', () => {
+}
+
+const ago = (iso: string) => {
+  const s = (Date.now() - Date.parse(iso)) / 1000;
+  if (s < 90) return 'just now';
+  if (s < 3600) return `${Math.round(s / 60)} min ago`;
+  if (s < 86400) return `${Math.round(s / 3600)} h ago`;
+  const d = Math.round(s / 86400);
+  return d === 1 ? 'yesterday' : d < 30 ? `${d} days ago` : new Date(iso).toLocaleDateString();
+};
+
+const roleSelect = (role: 'editor' | 'viewer') =>
+  `<select data-act="role" aria-label="Permission"><option value="editor" ${role === 'editor' ? 'selected' : ''}>Can edit</option><option value="viewer" ${role === 'viewer' ? 'selected' : ''}>Can view</option></select>`;
+
+/**
+ * Everyone with access, one row per invite link: who it is, whether they're here, what they can do, and
+ * a Remove that retires the link (so they can't come back). Re-rendered live as people come and go.
+ */
+function renderMembers(invites: Invite[]) {
+  const box = $('share').querySelector<HTMLElement>('.members');
+  if (!box) return;
+  const onLink = new Set(invites.flatMap((i) => (i.online ?? []).map((o) => o.id)));
+  // Connected without a link: the owner on another device.
+  const elsewhere = [...session.peers.values()].filter((p) => !onLink.has(p.id));
+  const you = session.you;
+  box.innerHTML = `
+    ${you ? `<div class="member">
+      <span class="avatar" style="--c:${you.color}">${esc(initials(you.name))}</span>
+      <div class="member-main"><b>${esc(you.name)} <span class="muted">(you)</span></b><span class="muted sub">Owner</span></div>
+      <button class="link-btn" data-me>${session.profile.name ? 'Edit' : 'Set your name'}</button>
+    </div>` : ''}
+    ${elsewhere.map((p) => `<div class="member">
+      <span class="avatar" style="--c:${p.color}">${esc(initials(p.name))}</span>
+      <div class="member-main"><b>${esc(p.name)}</b><span class="muted sub"><i class="live-dot"></i>Here now · ${p.role === 'owner' ? 'you, on another device' : ROLE_LABEL[p.role]}</span></div>
+    </div>`).join('')}
+    ${invites.map((inv) => {
+      const online = inv.online ?? [];
+      const name = online[0]?.name ?? inv.seen?.name ?? inv.name ?? inv.label;
+      const status = online.length
+        ? `<i class="live-dot"></i>Here now${online.length > 1 ? ` · ${online.length} people on this link` : ''}`
+        : inv.seen ? `Last here ${ago(inv.seen.at)}` : 'Hasn’t joined yet';
+      return `<div class="member" data-token="${esc(inv.token)}">
+        <span class="avatar ${online.length ? '' : 'away'}" style="--c:${online[0]?.color ?? 'var(--fg-3)'}">${esc(initials(name))}</span>
+        <div class="member-main"><b>${esc(name)}${online.length > 1 ? ` <span class="muted">+${online.length - 1}</span>` : ''}</b><span class="muted sub">${status}</span></div>
+        ${roleSelect(inv.role)}
+        <button class="cbtn" data-act="copy" data-tip="Copy their link" aria-label="Copy their link">${icon('copy', 17)}</button>
+        <button class="link-btn danger" data-act="remove">Remove</button>
+      </div>`;
+    }).join('')}
+    ${invites.length ? '' : '<p class="muted small">Nobody else yet. Create a link above for each person you invite; you can change what they can do or remove them at any time.</p>'}`;
+
+  box.querySelector<HTMLElement>('[data-me]')?.addEventListener('click', () => {
     $('share').hidden = true;
     const me = document.querySelector<HTMLElement>('#avatars .avatar.me');
     if (me && session.you) openPeerPop(me, session.you.id);
   });
-  body.querySelectorAll<HTMLElement>('[data-kick]').forEach((b) => {
-    b.addEventListener('click', () => { kick(b.dataset.kick!); setTimeout(() => void reload(), 300); });
+  box.querySelectorAll<HTMLElement>('.member[data-token]').forEach((row) => {
+    const token = row.dataset.token!;
+    const inv = invites.find((i) => i.token === token)!;
+    const who = row.querySelector('b')!.firstChild!.textContent!;
+    row.querySelector('[data-act="copy"]')!.addEventListener('click', () => void copy(inviteUrl(inv)));
+    row.querySelector<HTMLSelectElement>('[data-act="role"]')!.addEventListener('change', async (e) => {
+      await api.updateInvite(session.boardId!, token, { role: (e.target as HTMLSelectElement).value as 'editor' | 'viewer' });
+      toast(`${who} ${(e.target as HTMLSelectElement).value === 'editor' ? 'can edit' : 'can view'} now`);
+    });
+    const remove = row.querySelector<HTMLButtonElement>('[data-act="remove"]')!;
+    let armed = 0;
+    remove.addEventListener('click', async () => {
+      if (!armed) {
+        remove.textContent = 'Confirm';
+        remove.classList.add('armed');
+        armed = window.setTimeout(() => { armed = 0; remove.textContent = 'Remove'; remove.classList.remove('armed'); }, 3500);
+        return;
+      }
+      clearTimeout(armed);
+      await api.revokeInvite(session.boardId!, token);
+      toast(inv.online?.length ? `Removed ${who}. Their link no longer works` : `Removed ${who}`);
+      void refreshMembers();
+    });
   });
+}
+
+/** Refetch who's online through which link (people come and go while the dialog is open). */
+let membersTimer = 0;
+async function refreshMembers() {
+  clearTimeout(membersTimer);
+  if ($('share').hidden || !session.boardId || !isOwner()) return;
+  try {
+    const { invites } = await api.sharing(session.boardId);
+    renderMembers(invites);
+    const count = $('share').querySelector('.members')?.parentElement?.querySelector('.count');
+    if (count) count.textContent = String(invites.length + 1);
+  } catch { /* keep what we have */ }
 }
 
 async function copy(text: string) {
@@ -478,6 +543,8 @@ export function initCollab() {
     renderAvatars();
     placeCursors();
     decoratePeers();
+    clearTimeout(membersTimer);
+    membersTimer = window.setTimeout(() => void refreshMembers(), 250);
   });
   events.addEventListener('join', (e) => toast(`${(e as CustomEvent<PeerInfo>).detail.name} joined`));
   events.addEventListener('presence', (e) => {
