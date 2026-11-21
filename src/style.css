@@ -1493,6 +1493,8 @@ button.primary:hover { opacity: 0.86; }
 .home-row.current .hr-name::after { content: "Open now"; margin-left: 8px; font-size: 11px; font-weight: 600; color: var(--accent); }
 .hr-name { flex: 1; min-width: 0; font-size: 14px; font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .hr-live { display: inline-flex; align-items: center; gap: 5px; font-size: 12px; color: var(--fg-2); }
+.board-call-count { display: inline-flex; align-items: center; gap: 4px; white-space: nowrap; color: var(--fg); font: 550 12px var(--font); }
+.home-card .board-call-count, .home-row .board-call-count { padding: 2px 6px; border-radius: 4px; background: color-mix(in srgb, #2fb36d 14%, transparent); }
 .hr-meta { font-size: 12.5px; color: var(--fg-3); white-space: nowrap; }
 @media (max-width: 480px) {
   .home-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
@@ -1812,8 +1814,12 @@ body.viewer #modeline { bottom: 16px; }
 .voice-details svg { width: 13px; }
 .voice-details[aria-expanded="true"] { background: var(--hover); }
 .voice-details[aria-expanded="true"] svg { rotate: 180deg; }
-#voice-count { padding: 2px 5px; border-radius: 4px; background: var(--accent-soft); color: var(--fg); font: 550 11px var(--font); white-space: nowrap; }
-.voice.live { background: color-mix(in srgb, #2fb36d 9%, var(--panel-solid)); border-color: color-mix(in srgb, #2fb36d 36%, var(--line)); }
+.voice-join-copy { display: grid; gap: 1px; text-align: left; line-height: 1.12; }
+#voice-count { display: inline-flex; align-items: center; gap: 4px; font: 550 11px/1 var(--font); white-space: nowrap; }
+#voice-count[hidden] { display: none; }
+#voice-count::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: #2fb36d; }
+#voice-details-count { padding: 2px 5px; border-radius: 4px; background: var(--accent-soft); color: var(--fg); font: 550 11px var(--font); white-space: nowrap; }
+.voice.has-call { background: color-mix(in srgb, #2fb36d 9%, var(--panel-solid)); border-color: color-mix(in srgb, #2fb36d 36%, var(--line)); }
 .voice-mic.off { color: var(--danger); }
 .voice-mic[aria-disabled="true"] { cursor: not-allowed; }
 .voice-mic.talking { box-shadow: inset 0 0 0 1.5px #2fb36d; }

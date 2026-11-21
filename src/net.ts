@@ -9,11 +9,11 @@ import { applyOps, diffItems } from './ops';
 // ---------------------------------------------------------------- identity & session
 
 export type { LivePerson };
-export interface BoardMeta { id: string; name: string; rev: number; updated: string; itemCount: number; live?: number; people?: LivePerson[] }
+export interface BoardMeta { id: string; name: string; rev: number; updated: string; itemCount: number; live?: number; inCall?: number; people?: LivePerson[] }
 /** A board someone else owns that was shared with you (a link you opened, or an invite to your account). */
 export interface SharedBoard {
   id: string; name: string; role: 'editor' | 'viewer'; from: string | null; token: string;
-  updated: string; lastHere: string | null; itemCount: number; people: LivePerson[];
+  updated: string; lastHere: string | null; itemCount: number; inCall?: number; people: LivePerson[];
 }
 
 const PEER_COLORS = ['#f2555a', '#f5871f', '#e0b400', '#2fb36d', '#14a3c7', '#4f6bff', '#9b5cf0', '#e0559c'];
@@ -45,6 +45,14 @@ export const session = {
   status: 'offline' as 'offline' | 'connecting' | 'live' | 'draft',
   profile: loadProfile(),
 };
+
+/** The open board receives membership changes over its socket between board-list refreshes. */
+export function boardCallCount(board: BoardMeta | SharedBoard) {
+  if (board.id !== session.boardId || session.status !== 'live') return board.inCall ?? 0;
+  let count = Number(!!session.you?.voice);
+  for (const peer of session.peers.values()) if (peer.voice) count++;
+  return count;
+}
 
 export interface Account { picture?: string; id: string; name: string; email: string | null; passkeys: number; hasPassword: boolean }
 

@@ -14,7 +14,7 @@ import {
   createInvite, findInvite, getOwner, getSharing, revokeInvite, setOwner, sharedWith, tokenBoards, transferMemberships,
   transferOwnership, updateInvite, type Invite, type InviteRole,
 } from './sharing.ts';
-import { liveBoard, liveCounts, livePeople, onlineByInvite, refreshAccess } from './realtime.ts';
+import { liveBoard, liveBoardPresence, onlineByInvite, refreshAccess } from './realtime.ts';
 import { EXPORT_TYPES, exportBoard, type ExportFormat } from './export.ts';
 import {
   checkPassword, cleanEmail, cleanName, createSession, createUser, endSession, getUser, limited, publicUser, updateUser, userByEmail,
@@ -108,7 +108,7 @@ export async function handleApi(req: IncomingMessage, res: ServerResponse): Prom
     if (parts[0] === 'shared' && method === 'GET') {
       const keys = [p.user ? userKey(p.user.id) : null, p.anonId ? anonKey(p.anonId) : null].filter((k): k is string => !!k);
       if (!keys.length) return send(res, 200, []), true;
-      const people = await livePeople();
+      const presence = await liveBoardPresence();
       const out = [];
       for (const { boardId, invite, lastHere } of await sharedWith(keys, p.user?.id ?? null)) {
         const b = await readBoard(boardId);
@@ -117,7 +117,7 @@ export async function handleApi(req: IncomingMessage, res: ServerResponse): Prom
         const ownerName = owner?.startsWith('user:') ? getUser(owner.slice(5))?.name : undefined;
         out.push({
           id: boardId, name: b.name, role: invite.role, from: ownerName ?? invite.from ?? null, token: invite.token,
-          updated: b.updated, lastHere, itemCount: b.items.length, people: people[boardId] ?? [],
+          updated: b.updated, lastHere, itemCount: b.items.length, ...(presence.get(boardId) ?? { people: [], inCall: 0 }),
         });
       }
       return send(res, 200, out), true;
@@ -203,11 +203,12 @@ export async function handleApi(req: IncomingMessage, res: ServerResponse): Prom
       const id = parts[1];
       if (!id) {
         if (method === 'GET') {
-          const live = await liveCounts();
-          const people = await livePeople();
+          const presence = await liveBoardPresence();
           const mine = [];
           for (const b of await listBoards()) {
-            if (ownsKey(p, await getOwner(b.id))) mine.push({ ...b, live: Math.max(0, live[b.id] ?? 0), people: people[b.id] ?? [] });
+            if (!ownsKey(p, await getOwner(b.id))) continue;
+            const live = presence.get(b.id) ?? { people: [], inCall: 0 };
+            mine.push({ ...b, ...live, live: live.people.length });
           }
           return send(res, 200, mine), true;
         }

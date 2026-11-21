@@ -233,23 +233,21 @@ export async function liveBoard(id: string): Promise<Board | null> {
   return room ? room.board : null;
 }
 
-/** Who is on each open board right now (names, colours and profile pictures), for the boards home screen. */
-export async function livePeople(): Promise<Record<string, LivePerson[]>> {
-  const out: Record<string, LivePerson[]> = {};
-  for (const [id, p] of rooms) {
-    const r = await p;
-    if (r && r.clients.size) out[id] = [...r.clients].map((c) => ({ name: c.name, color: c.color, picture: c.picture }));
+/** One snapshot of board visitors and voice participants for the board pickers. */
+export async function liveBoardPresence() {
+  const presence = new Map<string, { people: LivePerson[]; inCall: number }>();
+  for (const [id, pending] of rooms) {
+    const room = await pending;
+    if (!room?.clients.size) continue;
+    const people: LivePerson[] = [];
+    let inCall = 0;
+    for (const c of room.clients) {
+      people.push({ name: c.name, color: c.color, picture: c.picture });
+      if (c.voice) inCall++;
+    }
+    presence.set(id, { people, inCall });
   }
-  return out;
-}
-
-export async function liveCounts(): Promise<Record<string, number>> {
-  const out: Record<string, number> = {};
-  for (const [id, p] of rooms) {
-    const r = await p;
-    if (r) out[id] = r.clients.size;
-  }
-  return out;
+  return presence;
 }
 
 async function handle(room: Room, c: Client, raw: string) {

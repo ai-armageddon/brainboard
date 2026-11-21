@@ -1,7 +1,7 @@
 // The boards screen: what's live now, what you opened recently, what was shared with you, and all your boards.
 // It only ever lists boards you own or that were shared with you (a link you opened, or an invite to your account).
 import { avatarFace } from './avatar';
-import { account, api, session, type BoardMeta, type LivePerson, type SharedBoard } from './net';
+import { account, api, boardCallCount, events, session, type BoardMeta, type LivePerson, type SharedBoard } from './net';
 import { openBoard, openedAt } from './boards';
 import { closePopovers, newBoard } from './ui';
 import { icon } from './icons';
@@ -53,6 +53,11 @@ function faces(people: LivePerson[]) {
   return `<span class="hc-live"><span class="hc-faces">${shown}</span><i class="live-dot"></i>${people.length} here</span>`;
 }
 
+export function boardCallBadge(board: BoardMeta | SharedBoard) {
+  const count = boardCallCount(board);
+  return count ? `<span class="board-call-count">${icon('headphones', 13)}${count} in call</span>` : '';
+}
+
 function card(e: Entry) {
   const cur = e.b.id === session.boardId ? ' current' : '';
   const meta = e.kind === 'own'
@@ -61,6 +66,7 @@ function card(e: Entry) {
   return `<button class="home-card${cur}" data-id="${esc(e.b.id)}" data-kind="${e.kind}">
     <span class="hc-name">${esc(e.b.name)}</span>
     <span class="hc-meta">${meta}</span>
+    ${boardCallBadge(e.b)}
     ${faces(e.people)}
     ${e.kind === 'shared' ? `<span class="hc-tag">${icon('users', 13)}Shared</span>` : ''}
     ${cur ? '<span class="hc-tag here">Open now</span>' : ''}
@@ -70,7 +76,7 @@ function card(e: Entry) {
 function render() {
   const body = $('home').querySelector<HTMLElement>('.home-body')!;
   const all = entries();
-  const live = all.filter((e) => e.people.length && matches(e)).sort((a, b) => b.people.length - a.people.length);
+  const live = all.filter((e) => (e.people.length || boardCallCount(e.b)) && matches(e)).sort((a, b) => b.people.length - a.people.length);
   const recent = all.filter(matches).sort((a, b) => b.seen - a.seen).slice(0, 6);
   const sharedE = all.filter((e) => e.kind === 'shared' && matches(e)).sort((a, b) => b.seen - a.seen);
   const mine = all.filter((e): e is Extract<Entry, { kind: 'own' }> => e.kind === 'own' && matches(e))
@@ -89,6 +95,7 @@ function render() {
       ? `<div class="home-list">${mine.map((e) => `
           <button class="home-row${e.b.id === session.boardId ? ' current' : ''}" data-id="${esc(e.b.id)}" data-kind="own">
             <span class="hr-name">${esc(e.b.name)}</span>
+            ${boardCallBadge(e.b)}
             ${e.people.length ? `<span class="hr-live"><i class="live-dot"></i>${e.people.length} here</span>` : ''}
             <span class="hr-meta">${e.b.itemCount} item${e.b.itemCount === 1 ? '' : 's'} · ${ago(e.b.updated)}</span>
           </button>`).join('')}</div>`
@@ -140,6 +147,7 @@ export function closeHome() {
 
 export function initHome() {
   const el = $('home');
+  events.addEventListener('peers', () => { if (!el.hidden) render(); });
   el.querySelector('.home-body')!.innerHTML = `
     <div class="home-top">
       <input class="home-search" type="search" placeholder="Search boards" aria-label="Search boards" />

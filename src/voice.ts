@@ -447,6 +447,7 @@ function render() {
   const others = [...session.peers.values()].filter(p => p.voice);
   const total = others.length + Number(inVoice);
   box.classList.toggle('live', inVoice);
+  box.classList.toggle('has-call', total > 0);
   for (const b of document.querySelectorAll<HTMLButtonElement>('[data-voice="join"]')) b.disabled = joining;
   box.querySelector<HTMLButtonElement>('[data-voice="join"]')!.hidden = inVoice;
   $('voice-join-label').textContent = joining ? 'Joining…' : 'Join voice';
@@ -463,6 +464,9 @@ function render() {
   const countLabel = total ? `${total} in call` : '';
   if (badge.textContent !== countLabel) badge.textContent = countLabel;
   badge.hidden = total === 0;
+  const detailsCount = $('voice-details-count');
+  detailsCount.textContent = inVoice ? countLabel : '';
+  detailsCount.hidden = !inVoice;
   if (!$('voice-panel').hidden) {
     $('voice-board').textContent = session.boardName || 'Untitled board';
     $('voice-total').textContent = String(total);

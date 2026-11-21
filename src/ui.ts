@@ -10,7 +10,7 @@ import {
 import { clamp } from './geometry';
 import { account, api, events, saveProfile, session, type BoardMeta } from './net';
 import { ensureBoard, openBoard, openDraft, saveCamera, showBoardInUrl } from './boards';
-import { openHome } from './home';
+import { boardCallBadge, openHome } from './home';
 import { paintLogos } from './brand';
 import { userMovedCamera } from './collab';
 import { keyLabel, localizeKeys } from './keys';
@@ -410,6 +410,7 @@ export function buildUI() {
   };
   viewport.dataset.tool = S.tool;
 
+  events.addEventListener('peers', () => { if (!menu.hidden && !session.invite) renderBoardList(); });
   $('board-list').addEventListener('click', (e) => {
     const b = (e.target as Element).closest<HTMLElement>('[data-board]');
     if (!b) return;
@@ -458,10 +459,14 @@ function relTime(iso: string) {
 
 async function refreshBoardList() {
   try { boardCache = await api.boards(); } catch { return; }
+  renderBoardList();
+}
+
+function renderBoardList() {
   $('board-list').innerHTML = boardCache.map((b) => `
     <button class="board-row ${b.id === session.boardId ? 'current' : ''}" data-board="${b.id}">
       <span class="board-row-name">${escapeHtml(b.name)}</span>
-      <span class="board-row-meta">${b.live ? `<i class="live-dot"></i>${b.live} live · ` : ''}${relTime(b.updated)}</span>
+      <span class="board-row-meta">${boardCallBadge(b)}${b.live ? `<i class="live-dot"></i>${b.live} live · ` : ''}${relTime(b.updated)}</span>
     </button>`).join('');
 }
 
