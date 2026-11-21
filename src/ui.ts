@@ -267,7 +267,7 @@ export function buildUI() {
     const b = (e.target as Element).closest<HTMLElement>('[data-board]');
     if (!b) return;
     closePopovers();
-    openBoard(b.dataset.board!);
+    openBoard(b.dataset.board!, b.querySelector('.board-row-name')?.textContent ?? undefined);
   });
   $('board-name').addEventListener('dblclick', (e) => { e.stopPropagation(); if (!session.invite) startRename(); });
   window.addEventListener('keydown', (e) => {
@@ -322,7 +322,7 @@ export async function newBoard() {
   closePopovers();
   try {
     const b = await api.createBoard('Untitled board');
-    openBoard(b.id);
+    openBoard(b.id, b.name);
     setTimeout(startRename, 150);
   } catch (err) {
     toast(`Couldn’t create a board: ${(err as Error).message}`);
@@ -383,7 +383,7 @@ async function deleteCurrentBoard() {
   try {
     await api.deleteBoard(id);
     const rest = (await api.boards()).filter((b) => b.id !== id);
-    if (rest[0]) openBoard(rest[0].id);
+    if (rest[0]) openBoard(rest[0].id, rest[0].name);
     else openDraft();
     toast('Board moved to ~/.brainboard/trash');
   } catch (err) {
