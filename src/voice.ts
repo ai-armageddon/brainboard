@@ -158,6 +158,26 @@ async function onSignal(from: string, data: RtcSignal) {
 
 // ---------------------------------------------------------------- join / leave / mute
 
+function playMembershipChime(joined: boolean) {
+  if (!inVoice || !ctx || ctx.state !== 'running') return;
+  const notes = joined ? [440, 660] : [660, 440];
+  const start = ctx.currentTime;
+  for (const [i, frequency] of notes.entries()) {
+    const at = start + i * 0.1;
+    const tone = ctx.createOscillator();
+    const volume = ctx.createGain();
+    tone.frequency.value = frequency;
+    volume.gain.setValueAtTime(0, at);
+    volume.gain.linearRampToValueAtTime(0.075, at + 0.012);
+    volume.gain.exponentialRampToValueAtTime(0.0001, at + 0.15);
+    tone.connect(volume);
+    volume.connect(ctx.destination);
+    tone.onended = () => { tone.disconnect(); volume.disconnect(); };
+    tone.start(at);
+    tone.stop(at + 0.15);
+  }
+}
+
 export async function joinVoice() {
   if (inVoice || !(await ensureBoard())) return;
   if (!(await ensureScreenName('talk'))) return;
@@ -169,6 +189,8 @@ export async function joinVoice() {
   }
   watchMic();
   ctx = new AudioContext();
+  void applySpeaker(ctx);
+  if (ctx.state === 'suspended') void ctx.resume().catch(() => {});
   localMeter = meterFor(local);
   inVoice = true;
   boardOfCall = session.boardId;
@@ -221,7 +243,6 @@ const SPEAKER_KEY = 'bb-speaker';
 const pref = (k: string) => { try { return localStorage.getItem(k) ?? ''; } catch { return ''; } };
 const setPref = (k: string, v: string) => { try { if (v) localStorage.setItem(k, v); else localStorage.removeItem(k); } catch { /* ignore */ } };
 
-type Sinkable = HTMLMediaElement & { setSinkId?: (id: string) => Promise<void> };
 const canPickSpeaker = typeof HTMLMediaElement !== 'undefined' && 'setSinkId' in HTMLMediaElement.prototype;
 
 /** '' = whatever the system default is. */
@@ -293,13 +314,16 @@ async function switchMic(deviceId: string, note?: string) {
   }
 }
 
-async function applySpeaker(audio: Sinkable) {
+async function applySpeaker(output: HTMLMediaElement | AudioContext) {
+  if (!('setSinkId' in output) || typeof output.setSinkId !== 'function') return;
   const id = pref(SPEAKER_KEY);
-  if (canPickSpeaker && audio.setSinkId) await audio.setSinkId(id).catch(() => audio.setSinkId!('').catch(() => {}));
+  try { await output.setSinkId(id); }
+  catch { try { await output.setSinkId(''); } catch { /* keep current output */ } }
 }
 
 async function switchSpeaker(deviceId: string, label: string) {
   setPref(SPEAKER_KEY, deviceId);
+  if (ctx) await applySpeaker(ctx);
   for (const c of conns.values()) await applySpeaker(c.audio);
   toast(`Speaker: ${label}`);
   void renderDevices();
@@ -462,6 +486,7 @@ export function initVoice() {
     else if (act === 'devices') toggleDevices((e.target as Element).closest<HTMLElement>('[data-voice]')!);
   });
   initDevices();
+  events.addEventListener('voice-membership', (e) => playMembershipChime((e as CustomEvent<boolean>).detail));
   events.addEventListener('rtc', (e) => {
     const { from, data } = (e as CustomEvent<{ from: string; data: RtcSignal }>).detail;
     void onSignal(from, data);
