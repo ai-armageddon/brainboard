@@ -259,7 +259,7 @@ function renderShare(invites: Invite[], net: { lan: boolean; lanUrls: string[]; 
       <h3>Invite people</h3>
       <form class="invite-form">
         <select name="role" aria-label="Permission"><option value="editor">Can edit</option><option value="viewer">Can view</option></select>
-        <input name="label" maxlength="60" placeholder="Who is it for? (optional)" aria-label="Label" />
+        <input name="label" maxlength="40" placeholder="Their name (optional)" aria-label="Who the link is for" />
         <button class="primary" type="submit">${icon('link', 16)} Create link</button>
       </form>
       <label class="field base" ${net.hosted ? 'hidden' : ''}><span>Link address</span>

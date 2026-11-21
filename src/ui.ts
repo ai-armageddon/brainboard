@@ -388,7 +388,10 @@ async function deleteCurrentBoard() {
 
 // ---------------------------------------------------------------- full-screen states
 
-export function showOverlay(kind: 'offline' | 'invalid' | 'join' | 'fatal', onJoin?: () => void, msg?: string) {
+export function showOverlay(
+  kind: 'offline' | 'invalid' | 'join' | 'fatal', onJoin?: () => void, msg?: string,
+  invite?: { role: string; name?: string | null; from?: string | null; board?: string | null },
+) {
   const el = $('overlay');
   el.hidden = false;
   document.body.classList.add('loaded');
@@ -396,17 +399,22 @@ export function showOverlay(kind: 'offline' | 'invalid' | 'join' | 'fatal', onJo
   const logo = '<span class="logo big" aria-hidden="true"></span>';
   if (kind === 'join') {
     const p = session.profile;
+    // Signed-in name, then the name this browser used before, then the name the owner gave the link.
+    const name = account.user?.name || p.name || invite?.name || '';
+    const what = invite?.role === 'viewer' ? 'to view' : 'to edit';
     el.innerHTML = `
       <form class="panel sheet join">
         ${logo}
-        <h2>You’re invited to a board</h2>
-        <p class="muted">Pick a name so others know who’s here.</p>
-        <label class="field"><span>Your name</span><input name="name" maxlength="40" autocomplete="nickname" placeholder="e.g. Sam" value="${escapeHtml(p.name)}" required /></label>
+        <h2>${invite?.board ? `Join “${escapeHtml(invite.board)}”` : 'You’re invited to a board'}</h2>
+        <p class="muted">${invite?.from ? `${escapeHtml(invite.from)} invited you ${what}.` : `You’re invited ${what}.`} ${name ? 'Is this you? Change your name if not.' : 'Pick a name so others know who’s here.'}</p>
+        <label class="field"><span>Your name</span><input name="name" maxlength="40" autocomplete="nickname" placeholder="e.g. Sam" value="${escapeHtml(name)}" required /></label>
         <div class="colors">${['#f2555a', '#f5871f', '#e0b400', '#2fb36d', '#14a3c7', '#4f6bff', '#9b5cf0', '#e0559c'].map((c) => `<label class="color-pick"><input type="radio" name="color" value="${c}" ${c === p.color ? 'checked' : ''}/><i style="background:${c}"></i></label>`).join('')}</div>
         <button class="primary" type="submit">Join board</button>
       </form>`;
     const form = el.querySelector('form')!;
-    (form.elements.namedItem('name') as HTMLInputElement).focus();
+    const input = form.elements.namedItem('name') as HTMLInputElement;
+    input.focus();
+    input.select(); // prefilled: Enter to join, or just type to replace it
     form.addEventListener('submit', (e) => {
       e.preventDefault();
       const fd = new FormData(form);

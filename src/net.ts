@@ -91,11 +91,12 @@ export const api = {
   renameBoard: (id: string, name: string) => j<BoardMeta>('PATCH', `/api/boards/${id}`, { name }),
   deleteBoard: (id: string) => j<{ ok: true }>('DELETE', `/api/boards/${id}`),
   sharing: (id: string) => j<{ invites: Invite[]; settings: BoardSettings }>('GET', `/api/boards/${id}/share`),
-  createInvite: (id: string, role: 'editor' | 'viewer', label = '') => j<Invite>('POST', `/api/boards/${id}/invites`, { role, label }),
+  createInvite: (id: string, role: 'editor' | 'viewer', label = '') =>
+    j<Invite>('POST', `/api/boards/${id}/invites`, { role, label, from: session.profile.name }),
   updateInvite: (id: string, token: string, patch: Partial<Pick<Invite, 'role' | 'label'>>) => j<Invite>('PATCH', `/api/boards/${id}/invites/${token}`, patch),
   revokeInvite: (id: string, token: string) => j<{ ok: true }>('DELETE', `/api/boards/${id}/invites/${token}`),
   net: () => j<{ lan: boolean; lanUrls: string[]; hosted: boolean; publicUrl: string | null }>('GET', '/api/net'),
-  me: (board: string) => j<{ role: Role; saved?: boolean }>('GET', `/api/me?board=${encodeURIComponent(board)}`),
+  me: (board: string) => j<{ role: Role; saved?: boolean; name?: string | null; from?: string | null; board?: string | null }>('GET', `/api/me?board=${encodeURIComponent(board)}`),
   session: () => j<{ user: Account | null; local: boolean; hosted: boolean; publicUrl: string | null; passkeys: boolean }>('GET', '/api/session'),
   auth: <T = { user: Account; claimed: number }>(path: string, body?: unknown, method = 'POST') => j<T>(method, `/api/auth/${path}`, body ?? {}),
   async uploadImage(blob: Blob, id?: string): Promise<string> {

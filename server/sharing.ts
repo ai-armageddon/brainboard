@@ -10,6 +10,10 @@ export interface Invite {
   token: string;
   role: InviteRole;
   label: string;
+  /** who the link is for, if the owner said; prefilled on the join screen */
+  name?: string;
+  /** the inviter's screen name, shown on the join screen */
+  from?: string;
   created: string;
 }
 export interface Sharing {
@@ -70,12 +74,17 @@ export async function transferOwnership(from: string, to: string): Promise<numbe
   return n;
 }
 
-export async function createInvite(boardId: string, role: InviteRole, label: string): Promise<Invite> {
+const cleanPerson = (s: unknown) => String(s ?? '').replace(/\s+/g, ' ').trim().slice(0, 40);
+
+export async function createInvite(boardId: string, role: InviteRole, label: string, from = ''): Promise<Invite> {
   const s = await getSharing(boardId);
+  const name = cleanPerson(label);
   const inv: Invite = {
     token: crypto.randomBytes(18).toString('base64url'),
     role,
     label: label.trim().slice(0, 60) || (role === 'editor' ? 'Can edit' : 'Can view'),
+    ...(name ? { name } : {}),
+    ...(cleanPerson(from) ? { from: cleanPerson(from) } : {}),
     created: new Date().toISOString(),
   };
   s.invites.push(inv);
@@ -88,7 +97,10 @@ export async function updateInvite(boardId: string, token: string, patch: { role
   const inv = s.invites.find((i) => i.token === token);
   if (!inv) return null;
   if (patch.role === 'editor' || patch.role === 'viewer') inv.role = patch.role;
-  if (typeof patch.label === 'string') inv.label = patch.label.trim().slice(0, 60) || inv.label;
+  if (typeof patch.label === 'string') {
+    inv.label = patch.label.trim().slice(0, 60) || inv.label;
+    if (cleanPerson(patch.label)) inv.name = cleanPerson(patch.label);
+  }
   await save(boardId, s);
   return inv;
 }
@@ -106,6 +118,10 @@ export async function setSettings(boardId: string, patch: Partial<BoardSettings>
   }
   await save(boardId, s);
   return s.settings;
+}
+
+export async function findInvite(boardId: string, token: string): Promise<Invite | null> {
+  return (await getSharing(boardId)).invites.find((i) => i.token === token) ?? null;
 }
 
 export async function inviteRole(boardId: string, token: string): Promise<InviteRole | null> {

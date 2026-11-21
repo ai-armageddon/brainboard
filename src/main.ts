@@ -76,13 +76,14 @@ async function main() {
     // Guest: only this one board.
     session.invite = invite;
     document.body.classList.add('guest');
+    let details;
     try {
-      await api.me(hashId);
+      details = await api.me(hashId);
     } catch {
       showOverlay('invalid');
       return;
     }
-    showOverlay('join', () => openBoard(hashId));
+    showOverlay('join', () => openBoard(hashId), undefined, details);
     return;
   }
 

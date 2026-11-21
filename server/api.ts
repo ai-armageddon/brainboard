@@ -10,12 +10,12 @@ import {
   principal, sessionCookie, userKey, type Principal,
 } from './auth.ts';
 import {
-  createInvite, getOwner, getSharing, inviteRole, revokeInvite, setOwner, tokenBoards, transferOwnership, updateInvite,
+  createInvite, findInvite, getOwner, getSharing, revokeInvite, setOwner, tokenBoards, transferOwnership, updateInvite,
   type InviteRole,
 } from './sharing.ts';
 import { liveCounts, refreshAccess } from './realtime.ts';
 import {
-  checkPassword, cleanEmail, cleanName, createSession, createUser, endSession, limited, publicUser, updateUser, userByEmail,
+  checkPassword, cleanEmail, cleanName, createSession, createUser, endSession, getUser, limited, publicUser, updateUser, userByEmail,
   validEmail, type User,
 } from './accounts.ts';
 import { authenticationOptions, authenticationVerify, registrationOptions, registrationVerify, relyingParty } from './passkeys.ts';
@@ -126,8 +126,17 @@ export async function handleApi(req: IncomingMessage, res: ServerResponse): Prom
         return send(res, 200, { role: 'owner', saved: !owner || owner.startsWith('user:') }), true;
       }
       const token = inviteToken(req, url);
-      const role = token && isValidId(boardId) ? await inviteRole(boardId, token) : null;
-      return send(res, role ? 200 : 403, role ? { role } : { error: 'invalid invite' }), true;
+      const inv = token && isValidId(boardId) ? await findInvite(boardId, token) : null;
+      if (!inv) return send(res, 403, { error: 'invalid invite' }), true;
+      // Enough for a friendly join screen: who it's for, which board, and who sent it.
+      const owner = await getOwner(boardId);
+      const ownerName = owner?.startsWith('user:') ? getUser(owner.slice(5))?.name : undefined;
+      return send(res, 200, {
+        role: inv.role,
+        name: inv.name ?? null,
+        from: ownerName ?? inv.from ?? null,
+        board: (await readBoard(boardId))?.name ?? null,
+      }), true;
     }
 
     if (parts[0] === 'net' && method === 'GET') {
@@ -161,8 +170,9 @@ export async function handleApi(req: IncomingMessage, res: ServerResponse): Prom
       } else if (parts[2] === 'invites') {
         const token = parts[3];
         if (!token && method === 'POST') {
-          const body = await readJson<{ role?: InviteRole; label?: string }>(req);
-          const inv = await createInvite(id, body.role === 'editor' ? 'editor' : 'viewer', String(body.label ?? ''));
+          const body = await readJson<{ role?: InviteRole; label?: string; from?: string }>(req);
+          const inviter = p.user?.name ?? String(body.from ?? '');
+          const inv = await createInvite(id, body.role === 'editor' ? 'editor' : 'viewer', String(body.label ?? ''), inviter);
           return send(res, 201, inv), true;
         }
         if (token && method === 'PATCH') {
