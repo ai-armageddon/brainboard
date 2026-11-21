@@ -1,5 +1,6 @@
 // The boards screen: what's live now, what you opened recently, what was shared with you, and all your boards.
 // It only ever lists boards you own or that were shared with you (a link you opened, or an invite to your account).
+import { avatarFace } from './avatar';
 import { account, api, session, type BoardMeta, type LivePerson, type SharedBoard } from './net';
 import { openBoard, openedAt } from './boards';
 import { closePopovers, newBoard } from './ui';
@@ -7,7 +8,6 @@ import { icon } from './icons';
 
 const $ = (id: string) => document.getElementById(id)!;
 const esc = (s: string) => s.replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`);
-const initials = (n: string) => n.trim().split(/\s+/).map((w) => w[0]).join('').slice(0, 2).toUpperCase() || '?';
 
 function ago(iso: string | number) {
   const s = (Date.now() - (typeof iso === 'number' ? iso : Date.parse(iso))) / 1000;
@@ -49,7 +49,7 @@ const matches = (e: Entry) => !query || e.b.name.toLowerCase().includes(query);
 
 function faces(people: LivePerson[]) {
   if (!people.length) return '';
-  const shown = people.slice(0, 4).map((p) => `<b style="--c:${esc(p.color)}" title="${esc(p.name)}">${esc(initials(p.name))}</b>`).join('');
+  const shown = people.slice(0, 4).map((p) => `<b style="--c:${esc(p.color)}" title="${esc(p.name)}">${avatarFace(p.name, p.picture)}</b>`).join('');
   return `<span class="hc-live"><span class="hc-faces">${shown}</span><i class="live-dot"></i>${people.length} here</span>`;
 }
 

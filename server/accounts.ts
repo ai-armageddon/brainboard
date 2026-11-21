@@ -16,6 +16,7 @@ export interface Passkey {
   created: string;
 }
 export interface User {
+  picture?: string;
   id: string;
   name: string;
   email?: string;
@@ -58,7 +59,7 @@ export const validEmail = (e: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e);
 
 /** What the browser is allowed to see about an account. */
 export const publicUser = (u: User) => ({
-  id: u.id, name: u.name, email: u.email ?? null, passkeys: u.passkeys.length, hasPassword: !!u.passwordHash,
+  id: u.id, name: u.name, picture: u.picture ?? '', email: u.email ?? null, passkeys: u.passkeys.length, hasPassword: !!u.passwordHash,
 });
 
 export const getUser = (id: string) => users.get(id) ?? null;
@@ -72,10 +73,11 @@ export function userByPasskey(credId: string): { user: User; passkey: Passkey } 
   return null;
 }
 
-export async function createUser(fields: { id?: string; name: string; email?: string; password?: string; passkey?: Passkey }): Promise<User> {
+export async function createUser(fields: { id?: string; name: string; email?: string; password?: string; passkey?: Passkey; picture?: string }): Promise<User> {
   const u: User = {
     id: fields.id ?? newUserId(),
     name: cleanName(fields.name) || 'Someone',
+    picture: fields.picture || undefined,
     email: fields.email || undefined,
     passwordHash: fields.password ? await hashPassword(fields.password) : undefined,
     passkeys: fields.passkey ? [fields.passkey] : [],
