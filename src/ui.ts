@@ -242,7 +242,13 @@ export function buildUI() {
 
   hooks.afterRender = () => {
     updateCtxBar();
-    hint.classList.toggle('show', S.items.length === 0);
+    const empty = S.items.length === 0;
+    if (empty !== hint.classList.contains('show')) {
+      hint.classList.toggle('show', empty);
+      // SMIL dots keep running when hidden unless paused explicitly
+      const svg = hint.querySelector<SVGSVGElement>('svg.flow');
+      if (empty) svg?.unpauseAnimations(); else svg?.pauseAnimations();
+    }
     ($('undo-btn') as HTMLButtonElement).disabled = !canUndo();
     ($('redo-btn') as HTMLButtonElement).disabled = !canRedo();
   };

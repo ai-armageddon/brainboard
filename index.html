@@ -29,7 +29,21 @@
       <div id="marquee"></div>
       <div id="cursors"></div>
       <div id="hint">
-        <span class="logo xl"></span>
+        <div class="hint-art" aria-hidden="true">
+          <i class="glow g1"></i><i class="glow g2"></i><i class="glow g3"></i>
+          <svg viewBox="0 0 320 150" class="flow">
+            <path class="wire" id="w1" d="M98 78C116 78 112 44 130 44" />
+            <path class="wire" id="w2" d="M196 44C232 44 262 40 262 62" />
+            <path class="wire" id="w3" d="M96 90C112 106 120 116 140 116" />
+            <circle class="pulse p1" r="2.6"><animateMotion dur="3.4s" repeatCount="indefinite" rotate="auto"><mpath href="#w1" /></animateMotion></circle>
+            <circle class="pulse p2" r="2.6"><animateMotion dur="4.2s" begin="1.2s" repeatCount="indefinite"><mpath href="#w2" /></animateMotion></circle>
+            <circle class="pulse p3" r="2.6"><animateMotion dur="3.8s" begin="0.6s" repeatCount="indefinite"><mpath href="#w3" /></animateMotion></circle>
+            <g class="node n1"><ellipse cx="60" cy="82" rx="38" ry="23" /></g>
+            <g class="node n2"><rect x="130" y="24" width="66" height="40" rx="3" /></g>
+            <g class="node n3"><path d="M262 62 290 90 262 118 234 90z" /></g>
+            <g class="node n4"><rect x="140" y="96" width="40" height="40" rx="1" /></g>
+          </svg>
+        </div>
         <div class="hint-title">Empty board</div>
         <div class="hint-sub">Paste, type or draw anywhere.</div>
         <div class="hint-chips">

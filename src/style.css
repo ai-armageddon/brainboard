@@ -60,6 +60,7 @@
     --note-shadow: 0 1px 1px rgba(0, 0, 0, 0.3), 0 6px 18px -8px rgba(0, 0, 0, 0.8);
     --logo-tile: #fafafa;
     --logo-ink: #0a0a0a;
+    --glow-o: 0.24;
     --f-ink: #141414;   --s-ink: #fafafa;
     --f-gray: #262626;  --s-gray: #9a9a9a;
     --f-red: #47252a;   --s-red: #ff6b70;
@@ -91,6 +92,7 @@
   --note-shadow: 0 1px 1px rgba(0, 0, 0, 0.3), 0 6px 18px -8px rgba(0, 0, 0, 0.8);
   --logo-tile: #fafafa;
   --logo-ink: #0a0a0a;
+  --glow-o: 0.24;
   --f-ink: #141414;   --s-ink: #fafafa;
   --f-gray: #262626;  --s-gray: #9a9a9a;
   --f-red: #47252a;   --s-red: #ff6b70;
@@ -122,8 +124,6 @@ kbd {
   background: var(--hover);
   border: 1px solid var(--line);
   color: var(--fg-2);
-  font-family: var(--mono);
-  font-size: 10.5px;
 }
 
 /* ---------------------------------------------------------------- canvas */
@@ -411,7 +411,47 @@ body.busy .port { opacity: 0 !important; pointer-events: none !important; }
   width: min(560px, 100%);
 }
 #hint.show { opacity: 1; }
-#hint .logo { margin-bottom: 22px; }
+/* a small flow chart that drifts, with a soft colour glow behind it */
+.hint-art { position: relative; width: 320px; max-width: 100%; aspect-ratio: 320 / 150; margin-bottom: 26px; }
+.hint-art .flow { position: relative; width: 100%; height: 100%; overflow: visible; }
+.glow {
+  position: absolute;
+  width: 150px;
+  height: 150px;
+  border-radius: 50%;
+  filter: blur(42px);
+  opacity: var(--glow-o, 0.42);
+  will-change: transform;
+}
+.g1 { left: 6%; top: 0; background: #6aa8ff; animation: drift1 17s ease-in-out infinite alternate; }
+.g2 { left: 38%; top: -12%; background: #b48cf2; animation: drift2 21s ease-in-out infinite alternate; }
+.g3 { left: 62%; top: 22%; background: #ffad6b; animation: drift3 19s ease-in-out infinite alternate; }
+@keyframes drift1 { to { transform: translate(60px, 22px) scale(1.2); } }
+@keyframes drift2 { to { transform: translate(-50px, 30px) scale(0.85); } }
+@keyframes drift3 { to { transform: translate(-40px, -26px) scale(1.15); } }
+
+.flow .wire { fill: none; stroke: var(--fg-3); stroke-width: 1.4; stroke-dasharray: 3 4; animation: march 1.6s linear infinite; }
+@keyframes march { to { stroke-dashoffset: -14; } }
+.flow .pulse { stroke: none; }
+.flow .p1 { fill: var(--s-blue); }
+.flow .p2 { fill: var(--s-orange); }
+.flow .p3 { fill: var(--s-yellow); }
+.flow .node { transform-box: fill-box; transform-origin: center; animation: bob 7s ease-in-out infinite; }
+.flow .node > * { stroke-width: 1.6; }
+.flow .n1 > * { fill: var(--panel-solid); stroke: var(--fg); }
+.flow .n2 > * { fill: var(--f-blue); stroke: var(--s-blue); }
+.flow .n3 > * { fill: var(--f-orange); stroke: var(--s-orange); }
+.flow .n4 > * { fill: var(--f-yellow); stroke: none; filter: drop-shadow(0 3px 5px rgba(0, 0, 0, 0.12)); }
+.flow .n2 { animation-duration: 8.5s; animation-delay: -2s; }
+.flow .n3 { animation-duration: 7.6s; animation-delay: -4.5s; }
+.flow .n4 { animation-name: bob-tilt; animation-duration: 9s; animation-delay: -1s; }
+@keyframes bob { 50% { transform: translateY(-5px); } }
+@keyframes bob-tilt { 0%, 100% { transform: rotate(-4deg); } 50% { transform: translateY(-4px) rotate(2deg); } }
+#hint:not(.show) .hint-art * { animation-play-state: paused; }
+@media (prefers-reduced-motion: reduce) {
+  .hint-art *, .hint-art .flow .node { animation: none !important; }
+  .flow .pulse { display: none; }
+}
 .hint-title { font-family: var(--font-display); font-size: 38px; font-weight: 600; letter-spacing: -0.05em; color: var(--fg); margin-bottom: 8px; }
 .hint-sub { font-size: 15px; color: var(--fg-3); line-height: 1.5; }
 .hint-chips { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; margin-top: 22px; }
