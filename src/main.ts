@@ -1,5 +1,5 @@
-import '@fontsource-variable/inter';
-import '@fontsource-variable/bricolage-grotesque';
+import '@fontsource-variable/geist';
+import '@fontsource-variable/geist-mono';
 import './style.css';
 import { paintLogos } from './brand';
 import { loadPrefs, requestRender } from './state';

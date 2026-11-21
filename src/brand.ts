@@ -1,15 +1,17 @@
-// Brainboard mark: a lowercase "b" whose bowl is a thought-bubble, with a connected idea-spark.
-let n = 0;
+// Brainboard mark: a geometric lowercase "b" (stem + bubble) beside a square node, on a sharp tile.
+// Monochrome: the tile is the foreground colour and the glyph is the background colour, so it inverts with the theme.
+
+/** Glyph geometry, shared with scripts/icons.ts. `ink` paints the glyph. */
+export function markGlyph(ink: string) {
+  return `<path d="M9 6.5V18" stroke="${ink}" stroke-width="3.2"/>
+  <circle cx="15" cy="18.5" r="6" fill="none" stroke="${ink}" stroke-width="3.2"/>
+  <rect x="20.2" y="6.5" width="4.3" height="4.3" fill="${ink}"/>`;
+}
 
 export function logoSvg(size = 32): string {
-  const id = `bbg${n++}`;
   return `<svg viewBox="0 0 32 32" width="${size}" height="${size}" aria-hidden="true" focusable="false">
-  <defs><linearGradient id="${id}" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#6d7cff"/><stop offset="1" stop-color="#9a5cf5"/></linearGradient></defs>
-  <rect width="32" height="32" rx="9" fill="url(#${id})"/>
-  <path d="M10.4 7.6V18.4" stroke="#fff" stroke-width="3.4" stroke-linecap="round"/>
-  <circle cx="16.4" cy="18.4" r="6" fill="none" stroke="#fff" stroke-width="3.4"/>
-  <path d="M20.6 13.9 22.5 11" stroke="#fff" stroke-opacity=".75" stroke-width="1.8" stroke-linecap="round"/>
-  <circle cx="23.9" cy="8.6" r="2.5" fill="#fff" fill-opacity=".92"/>
+  <rect width="32" height="32" rx="2" fill="var(--logo-tile)"/>
+  ${markGlyph('var(--logo-ink)')}
 </svg>`;
 }
 
