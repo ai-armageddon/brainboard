@@ -13,13 +13,14 @@ import { canEdit } from './net';
 import { userMovedCamera } from './collab';
 import { vimKey } from './vim';
 import { openExport } from './export';
+import { inkEnd, inkMove, inkStart } from './ink';
 
 type Drag =
   | { kind: 'pan'; lx: number; ly: number }
   | { kind: 'move'; sx: number; sy: number; started: boolean; orig: Map<string, { x: number; y: number }>; clickId: string; wasSelected: boolean; shift: boolean }
   | { kind: 'marquee'; sx: number; sy: number; base: Set<string> }
   | { kind: 'resize'; corner: string; start: Box; origs: Map<string, NodeItem> ; lock: boolean }
-  | { kind: 'draw'; pts: number[] }
+  | { kind: 'draw'; pts: number[]; id: string }
   | { kind: 'erase'; last: { x: number; y: number }; did: boolean }
   | { kind: 'create'; tool: Tool; start: { x: number; y: number }; sx: number; sy: number; id: string | null }
   | { kind: 'connect'; from: string; side: Side | null; sx: number; sy: number; moved: boolean; target: string | null };
@@ -78,10 +79,14 @@ function onDown(e: PointerEvent) {
   }
 
   switch (S.tool) {
-    case 'pen':
-      begin({ kind: 'draw', pts: [p.x, p.y] }, e);
-      drawLive([p.x, p.y]);
+    case 'pen': {
+      const pts = [p.x, p.y];
+      const id = uid();
+      begin({ kind: 'draw', pts, id }, e);
+      drawLive(pts);
+      inkStart(id, S.pen.color, S.pen.size / S.cam.z, pts);
       return;
+    }
     case 'eraser':
       begin({ kind: 'erase', last: p, did: false }, e);
       eraseAlong(drag as Extract<Drag, { kind: 'erase' }>, p);
@@ -195,6 +200,7 @@ function onMove(e: PointerEvent) {
         pts.push(q.x, q.y);
       }
       drawLive(pts);
+      inkMove();
       return;
     }
 
@@ -298,7 +304,8 @@ function onUp(e: PointerEvent) {
       break;
     case 'draw':
       live.stroke.setAttribute('d', '');
-      if (e.type !== 'pointercancel') finishStroke(d.pts);
+      if (e.type !== 'pointercancel') finishStroke(d.pts, d.id);
+      inkEnd(e.type === 'pointercancel' ? 'cancel' : 'done');
       break;
     case 'create': {
       let id = d.id;
@@ -364,7 +371,7 @@ function drawLive(pts: number[]) {
   live.stroke.style.stroke = `var(--s-${S.pen.color})`;
 }
 
-function finishStroke(pts: number[]) {
+function finishStroke(pts: number[], id: string) {
   if (pts.length === 2) pts.push(pts[0] + 0.01, pts[1]);
   const size = S.pen.size / S.cam.z;
   let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
@@ -376,7 +383,7 @@ function finishStroke(pts: number[]) {
   const x = x0 - pad, y = y0 - pad;
   const rel = pts.map((v, i) => Math.round((i % 2 ? v - y : v - x) * 100) / 100);
   checkpoint();
-  const stroke: StrokeItem = { id: uid(), type: 'stroke', x, y, w: x1 - x0 + pad * 2, h: y1 - y0 + pad * 2, points: rel, color: S.pen.color, size };
+  const stroke: StrokeItem = { id, type: 'stroke', x, y, w: x1 - x0 + pad * 2, h: y1 - y0 + pad * 2, points: rel, color: S.pen.color, size };
   S.items.push(stroke);
   changed();
 }

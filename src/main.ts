@@ -13,6 +13,7 @@ import { initInput } from './input';
 import { api, events, loadSession, session } from './net';
 import { openBoard, restoreCamera } from './boards';
 import { initCollab } from './collab';
+import { initInk } from './ink';
 import { blobGet, kvGet, kvSet } from './db';
 import type { Item } from './types';
 
@@ -43,6 +44,7 @@ async function main() {
   paintLogos();
   buildUI();
   initCollab();
+  initInk();
   initVim();
   initAccount();
   initVoice();

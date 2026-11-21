@@ -1,7 +1,7 @@
 // Server connection: REST helpers + the live socket (item sync, presence, collaboration).
 import { S, getItem, noteLocalChange, pruneSelection, requestRender, resetHistory, setCollector, setSyncScheduler } from './state';
 import type { Item } from './types';
-import type { BoardSettings, ClientMsg, Op, PeerInfo, Presence, Role, RtcSignal, ServerMsg } from './protocol';
+import type { BoardSettings, ClientMsg, Ink, Op, PeerInfo, Presence, Role, RtcSignal, ServerMsg } from './protocol';
 import { DEFAULT_SETTINGS } from './protocol';
 import { applyOps, diffItems } from './ops';
 
@@ -291,6 +291,7 @@ function handle(m: ServerMsg) {
       return;
     }
     case 'presenter': session.presenter = m.id; emit('presenter'); return;
+    case 'ink': emit('ink', { from: m.from, ink: m.ink }); return;
     case 'settings': session.settings = m.s; emit('settings'); return;
     case 'role': {
       const was = session.role;
@@ -355,6 +356,7 @@ function sendPresence(force: boolean) {
 export const present = (on: boolean) => sendMsg({ t: 'present', on });
 export const sendVoice = (on: boolean, muted: boolean) => sendMsg({ t: 'voice', on, muted });
 export const sendRtc = (to: string, data: RtcSignal) => sendMsg({ t: 'rtc', to, data });
+export const sendInk = (ink: Ink) => sendMsg({ t: 'ink', ink });
 export const muteUser = (id: string) => sendMsg({ t: 'mute', id });
 export const updateSettings = (s: Partial<BoardSettings>) => sendMsg({ t: 'settings', s });
 export const kick = (id: string) => sendMsg({ t: 'kick', id });

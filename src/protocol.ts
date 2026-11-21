@@ -1,5 +1,11 @@
 // Messages exchanged over the /ws socket between the app and the server.
-import type { Item } from './types';
+import type { ColorKey, Item } from './types';
+
+/**
+ * A pen stroke while it's being drawn, streamed in small batches so others watch it appear.
+ * Relayed only, never stored: the finished stroke arrives as a normal item with the same id.
+ */
+export interface Ink { id: string; color: ColorKey; size: number; add: number[]; end?: 'done' | 'cancel' }
 
 export type Op =
   | { k: 'put'; item: Item }
@@ -55,7 +61,8 @@ export type ClientMsg =
   | { t: 'voice'; on: boolean; muted: boolean }
   | { t: 'rtc'; to: string; data: RtcSignal }
   /** owner or presenter: mute someone ('*' = everyone else) */
-  | { t: 'mute'; id: string };
+  | { t: 'mute'; id: string }
+  | { t: 'ink'; ink: Ink };
 
 export type ServerMsg =
   | {
@@ -79,4 +86,5 @@ export type ServerMsg =
   | { t: 'role'; role: Role }
   | { t: 'error'; msg: string }
   | { t: 'rtc'; from: string; data: RtcSignal }
-  | { t: 'muted'; by: string };
+  | { t: 'muted'; by: string }
+  | { t: 'ink'; from: string; ink: Ink };
