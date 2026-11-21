@@ -68,6 +68,7 @@ const btn = (act: string, ic: string, tip: string, extra = '') =>
 const SEP = '<span class="sep"></span>';
 
 let ctxSig = '';
+let sizingText = false;
 
 function buildCtx(sel: Item[]) {
   const parts: string[] = [];
@@ -97,21 +98,39 @@ function buildCtx(sel: Item[]) {
 function updateCtxBar() {
   const sel = S.items.filter((i) => S.selected.has(i.id));
   if (!sel.length || !selBounds) {
-    ctx.classList.remove('show');
+    ctx.classList.remove('show', 'glide');
     ctxSig = '';
     return;
   }
   const sig = sel.map((i) => `${i.id}:${'color' in i ? i.color : ''}:${i.type === 'shape' ? i.shape : ''}`).join('|');
   if (sig !== ctxSig) {
     ctxSig = sig;
+    sizingText = false;
     buildCtx(sel);
   }
+  const wasVisible = ctx.classList.contains('show');
   ctx.classList.add('show');
-  positionCtxBar();
+  if (!sizingText) positionCtxBar(wasVisible);
 }
 
-function positionCtxBar() {
+function beginTextSizing() {
+  if (sizingText) return;
+  sizingText = true;
+  // A click can land mid-glide. Hold the menu exactly where the user pressed it.
+  const transform = getComputedStyle(ctx).transform;
+  ctx.classList.remove('glide');
+  ctx.style.transform = transform;
+}
+
+function finishTextSizing() {
+  if (!sizingText) return;
+  sizingText = false;
+  positionCtxBar(true);
+}
+
+function positionCtxBar(glide: boolean) {
   if (!ctx.classList.contains('show') || !selBounds) return;
+  ctx.classList.toggle('glide', glide);
   const { x, y, z } = S.cam;
   const b = selBounds;
   const L = b.x * z + x, T = b.y * z + y, R = (b.x + b.w) * z + x, B = (b.y + b.h) * z + y;
@@ -172,15 +191,27 @@ export function buildUI() {
     buildPenbar();
   });
 
-  ctx.addEventListener('pointerdown', (e) => e.preventDefault()); // keep text focus while styling
+  ctx.addEventListener('pointerdown', (e) => {
+    e.preventDefault(); // keep text focus while styling
+    if ((e.target as Element).closest('[data-act="font-down"], [data-act="font-up"]')) beginTextSizing();
+  });
+  ctx.addEventListener('pointerleave', (e) => {
+    // Touch leaves after every tap, even when the next tap is on the same button.
+    if (e.pointerType !== 'touch') finishTextSizing();
+  });
+  ctx.addEventListener('focusout', (e) => {
+    if (!ctx.contains(e.relatedTarget as Node | null)) finishTextSizing();
+  });
   ctx.addEventListener('click', (e) => {
     const b = (e.target as Element).closest<HTMLElement>('button');
     if (!b) return;
     if (b.dataset.color) return setColor(b.dataset.color as ColorKey);
     if (b.dataset.shape) return setShape(b.dataset.shape as ShapeKind);
     switch (b.dataset.act) {
-      case 'font-down': return bumpFont(1 / 1.2);
-      case 'font-up': return bumpFont(1.2);
+      case 'font-down':
+      case 'font-up':
+        beginTextSizing();
+        return bumpFont(b.dataset.act === 'font-up' ? 1.2 : 1 / 1.2);
       case 'edit': return startEditing([...S.selected][0]);
       case 'duplicate': checkpoint(); return duplicateSelection(16 / S.cam.z);
       case 'front': return reorder(true);
@@ -229,6 +260,7 @@ export function buildUI() {
   });
   window.addEventListener('pointerdown', (e) => {
     const t = e.target as Element;
+    if (!ctx.contains(t)) finishTextSizing();
     if (!menu.hidden && !t.closest('#menu, #menu-btn')) closePopovers();
   });
 
@@ -260,7 +292,8 @@ export function buildUI() {
   };
   hooks.afterCamera = () => {
     saveCamera();
-    positionCtxBar();
+    sizingText = false;
+    positionCtxBar(false);
     zoomLabel.textContent = `${Math.round(S.cam.z * 100)}%`;
   };
   viewport.dataset.tool = S.tool;

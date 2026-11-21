@@ -808,6 +808,7 @@ body:not(.ready) .panel { opacity: 0; }
 /* context bar */
 #ctxbar {
   position: fixed;
+  touch-action: manipulation;
   left: 0;
   top: 0;
   display: flex;
@@ -821,6 +822,9 @@ body:not(.ready) .panel { opacity: 0; }
   border-radius: var(--r);
 }
 #ctxbar.show { opacity: 1; pointer-events: auto; }
+@media (prefers-reduced-motion: no-preference) {
+  #ctxbar.glide { transition: opacity 0.12s, transform 0.18s ease-out; }
+}
 body.busy #ctxbar { opacity: 0; pointer-events: none; transition: none; }
 .cbtn {
   position: relative;
