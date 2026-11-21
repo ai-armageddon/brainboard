@@ -494,7 +494,7 @@ export function initCollab() {
     if (e.key === 'Escape') {
       if (!$('share').hidden) $('share').hidden = true;
       else if (!$('peer-pop').hidden) $('peer-pop').hidden = true;
-      else if (following && !followLocked()) follow(null);
+      else if (following && !followLocked() && $('views-pop').hidden) follow(null);
     }
   });
 

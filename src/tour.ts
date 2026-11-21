@@ -29,7 +29,7 @@ function steps(): Step[] {
     );
     if (!account.user) list.push({ target: '#save-btn', title: 'Keep your work', body: 'Boards live in this browser until you save them to a free account. With a passkey it takes one tap. <kbd>⌘S</kbd> works too.' });
   } else {
-    list.push({ target: '#avatars', title: 'Follow along', body: 'Click someone’s avatar to follow their view, or watch when they present.' });
+    list.push({ target: '#viewnav', title: 'Follow along', body: 'When others are here, choose Follow next to Views and pick a name to follow their camera.' });
   }
   list.push({ title: 'Keyboard first', body: 'Press <kbd>?</kbd> for every shortcut, or <kbd>:</kbd> for vim-style commands.' });
   return list;

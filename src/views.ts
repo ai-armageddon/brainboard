@@ -196,6 +196,9 @@ function showPreview(v: BoardView | null) {
 
 function renderNav() {
   const nav = $('viewnav');
+  const followButton = $('choose-follow');
+  followButton.hidden = !session.peers.size;
+  followButton.setAttribute('aria-expanded', String(!$('views-pop').hidden));
   const here = viewAt(myRect());
   const list = session.views;
   const watching = !!followingId();
@@ -212,9 +215,34 @@ function renderNav() {
     (list.length > 1 ? `<button class="cbtn vn-step" data-vn="next" data-tip="Next view · }" aria-label="Next view">${icon('chevronRight', 16)}</button>` : '');
 }
 
+let followMarkup = '';
+function renderFollowChoices() {
+  const list = $('view-people');
+  const locked = isFollowLocked();
+  const rows = [...session.peers.values()].map((p) => {
+    const current = p.id === followingId();
+    const place = viewAt(p.p?.view)?.name ?? (p.p?.view && session.views.length ? 'Outside saved views' : 'On this board');
+    const detail = (p.id === session.presenter ? 'Presenting · ' : '') + place;
+    const action = current ? (locked ? 'Locked' : 'Stop') : 'Follow';
+    const where = `follow-where-${esc(p.id)}`;
+    return `<button class="follow-person" data-follow="${esc(p.id)}" aria-label="${esc(current ? 'Stop following ' + p.name : 'Follow ' + p.name)}" aria-describedby="${where}" aria-pressed="${current}" ${locked ? 'disabled' : ''}>
+      <span class="vn-face" style="--c:${esc(p.color)}">${esc(initials(p.name))}</span>
+      <span class="follow-who"><b>${esc(p.name)}</b><small id="${where}">${esc(detail)}</small></span>
+      <span class="follow-action">${action}</span></button>`;
+  }).join('');
+  const html = rows ? `<div class="pop-title">Follow someone</div><div class="follow-list">${rows}</div>` : '';
+  // Cursor updates are frequent. Leave the buttons in place while people are choosing.
+  if (html === followMarkup) return;
+  const focused = list.contains(document.activeElement) ? (document.activeElement as HTMLElement).dataset.follow : undefined;
+  followMarkup = html;
+  list.innerHTML = html;
+  if (focused) (list.querySelector<HTMLElement>(`[data-follow="${CSS.escape(focused)}"]:enabled`) ?? $('views-pop')).focus({ preventScroll: true });
+}
+
 function renderPop() {
   const pop = $('views-pop');
   if (pop.hidden) return;
+  renderFollowChoices();
   // Mid-rename: leave the field alone (presence updates arrive many times a second).
   if (renamingId && pop.querySelector('.vrow-input')) return;
   const here = viewAt(myRect());
@@ -239,7 +267,7 @@ function renderPop() {
   const active = document.activeElement;
   const action = active instanceof HTMLButtonElement && pop.contains(active) ? active.dataset.act : null;
   const rowId = active?.closest<HTMLElement>('[data-view]')?.dataset.view;
-  pop.innerHTML = `
+  $('saved-views').innerHTML = `
     <div class="vpop-head"><span class="pop-title">Views</span>${edit ? `<button class="vpop-add" data-act="add">${icon('plus', 15)}Add this view</button>` : ''}</div>
     ${session.views.length ? `<div class="vrows">${rows}</div>` : `<p class="vpop-empty">${edit ? 'Save spots on this board as views, so everyone can jump straight to them.' : 'No views on this board yet.'}</p>`}
     ${elsewhere.length ? `<div class="vrow elsewhere"><span class="vrow-key"></span><span class="vrow-go muted">Somewhere else</span><span class="vrow-faces">${elsewhere.map((p) => face(p, 'goto')).join('')}</span></div>` : ''}
@@ -295,6 +323,14 @@ export function initViews() {
   const nav = document.createElement('div');
   nav.id = 'viewnav';
   $('topbar').append(nav);
+  const followButton = document.createElement('button');
+  followButton.id = 'choose-follow';
+  followButton.className = 'vn-current';
+  followButton.innerHTML = `${icon('eye', 16)}Follow`;
+  followButton.setAttribute('aria-haspopup', 'menu');
+  followButton.setAttribute('aria-controls', 'views-pop');
+  followButton.hidden = true;
+  nav.after(followButton);
   const pop = document.createElement('div');
   pop.id = 'views-pop';
   pop.className = 'panel';
@@ -302,8 +338,13 @@ export function initViews() {
   pop.setAttribute('aria-label', 'Views');
   pop.tabIndex = -1;
   pop.hidden = true;
+  pop.innerHTML = '<section id="view-people"></section><div id="saved-views"></div>';
   document.body.append(pop);
 
+  followButton.addEventListener('click', () => {
+    togglePop();
+    if (!pop.hidden) (pop.querySelector<HTMLElement>('[data-follow]:enabled') ?? pop).focus();
+  });
   nav.addEventListener('click', (e) => {
     const act = (e.target as Element).closest<HTMLElement>('[data-vn]')?.dataset.vn;
     if (act === 'prev') stepView(-1);
@@ -312,6 +353,14 @@ export function initViews() {
   });
   pop.addEventListener('click', (e) => {
     const t = e.target as Element;
+    const peerId = t.closest<HTMLElement>('[data-follow]')?.dataset.follow;
+    if (peerId) {
+      if (isFollowLocked() || !session.peers.has(peerId)) return;
+      follow(peerId === followingId() ? null : peerId);
+      togglePop(false);
+      followButton.focus({ preventScroll: true });
+      return;
+    }
     const who = t.closest<HTMLElement>('[data-goto]')?.dataset.goto;
     if (who) { goToPerson(who); return; }
     const act = t.closest<HTMLElement>('[data-act]');
@@ -330,12 +379,18 @@ export function initViews() {
   });
   pop.addEventListener('pointerleave', () => showPreview(null));
   pop.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') {
+      e.stopPropagation();
+      togglePop(false);
+      if (!followButton.hidden) followButton.focus();
+      return;
+    }
     if (['Tab', 'Enter', ' '].includes(e.key)) e.stopPropagation();
   });
   document.addEventListener('pointerdown', (e) => {
     if (pop.hidden) return;
     const t = e.target as Element;
-    if (!pop.contains(t) && !nav.contains(t)) togglePop(false);
+    if (!pop.contains(t) && !nav.contains(t) && !followButton.contains(t)) togglePop(false);
   });
 
   window.addEventListener('keydown', (e) => {
@@ -350,7 +405,7 @@ export function initViews() {
     }
   });
 
-  for (const ev of ['views', 'peers', 'welcome', 'follow', 'role', 'settings']) events.addEventListener(ev, renderSoon);
+  for (const ev of ['views', 'peers', 'welcome', 'follow', 'presenter', 'role', 'settings']) events.addEventListener(ev, renderSoon);
   events.addEventListener('presence', (e) => {
     const id = (e as CustomEvent<string>).detail;
     const p = session.peers.get(id);

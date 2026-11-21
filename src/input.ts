@@ -434,7 +434,7 @@ function onKeyDown(e: KeyboardEvent) {
     e.preventDefault();
     return;
   }
-  if (target?.closest('#penbar, #ctxbar') && ['Tab', 'Enter', ' '].includes(e.key)) return;
+  if (target?.closest('#penbar, #ctxbar, #choose-follow') && ['Tab', 'Enter', ' '].includes(e.key)) return;
   const formatKey = mod && !e.altKey && !e.shiftKey ? e.key.toLowerCase() : '';
   if ((formatKey === 'b' || formatKey === 'u') && (S.editing || !isEditableTarget(e.target)) &&
       canEdit() && selectionItems().some(canEditText)) {
