@@ -9,6 +9,7 @@ import {
 import { clamp } from './geometry';
 import { account, api, events, saveProfile, session, type BoardMeta } from './net';
 import { ensureBoard, openBoard, openDraft, saveCamera, showBoardInUrl } from './boards';
+import { openHome } from './home';
 import { paintLogos } from './brand';
 import { userMovedCamera } from './collab';
 import { isVimMode, setVimMode } from './vim';
@@ -221,6 +222,7 @@ export function buildUI() {
       case 'account': if (account.user) void signOut(); else openAuth('signin'); break;
       case 'clear': clearBoard(); break;
       case 'new-board': void newBoard(); break;
+      case 'home': openHome(); break;
       case 'rename': startRename(); break;
       case 'delete-board': void deleteCurrentBoard(); break;
     }

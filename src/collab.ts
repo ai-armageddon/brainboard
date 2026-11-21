@@ -282,6 +282,7 @@ function renderShare(invites: Invite[], net: { lan: boolean; lanUrls: string[]; 
       <form class="invite-form">
         <select name="role" aria-label="Permission"><option value="editor">Can edit</option><option value="viewer">Can view</option></select>
         <input name="label" maxlength="40" placeholder="Their name (optional)" aria-label="Who the link is for" />
+        <input name="email" type="email" maxlength="200" placeholder="Their email (optional)" aria-label="Their email" />
         <button class="primary" type="submit">${icon('link', 16)} Create link</button>
       </form>
       <label class="field base" ${net.hosted ? 'hidden' : ''}><span>Link address</span>
@@ -309,8 +310,17 @@ function renderShare(invites: Invite[], net: { lan: boolean; lanUrls: string[]; 
   body.querySelector<HTMLFormElement>('.invite-form')!.addEventListener('submit', async (e) => {
     e.preventDefault();
     const fd = new FormData(e.target as HTMLFormElement);
-    const inv = await api.createInvite(session.boardId!, fd.get('role') === 'viewer' ? 'viewer' : 'editor', String(fd.get('label') ?? ''));
+    const email = String(fd.get('email') ?? '').trim();
+    let inv;
+    try {
+      inv = await api.createInvite(session.boardId!, fd.get('role') === 'viewer' ? 'viewer' : 'editor', String(fd.get('label') ?? ''), email);
+    } catch (err) {
+      toast((err as Error).message);
+      return;
+    }
     await copy(inviteUrl(inv));
+    if (inv.account) toast(`Link copied. It’s also in ${inv.account.name}’s boards now`);
+    else if (email) toast('Link copied. No account uses that email yet, so send them the link');
     await reload();
   });
   body.querySelector<HTMLInputElement>('input[name="base"]')!.addEventListener('change', (e) => {

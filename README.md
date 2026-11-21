@@ -32,7 +32,7 @@ npm run dev
 
 Open http://localhost:5317. A short tour walks you through the basics the first time, and you can replay it from the menu with **Quick tour**.
 
-Opening the address on its own always starts a blank board. It's saved, and gets its own link, the moment you add something, rename it, share it or start a call, so a visit never creates or shows a board. Your boards are in the menu at the top left, and a board's link opens it directly.
+Opening the address on its own always starts a blank board. It's saved, and gets its own link, the moment you add something, rename it, share it or start a call, so a visit never creates or shows a board. A board's link opens it directly. **All boards** (`⌥B`, or the top of the menu) shows what's live right now, what you opened recently, boards shared with you, and every board you own, with search. Boards shared with you are the ones you joined through an invite link, plus invites the owner addressed to your account's email. Sign in and they follow you to your other devices. Nobody sees a board unless they own it or it was shared with them.
 
 | Command | What it does |
 |---|---|
@@ -63,7 +63,7 @@ pm2 save
 | **Flow charts** | `O` bubble · `R` box · `D` decision · `C` connector |
 | | Drag a shape's dot onto another shape to connect them, or onto empty space to grow a new bubble. `Tab` adds a connected bubble to the right, even while you type. |
 | **Organise** | `⌘D` duplicate · `]` / `[` bring to front or send to back · `⌫` delete |
-| **Boards** | Open the menu at the top left · `⌥N` new board · double-click the board name to rename it |
+| **Boards** | `⌥B` all boards · open the menu at the top left · `⌥N` new board · double-click the board name to rename it |
 | **Export** | `⇧⌘E`, or **Export…** in the menu: PNG (1–3×, transparent if you like), PDF, SVG, a Markdown outline of the text and flow, or a brainboard file you can import again. Pick the whole board or just the selection, and a light or dark theme. **Save as…** lets you choose the folder and file name in Chrome, Edge and Opera. Other browsers save to Downloads |
 | **Undo** | `⌘Z` / `⇧⌘Z` undo only *your* changes, never anyone else's |
 

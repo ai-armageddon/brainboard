@@ -6,10 +6,10 @@ import { watch, type FSWatcher } from 'node:fs';
 import type { IncomingMessage, Server } from 'node:http';
 import type { Duplex } from 'node:stream';
 import { BOARDS_DIR, ensureDirs, isValidId, newId, readBoard, writeBoard, type Board } from './store.ts';
-import { inviteToken, isCrossSite, owns, principal } from './auth.ts';
+import { inviteToken, isCrossSite, ownerKeyOf, owns, principal } from './auth.ts';
 
 /** How a client got in: as the board's owner, or with an invite token. */
-type Identity = { owner: true; token: null } | { owner: false; token: string };
+type Identity = { owner: true; token: null } | { owner: false; token: string; key: string | null };
 import { getSharing, inviteRole, noteInviteUse, revokeInvite, setSettings } from './sharing.ts';
 import { applyOps, diffItems, validOp } from '../src/ops.ts';
 import type { BoardSettings, ClientMsg, Op, PeerInfo, Presence, Role, ServerMsg } from '../src/protocol.ts';
@@ -226,6 +226,16 @@ export async function liveBoard(id: string): Promise<Board | null> {
   return room ? room.board : null;
 }
 
+/** Who is on each open board right now (names and colours only), for the boards home screen. */
+export async function livePeople(): Promise<Record<string, { name: string; color: string }[]>> {
+  const out: Record<string, { name: string; color: string }[]> = {};
+  for (const [id, p] of rooms) {
+    const r = await p;
+    if (r && r.clients.size) out[id] = [...r.clients].map((c) => ({ name: c.name, color: c.color }));
+  }
+  return out;
+}
+
 export async function liveCounts(): Promise<Record<string, number>> {
   const out: Record<string, number> = {};
   for (const [id, p] of rooms) {
@@ -360,7 +370,7 @@ async function onConnection(ws: WebSocket, identity: Identity, baseRole: Role, b
     selfMuted: true,
   };
   room.clients.add(c);
-  if (identity.token) void noteInviteUse(room.id, identity.token, c.name);
+  if (!identity.owner) void noteInviteUse(room.id, identity.token, c.name, identity.key);
   send(c, {
     t: 'welcome',
     you: info(room, c, false),
@@ -400,13 +410,15 @@ export function attachRealtime(server: Server) {
       if (!isValidId(boardId)) return reject(socket, 403, 'Forbidden');
       let identity: Identity;
       let role: Role | null;
-      if (await owns(principal(req), boardId)) {
+      const who = principal(req);
+      if (await owns(who, boardId)) {
         identity = { owner: true, token: null };
         role = 'owner';
       } else {
         const token = inviteToken(req, url);
         if (!token) return reject(socket, 403, 'Forbidden');
-        identity = { owner: false, token };
+        // Remember who joined (their browser or account), so the board shows under "Shared with you" for them.
+        identity = { owner: false, token, key: ownerKeyOf(who) };
         role = await inviteRole(boardId, token);
       }
       if (!role) return reject(socket, 403, 'Forbidden');

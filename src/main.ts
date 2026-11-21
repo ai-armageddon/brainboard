@@ -14,6 +14,7 @@ import { api, events, loadSession, session } from './net';
 import { openBoard, openDraft, restoreCamera } from './boards';
 import { initCollab } from './collab';
 import { initInk } from './ink';
+import { initHome } from './home';
 import { blobGet, kvGet, kvSet } from './db';
 import type { Item } from './types';
 
@@ -45,6 +46,7 @@ async function main() {
   buildUI();
   initCollab();
   initInk();
+  initHome();
   initVim();
   initAccount();
   initVoice();
