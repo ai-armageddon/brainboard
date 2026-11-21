@@ -6,6 +6,7 @@ import { FONTS, type FontKey, type TextRun } from './types';
 import { appendStyle, drawText, editorFont, forgetDrawnText, readEditor, sameStyle, type TextStyle } from './format';
 import { clamp, intersects, unionBox } from './geometry';
 import { toast, updateToolUI } from './ui';
+import { keyLabel } from './keys';
 
 export const uid = () => Math.random().toString(36).slice(2, 9) + Date.now().toString(36).slice(-4);
 export const isNode = (it: Item | undefined): it is NodeItem => !!it && it.type !== 'edge';
@@ -480,5 +481,5 @@ export function clearBoard() {
   S.items = [];
   S.selected.clear();
   changed();
-  toast('Board cleared · ⌘Z to undo');
+  toast(keyLabel('Board cleared · ⌘Z to undo'));
 }

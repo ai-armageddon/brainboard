@@ -10,6 +10,7 @@ import { ensureBoard } from './boards';
 import { follow, followingId, isFollowLocked } from './collab';
 import { icon } from './icons';
 import { toast } from './ui';
+import { keyLabel } from './keys';
 import type { BoardView, PeerInfo } from './protocol';
 
 const $ = (id: string) => document.getElementById(id)!;
@@ -272,7 +273,7 @@ function renderPop() {
     ${session.views.length ? `<div class="vrows">${rows}</div>` : `<p class="vpop-empty">${edit ? 'Save spots on this board as views, so everyone can jump straight to them.' : 'No views on this board yet.'}</p>`}
     ${elsewhere.length ? `<div class="vrow elsewhere"><span class="vrow-key"></span><span class="vrow-go muted">Somewhere else</span><span class="vrow-faces">${elsewhere.map((p) => face(p, 'goto')).join('')}</span></div>` : ''}
     ${followingId() ? '<p class="vpop-note">You’re following someone. Picking a view stops following.</p>' : ''}
-    <p class="vpop-keys"><kbd>{</kbd> <kbd>}</kbd> previous / next · <kbd>⌥</kbd>+<kbd>1</kbd>–<kbd>9</kbd> jump</p>`;
+    <p class="vpop-keys"><kbd>{</kbd> <kbd>}</kbd> previous / next · <kbd>${keyLabel('⌥')}</kbd>+<kbd>1</kbd>–<kbd>9</kbd> jump</p>`;
   const input = pop.querySelector<HTMLInputElement>('.vrow-input');
   if (input) {
     input.focus();

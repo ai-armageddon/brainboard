@@ -14,6 +14,7 @@ import { userMovedCamera } from './collab';
 import { vimKey } from './vim';
 import { openExport } from './export';
 import { inkEnd, inkMove, inkStart } from './ink';
+import { IS_MAC } from './keys';
 
 type Drag =
   | { kind: 'pan'; lx: number; ly: number }
@@ -28,7 +29,6 @@ type Drag =
 let drag: Drag | null = null;
 
 /** Hold this and drag to pan: ⌘ on Mac (Ctrl-click is right-click there), Ctrl elsewhere. */
-export const IS_MAC = /Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent);
 const PAN_KEY = IS_MAC ? 'Meta' : 'Control';
 const panModifier = (e: MouseEvent | KeyboardEvent) => (IS_MAC ? e.metaKey : e.ctrlKey);
 const pointer = { x: innerWidth / 2, y: innerHeight / 2 };

@@ -1,5 +1,6 @@
 // A small first-run tour: a card that steps through the main ideas and rings the relevant control.
 import { account, canEdit, isOwner, session } from './net';
+import { keyLabel } from './keys';
 
 interface Step {
   target?: string; // CSS selector to ring; none = card floats above the toolbar
@@ -97,7 +98,7 @@ function show() {
   card.innerHTML = `
     <div class="tour-top"><span class="tour-count">${idx + 1}/${list.length}</span><button class="tour-skip" data-tour="skip">${last ? 'Close' : 'Skip'}</button></div>
     <h4>${s.title}</h4>
-    <p>${s.body}</p>
+    <p>${keyLabel(s.body)}</p>
     <div class="tour-foot">
       <div class="tour-dots">${list.map((_, i) => `<i class="${i === idx ? 'on' : ''}"></i>`).join('')}</div>
       ${idx > 0 ? '<button class="tour-back" data-tour="back">Back</button>' : ''}

@@ -13,6 +13,7 @@ import { ensureBoard, openBoard, openDraft, saveCamera, showBoardInUrl } from '.
 import { openHome } from './home';
 import { paintLogos } from './brand';
 import { userMovedCamera } from './collab';
+import { keyLabel, localizeKeys } from './keys';
 import { isVimMode, setVimMode } from './vim';
 import { startTour } from './tour';
 import { openAuth, signOut } from './account';
@@ -97,8 +98,8 @@ function buildCtx(sel: Item[]) {
       `<button data-font="${id}" style="font-family:${family.replaceAll('"', '&quot;')}">${name}</button>`).join('');
     parts.push(`<details class="font-picker"><summary aria-label="Choose font"><span>Font</span>${icon('chevron', 14)}</summary>
       <div class="font-list panel">${fonts}</div></details>` +
-      '<button class="cbtn" data-act="bold" aria-label="Bold" title="Bold · ⌘/Ctrl+B"><b>B</b></button>' +
-      '<button class="cbtn" data-act="underline" aria-label="Underline" title="Underline · ⌘/Ctrl+U"><u>U</u></button>' +
+      '<button class="cbtn" data-act="bold" aria-label="Bold" title="Bold · ⌘B"><b>B</b></button>' +
+      '<button class="cbtn" data-act="underline" aria-label="Underline" title="Underline · ⌘U"><u>U</u></button>' +
       btn('font-down', 'sizeDown', 'Smaller text') + btn('font-up', 'sizeUp', 'Larger text'));
   }
   const tail: string[] = [];
@@ -108,7 +109,7 @@ function buildCtx(sel: Item[]) {
   }
   tail.push(btn('delete', 'trash', 'Delete · ⌫', 'danger'));
   parts.push(tail.join(''));
-  ctx.innerHTML = parts.join(SEP);
+  ctx.innerHTML = keyLabel(parts.join(SEP));
   textToolSig = '';
 }
 
@@ -205,11 +206,8 @@ export function toggleShortcuts(force?: boolean) {
 // ---------------------------------------------------------------- build
 
 export function buildUI() {
-  // Ctrl-drag pans on Windows and Linux; ⌘-drag on Mac.
-  if (!/Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent)) {
-    document.querySelectorAll('.pan-key').forEach((k) => { k.textContent = 'Ctrl'; });
-    document.querySelectorAll<HTMLElement>('[data-tip*="⌘-drag"]').forEach((b) => { b.dataset.tip = b.dataset.tip!.replace('⌘-drag', 'Ctrl-drag'); });
-  }
+  // ⌘Z, ⌥N… read Ctrl+Z, Alt+N… on Windows and Linux.
+  localizeKeys();
   document.querySelectorAll<HTMLElement>('[data-icon]').forEach((el) => {
     el.insertAdjacentHTML('afterbegin', icon(el.dataset.icon!));
   });
@@ -383,7 +381,7 @@ export function buildUI() {
   });
   $('board-name').addEventListener('dblclick', (e) => { e.stopPropagation(); if (!session.invite) startRename(); });
   window.addEventListener('keydown', (e) => {
-    if (e.altKey && e.code === 'KeyN' && !session.invite && !S.editing) { e.preventDefault(); void newBoard(); }
+    if (e.altKey && !e.ctrlKey && !e.metaKey && e.code === 'KeyN' && !session.invite && !S.editing) { e.preventDefault(); void newBoard(); }
   });
 
   const syncTitle = () => {

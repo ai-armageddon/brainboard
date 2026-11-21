@@ -53,6 +53,8 @@ pm2 save
 
 ## Using the canvas
 
+Shortcuts are written for Mac. On Windows and Linux, `⌘` is `Ctrl` and `⌥` (Option) is `Alt`, and the app shows them that way.
+
 | | |
 |---|---|
 | **Pan** | Scroll or drag with two fingers, hold `⌘` and drag (`Ctrl` on Windows), hold `Space` and drag, or press `H` |
