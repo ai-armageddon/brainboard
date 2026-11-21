@@ -118,7 +118,7 @@ These work all the time, because they don't clash with the regular shortcuts:
 | `gt` · `gT` | Next or previous board |
 | `gv` · `:views` | Open saved views |
 
-Turn on **vim mode** with `:set vim` or **Vim keys** in the menu. It adds the keys that normally pick a tool, so the tools move to commands such as `:pen`, `:note` and `:bubble`.
+Turn on **vim mode** with `:set vim` or **Vim keys** in the menu. Press `p` to select the pen in either mode. For tools whose keys become Vim commands, use commands such as `:note` and `:bubble`.
 
 | | |
 |---|---|
@@ -126,7 +126,7 @@ Turn on **vim mode** with `:set vim` or **Vim keys** in the menu. It adds the ke
 | `H` `J` `K` `L` | Pan the view |
 | `i` · `cc` | Edit text with the cursor at the start, or replace it |
 | `o` · `O` | New connected bubble below or above |
-| `dd` · `p` `P` | Delete (and yank), put after or before the selection |
+| `dd` · `gp` `P` | Delete (and yank), put after or before the selection |
 | `n` · `N` | Next or previous search match |
 
 Some useful commands:

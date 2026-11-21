@@ -3,7 +3,7 @@
 // Always on (none of these clash with the regular shortcuts):
 //   :  /  u  ⌃R  x  yy  w  b  gg  G  a  zz  zi  zo  gt  gT  gv  m{a-z}  '{a-z}
 // Vim mode (`:set vim`, or the menu) adds the keys that would otherwise pick a tool:
-//   h j k l  H J K L  i  o O  p P  n N  dd  cc  s  e
+//   h j k l  H J K L  i  o O  gp P  n N  dd  cc  s  e
 import { replaceItemText } from './text-runs';
 import { S, changed, checkpoint, getItem, redo, requestRender, undo } from './state';
 import { COLORS, type Box, type ColorKey, type Item, type NodeItem, type ShapeKind, type Tool } from './types';
@@ -500,7 +500,7 @@ const COMMANDS: Cmd[] = [
         applyTheme(v);
       } else return fail(`E518: Unknown option: ${opt}`);
     }
-    if (/\b(no|inv)?vim!?\b/.test(a)) message(vimMode ? 'Vim mode on: hjkl, i, o, p, dd…' : 'Vim mode off');
+    if (/\b(no|inv)?vim!?\b/.test(a)) message(vimMode ? 'Vim mode on: hjkl, i, o, gp, dd…' : 'Vim mode off');
   }, complete: (a) => filterPrefix(['vim', 'novim', 'bg=light', 'bg=dark', 'bg=auto'], a) },
   ...TOOL_CMDS.map(([names, tool, desc]): Cmd => ({ names, desc, run: () => {
     if (!canEdit() && tool !== 'select' && tool !== 'hand') return fail('E21: Cannot make changes, board is view-only');
@@ -744,7 +744,7 @@ const VIM: Record<string, Fn> = {
   s: () => editAt('all'), S: () => editAt('all'),
   o: () => { const c = current(); if (c && c.type !== 'edge') createSibling(c.id, 's'); },
   O: () => { const c = current(); if (c && c.type !== 'edge') createSibling(c.id, 'n'); },
-  p: () => put(false), P: () => put(true),
+  P: () => put(true),
   n: () => searchNext(1), N: () => searchNext(-1),
 };
 
@@ -759,6 +759,7 @@ const SEQS: Record<string, Fn> = {
   zo: () => { if (userMovedCamera()) zoomBy(0.8); },
 };
 const VIM_SEQS: Record<string, Fn> = {
+  gp: () => put(false),
   dd: () => { if (canEdit() && yankSelection()) deleteSelection(); },
   cc: () => editAt('all'),
 };
