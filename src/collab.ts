@@ -8,6 +8,7 @@ import {
   type Invite,
 } from './net';
 import { addPasskey, ensureScreenName, openAuth, signOut } from './account';
+import { canModerate, decorateVoice, mute } from './voice';
 import { directorRunning, getFollowMode, observe, setFollowMode, startDirector, stopDirector, type FollowMode } from './director';
 import { animateCam, setTool, stopEditing } from './actions';
 import { toast } from './ui';
@@ -74,6 +75,7 @@ function cursorEl(p: PeerInfo) {
   if (!el) {
     el = document.createElement('div');
     el.className = 'cursor';
+    el.dataset.peer = p.id;
     el.innerHTML = '<svg viewBox="0 0 16 20" width="16" height="20"><path d="M1.5 1.5v14l3.8-3.6 2.6 6 2.4-1-2.6-5.9h5.3z"/></svg><span></span>';
     $('cursors').append(el);
     cursorEls.set(p.id, el);
@@ -138,6 +140,7 @@ function renderAvatars() {
   const pres = $('present-btn');
   pres.hidden = !canEdit() && session.presenter !== session.you?.id;
   pres.classList.toggle('on', !!session.you && session.presenter === session.you.id);
+  decorateVoice();
 }
 
 function renderBanner() {
@@ -210,12 +213,14 @@ function openPeerPop(anchor: HTMLElement, id: string) {
     pop.innerHTML = `
       <div class="pop-person"><span class="avatar" style="--c:${p.color}">${esc(initials(p.name))}</span><div><b>${esc(p.name)}</b><div class="muted">${ROLE_LABEL[p.role]}${session.presenter === p.id ? ' · presenting' : ''}</div></div></div>
       <button class="pop-btn" data-act="follow">${icon('eye', 18)}${following === p.id ? 'Stop following' : 'Follow their view'}</button>
+      ${canModerate() && p.voice && !p.muted ? `<button class="pop-btn" data-act="mute">${icon('micOff', 18)}Mute</button>` : ''}
       ${isOwner() && p.role !== 'owner' ? `<button class="pop-btn danger" data-act="kick">${icon('close', 18)}Remove from board</button>` : ''}`;
     pop.onclick = (e) => {
       const b = (e.target as Element).closest<HTMLElement>('[data-act]');
       if (!b) return;
       if (b.dataset.act === 'follow') follow(following === p.id ? null : p.id);
       if (b.dataset.act === 'kick') { kick(p.id); toast(`Removed ${p.name}`); }
+      if (b.dataset.act === 'mute') { mute(p); toast(`Muted ${p.name}`); }
       pop.hidden = true;
     };
   }
@@ -290,6 +295,8 @@ function renderShare(invites: Invite[], net: { lan: boolean; lanUrls: string[]; 
       <label class="toggle"><input type="checkbox" data-setting="paused" ${session.settings.paused ? 'checked' : ''}/><span><b>Pause editing</b><em>Everyone except you becomes view-only until you turn this off</em></span></label>
       <label class="toggle"><input type="checkbox" data-setting="lockFollow" ${session.settings.lockFollow ? 'checked' : ''}/><span><b>Lock view while presenting</b><em>People can’t wander off while you present</em></span></label>
       <label class="toggle"><input type="checkbox" data-setting="viewerCursors" ${session.settings.viewerCursors ? 'checked' : ''}/><span><b>Show viewers’ cursors</b><em>Turn off for big audiences to keep the board calm</em></span></label>
+      <label class="toggle"><input type="checkbox" data-setting="stage" ${session.settings.stage ? 'checked' : ''}/><span><b>Stage mode for voice</b><em>Only you and the presenter can talk; everyone else listens</em></span></label>
+      ${people.some((x) => x.voice && !x.muted) ? '<button class="link-btn" data-mute-all>Mute everyone in voice</button>' : ''}
     </section>
     <section>
       <h3>Here now <span class="count">${people.length + 1}</span></h3>
@@ -329,6 +336,7 @@ function renderShare(invites: Invite[], net: { lan: boolean; lanUrls: string[]; 
       toast('Permission updated for everyone using this link');
     });
   });
+  body.querySelector('[data-mute-all]')?.addEventListener('click', () => { mute('*'); toast('Muted everyone in voice'); });
   body.querySelectorAll<HTMLInputElement>('[data-setting]').forEach((cb) => {
     cb.addEventListener('change', () => updateSettings({ [cb.dataset.setting!]: cb.checked }));
   });

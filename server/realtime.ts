@@ -24,6 +24,9 @@ interface Client {
   identity: Identity;
   p: Presence;
   alive: boolean;
+  /** voice chat */
+  voice: boolean;
+  selfMuted: boolean;
 }
 interface Room {
   id: string;
@@ -147,10 +150,29 @@ function broadcast(room: Room, m: ServerMsg, except?: Client) {
 const roleOf = (room: Room, c: Client): Role =>
   c.baseRole !== 'owner' && room.settings.paused ? 'viewer' : c.baseRole;
 
+/** Owner and presenter can always talk; in stage mode nobody else can. */
+const canSpeak = (room: Room, c: Client) => !room.settings.stage || c.baseRole === 'owner' || room.presenter === c.id;
+const mutedNow = (room: Room, c: Client) => c.selfMuted || !canSpeak(room, c);
+const moderates = (room: Room, c: Client) => c.baseRole === 'owner' || room.presenter === c.id;
+
 const info = (room: Room, c: Client, withPresence = true): PeerInfo => ({
   id: c.id, name: c.name, color: c.color, role: roleOf(room, c),
+  ...(c.voice ? { voice: true, muted: mutedNow(room, c) } : {}),
   ...(withPresence ? { p: c.p } : {}),
 });
+
+/** Re-announce everyone in voice (after stage mode or the presenter changes who may talk). */
+const announceVoice = (room: Room) => {
+  for (const o of room.clients) if (o.voice) broadcast(room, { t: 'peer', peer: info(room, o, false) });
+};
+
+const validSignal = (d: unknown): boolean => {
+  if (!d || typeof d !== 'object') return false;
+  const s = d as Record<string, unknown>;
+  if ((s.kind === 'offer' || s.kind === 'answer') && typeof s.sdp === 'string') return s.sdp.length < 40_000;
+  if (s.kind === 'ice' && s.candidate && typeof s.candidate === 'object') return JSON.stringify(s.candidate).length < 4_000;
+  return false;
+};
 
 const cleanName = (s: unknown) => String(s ?? '').replace(/\s+/g, ' ').trim().slice(0, 40);
 const cleanColor = (s: unknown) => (typeof s === 'string' && /^#[0-9a-f]{6}$/i.test(s) ? s : null);
@@ -185,6 +207,13 @@ export async function refreshAccess(boardId: string) {
       broadcast(room, { t: 'peer', peer: info(room, c, false) }, c);
     }
   }
+}
+
+/** The board as everyone currently sees it (the open room is newer than the file on disk). */
+export async function liveBoard(id: string): Promise<Board | null> {
+  const p = rooms.get(id);
+  const room = p && (await p);
+  return room ? room.board : null;
 }
 
 export async function liveCounts(): Promise<Record<string, number>> {
@@ -233,19 +262,44 @@ async function handle(room: Room, c: Client, raw: string) {
       if (m.on) room.presenter = c.id;
       else if (room.presenter === c.id) room.presenter = null;
       broadcast(room, { t: 'presenter', id: room.presenter });
+      if (room.settings.stage) announceVoice(room);
       return;
     }
     case 'settings': {
       if (c.baseRole !== 'owner') return;
       const wasPaused = room.settings.paused;
+      const wasStage = room.settings.stage;
       room.settings = await setSettings(room.id, m.s ?? {});
       broadcast(room, { t: 'settings', s: room.settings });
+      if (wasStage !== room.settings.stage) announceVoice(room);
       if (wasPaused !== room.settings.paused) {
         for (const o of room.clients) {
           if (o.baseRole === 'owner') continue;
           send(o, { t: 'role', role: roleOf(room, o) });
           broadcast(room, { t: 'peer', peer: info(room, o, false) }, o);
         }
+      }
+      return;
+    }
+    case 'voice': {
+      c.voice = !!m.on;
+      c.selfMuted = !m.on || !!m.muted;
+      broadcast(room, { t: 'peer', peer: info(room, c, false) });
+      if (c.voice && !m.muted && !canSpeak(room, c)) send(c, { t: 'muted', by: 'stage' });
+      return;
+    }
+    case 'rtc': {
+      if (!c.voice || !validSignal(m.data)) return;
+      for (const o of room.clients) if (o.id === m.to && o.voice) send(o, { t: 'rtc', from: c.id, data: m.data });
+      return;
+    }
+    case 'mute': {
+      if (!moderates(room, c)) return;
+      for (const o of room.clients) {
+        if (o === c || !o.voice || o.selfMuted || (m.id !== '*' && o.id !== m.id)) continue;
+        o.selfMuted = true;
+        send(o, { t: 'muted', by: c.name });
+        broadcast(room, { t: 'peer', peer: info(room, o, false) });
       }
       return;
     }
@@ -275,6 +329,8 @@ async function onConnection(ws: WebSocket, identity: Identity, baseRole: Role, b
     identity,
     p: {},
     alive: true,
+    voice: false,
+    selfMuted: true,
   };
   room.clients.add(c);
   send(c, {

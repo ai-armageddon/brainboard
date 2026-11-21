@@ -1,7 +1,7 @@
 // Server connection: REST helpers + the live socket (item sync, presence, collaboration).
 import { S, getItem, noteLocalChange, pruneSelection, requestRender, resetHistory, setCollector, setSyncScheduler } from './state';
 import type { Item } from './types';
-import type { BoardSettings, ClientMsg, Op, PeerInfo, Presence, Role, ServerMsg } from './protocol';
+import type { BoardSettings, ClientMsg, Op, PeerInfo, Presence, Role, RtcSignal, ServerMsg } from './protocol';
 import { DEFAULT_SETTINGS } from './protocol';
 import { applyOps, diffItems } from './ops';
 
@@ -43,6 +43,8 @@ export const account = {
   hosted: false,
   publicUrl: null as string | null,
   passkeys: false,
+  /** ICE servers for voice chat */
+  ice: [] as RTCIceServer[],
 };
 
 export const canEdit = () => session.role !== 'viewer';
@@ -97,7 +99,7 @@ export const api = {
   revokeInvite: (id: string, token: string) => j<{ ok: true }>('DELETE', `/api/boards/${id}/invites/${token}`),
   net: () => j<{ lan: boolean; lanUrls: string[]; hosted: boolean; publicUrl: string | null }>('GET', '/api/net'),
   me: (board: string) => j<{ role: Role; saved?: boolean; name?: string | null; from?: string | null; board?: string | null }>('GET', `/api/me?board=${encodeURIComponent(board)}`),
-  session: () => j<{ user: Account | null; local: boolean; hosted: boolean; publicUrl: string | null; passkeys: boolean }>('GET', '/api/session'),
+  session: () => j<{ user: Account | null; local: boolean; hosted: boolean; publicUrl: string | null; passkeys: boolean; ice: RTCIceServer[] }>('GET', '/api/session'),
   auth: <T = { user: Account; claimed: number }>(path: string, body?: unknown, method = 'POST') => j<T>(method, `/api/auth/${path}`, body ?? {}),
   async uploadImage(blob: Blob, id?: string): Promise<string> {
     const res = await fetch(`/api/images${id ? `?id=${encodeURIComponent(id)}` : ''}`, {
@@ -286,6 +288,8 @@ function handle(m: ServerMsg) {
       return;
     }
     case 'error': emit('notice', m.msg); return;
+    case 'rtc': emit('rtc', { from: m.from, data: m.data }); return;
+    case 'muted': emit('muted', m.by); return;
   }
 }
 
@@ -337,6 +341,9 @@ function sendPresence(force: boolean) {
 }
 
 export const present = (on: boolean) => sendMsg({ t: 'present', on });
+export const sendVoice = (on: boolean, muted: boolean) => sendMsg({ t: 'voice', on, muted });
+export const sendRtc = (to: string, data: RtcSignal) => sendMsg({ t: 'rtc', to, data });
+export const muteUser = (id: string) => sendMsg({ t: 'mute', id });
 export const updateSettings = (s: Partial<BoardSettings>) => sendMsg({ t: 'settings', s });
 export const kick = (id: string) => sendMsg({ t: 'kick', id });
 

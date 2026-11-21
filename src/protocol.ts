@@ -22,7 +22,16 @@ export interface PeerInfo {
   color: string;
   role: Role;
   p?: Presence;
+  /** in the voice chat */
+  voice?: boolean;
+  /** muted (by themselves, the owner/presenter, or stage mode). Everyone else silences them locally. */
+  muted?: boolean;
 }
+
+/** WebRTC signalling, relayed by the server between two people in the voice chat. */
+export type RtcSignal =
+  | { kind: 'offer' | 'answer'; sdp: string }
+  | { kind: 'ice'; candidate: { candidate: string; sdpMid?: string | null; sdpMLineIndex?: number | null } };
 
 export interface BoardSettings {
   /** Temporarily make every guest read-only. */
@@ -31,8 +40,10 @@ export interface BoardSettings {
   viewerCursors: boolean;
   /** While presenting, followers can't wander off. */
   lockFollow: boolean;
+  /** Voice: only the owner and the presenter can talk. */
+  stage: boolean;
 }
-export const DEFAULT_SETTINGS: BoardSettings = { paused: false, viewerCursors: true, lockFollow: false };
+export const DEFAULT_SETTINGS: BoardSettings = { paused: false, viewerCursors: true, lockFollow: false, stage: false };
 
 export type ClientMsg =
   | { t: 'ops'; ops: Op[]; seq: number }
@@ -40,7 +51,11 @@ export type ClientMsg =
   | { t: 'profile'; name: string; color: string }
   | { t: 'present'; on: boolean }
   | { t: 'settings'; s: Partial<BoardSettings> }
-  | { t: 'kick'; id: string };
+  | { t: 'kick'; id: string }
+  | { t: 'voice'; on: boolean; muted: boolean }
+  | { t: 'rtc'; to: string; data: RtcSignal }
+  /** owner or presenter: mute someone ('*' = everyone else) */
+  | { t: 'mute'; id: string };
 
 export type ServerMsg =
   | {
@@ -62,4 +77,6 @@ export type ServerMsg =
   | { t: 'presenter'; id: string | null }
   | { t: 'settings'; s: BoardSettings }
   | { t: 'role'; role: Role }
-  | { t: 'error'; msg: string };
+  | { t: 'error'; msg: string }
+  | { t: 'rtc'; from: string; data: RtcSignal }
+  | { t: 'muted'; by: string };

@@ -8,7 +8,7 @@ import { S, changed, checkpoint, getItem, redo, requestRender, undo } from './st
 import { COLORS, type Box, type ColorKey, type Item, type NodeItem, type ShapeKind, type Tool } from './types';
 import { hooks, selBounds, textElOf } from './render';
 import {
-  animateCam, canEditText, clearBoard, createSibling, deleteSelection, exportBoard, isNode, isTextual,
+  animateCam, canEditText, clearBoard, createSibling, deleteSelection, isNode, isTextual,
   panIntoView, selectionItems, setColor, setShape, setTool, setZoom, startEditing, zoomBy, zoomToFit,
 } from './actions';
 import { api, canEdit, isOwner, session } from './net';
@@ -16,6 +16,7 @@ import { closePopovers, getTheme, applyTheme, newBoard, openImagePicker, toggleS
 import { follow, userMovedCamera } from './collab';
 import { openBoard } from './boards';
 import { saveCommand } from './account';
+import { openExport } from './export';
 import { pointerWorld, putClip, yank, clipBounds } from './input';
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
@@ -536,7 +537,7 @@ const COMMANDS: Cmd[] = [
     if (!p) return fail(`Nobody called ${a} is here`);
     follow(p.id);
   }, complete: (a) => filterPrefix(peerNames(), a) },
-  { names: ['export', 'exp'], desc: 'Download this board as JSON', run: () => exportBoard() },
+  { names: ['export', 'exp'], desc: 'Export as PNG, PDF, SVG, Markdown or a brainboard file', run: () => openExport() },
   { names: ['import', 'r', 'read'], desc: 'Import a board file', run: () => { if (ownerOnly()) $('file-board').click(); } },
   { names: ['clear', '%d', '%delete'], desc: 'Clear the board (undoable)', run: () => clearBoard() },
   { names: ['undo', 'u', 'un'], desc: 'Undo', run: () => undo() },

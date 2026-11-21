@@ -12,6 +12,7 @@ import { closePopovers, openImagePicker, toggleShortcuts } from './ui';
 import { canEdit } from './net';
 import { userMovedCamera } from './collab';
 import { vimKey } from './vim';
+import { openExport } from './export';
 
 type Drag =
   | { kind: 'pan'; lx: number; ly: number }
@@ -438,6 +439,7 @@ function onKeyDown(e: KeyboardEvent) {
   if (mod) {
     const k = e.key.toLowerCase();
     if (ro && ['z', 'y', 'd', 'x'].includes(k)) { e.preventDefault(); return; }
+    if (k === 'e' && e.shiftKey) { e.preventDefault(); openExport(); return; }
     if (k === 'r' && e.ctrlKey && !e.metaKey && !e.shiftKey) { e.preventDefault(); if (!ro) redo(); return; } // vim redo
     if (['=', '+', '-', '0'].includes(k) && !userMovedCamera()) { e.preventDefault(); return; }
     switch (k) {

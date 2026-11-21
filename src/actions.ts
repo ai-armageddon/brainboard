@@ -1,7 +1,7 @@
 import { S, changed, checkpoint, getItem, requestRender, scheduleSave } from './state';
 import type { Box, Camera, ColorKey, EdgeItem, Item, NodeItem, ShapeKind, TextualItem, Tool } from './types';
 import { applyCamera, render, textElOf, viewport } from './render';
-import { api, canEdit, imageUrl, session } from './net';
+import { api, canEdit } from './net';
 import { clamp, intersects, unionBox } from './geometry';
 import { toast, updateToolUI } from './ui';
 
@@ -405,32 +405,6 @@ export function zoomToFit() {
 }
 
 // ---------------------------------------------------------------- board files
-
-function blobToDataUrl(b: Blob): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const r = new FileReader();
-    r.onload = () => resolve(String(r.result));
-    r.onerror = () => reject(r.error);
-    r.readAsDataURL(b);
-  });
-}
-
-export async function exportBoard() {
-  stopEditing();
-  const blobs: Record<string, string> = {};
-  for (const it of S.items) {
-    if (it.type !== 'image' || blobs[it.blob]) continue;
-    const res = await fetch(imageUrl(it.blob));
-    if (res.ok) blobs[it.blob] = await blobToDataUrl(await res.blob());
-  }
-  const data = { app: 'brainboard', version: 1, name: session.boardName, items: S.items, blobs };
-  const a = document.createElement('a');
-  a.href = URL.createObjectURL(new Blob([JSON.stringify(data)], { type: 'application/json' }));
-  a.download = `${(session.boardName || 'brainboard').replace(/[^\w\- ]+/g, '').trim() || 'brainboard'}.json`;
-  a.click();
-  setTimeout(() => URL.revokeObjectURL(a.href), 5000);
-  toast('Board exported');
-}
 
 /** Import an exported .json as a new board (never overwrites the current one). */
 export async function importBoard(file: File) {

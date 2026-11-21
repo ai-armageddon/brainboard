@@ -3,7 +3,7 @@ import { S, canRedo, canUndo, checkpoint, redo, requestRender, undo } from './st
 import { hooks, selBounds, viewport } from './render';
 import { COLORS, SHAPES, type ColorKey, type Item, type ShapeKind, type Tool } from './types';
 import {
-  addImages, bumpFont, canEditText, clearBoard, deleteSelection, duplicateSelection, exportBoard,
+  addImages, bumpFont, canEditText, clearBoard, deleteSelection, duplicateSelection,
   importBoard, reorder, setColor, setShape, setTool, setZoom, startEditing, viewCenter, zoomBy, zoomToFit,
 } from './actions';
 import { clamp } from './geometry';
@@ -14,6 +14,7 @@ import { userMovedCamera } from './collab';
 import { isVimMode, setVimMode } from './vim';
 import { startTour } from './tour';
 import { openAuth, signOut } from './account';
+import { openExport } from './export';
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
 
@@ -207,7 +208,7 @@ export function buildUI() {
     if (act !== 'theme' && act !== 'vim') closePopovers();
     switch (act) {
       case 'fit': if (userMovedCamera()) zoomToFit(); break;
-      case 'export': void exportBoard(); break;
+      case 'export': openExport(); break;
       case 'import': fileBoard.click(); break;
       case 'theme': {
         const order: Theme[] = ['auto', 'light', 'dark'];

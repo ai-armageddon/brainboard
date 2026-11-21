@@ -13,13 +13,14 @@ import {
   createInvite, findInvite, getOwner, getSharing, revokeInvite, setOwner, tokenBoards, transferOwnership, updateInvite,
   type InviteRole,
 } from './sharing.ts';
-import { liveCounts, refreshAccess } from './realtime.ts';
+import { liveBoard, liveCounts, refreshAccess } from './realtime.ts';
+import { EXPORT_TYPES, exportBoard, type ExportFormat } from './export.ts';
 import {
   checkPassword, cleanEmail, cleanName, createSession, createUser, endSession, getUser, limited, publicUser, updateUser, userByEmail,
   validEmail, type User,
 } from './accounts.ts';
 import { authenticationOptions, authenticationVerify, registrationOptions, registrationVerify, relyingParty } from './passkeys.ts';
-import { HOSTED, PUBLIC_URL } from './config.ts';
+import { HOSTED, ICE_SERVERS, PUBLIC_URL } from './config.ts';
 
 const MAX_BODY = 30 * 1024 * 1024;
 
@@ -91,6 +92,7 @@ export async function handleApi(req: IncomingMessage, res: ServerResponse): Prom
         hosted: HOSTED,
         publicUrl: PUBLIC_URL,
         passkeys: !!relyingParty(req),
+        ice: ICE_SERVERS,
       }), true;
     }
     if (parts[0] === 'auth') return await handleAuth(req, res, parts.slice(1), method, p), true;
@@ -141,6 +143,34 @@ export async function handleApi(req: IncomingMessage, res: ServerResponse): Prom
 
     if (parts[0] === 'net' && method === 'GET') {
       return send(res, 200, { lan: network.lan, lanUrls: network.lan ? lanUrls(req) : [], hosted: HOSTED, publicUrl: PUBLIC_URL }), true;
+    }
+
+    // ---- export: anyone who can open the board (owner or invite holder)
+    if (parts[0] === 'boards' && parts[2] === 'export' && method === 'GET') {
+      const id = parts[1];
+      const token = inviteToken(req, url);
+      if (!isValidId(id) || !((await owns(p, id)) || (token && (await findInvite(id, token))))) return send(res, 403, { error: 'forbidden' }), true;
+      const b = (await liveBoard(id)) ?? (await readBoard(id));
+      if (!b) return send(res, 404, { error: 'not found' }), true;
+      const format = url.searchParams.get('format') as ExportFormat;
+      if (!(format in EXPORT_TYPES)) return send(res, 400, { error: 'unknown format' }), true;
+      const q = url.searchParams;
+      const out = await exportBoard(b, format, {
+        ids: q.get('ids')?.split(',').filter(isValidId),
+        theme: q.get('theme') === 'dark' ? 'dark' : 'light',
+        background: q.get('bg') !== '0',
+        scale: Number(q.get('scale')) || 2,
+        max: Number(q.get('max')) || undefined,
+      });
+      if (out === null) return send(res, 422, { error: 'Nothing to export yet' }), true;
+      const name = `${(b.name || 'brainboard').replace(/[\\/:*?"<>|]+/g, '').trim() || 'brainboard'}.${EXPORT_TYPES[format].ext}`;
+      res.writeHead(200, {
+        'content-type': EXPORT_TYPES[format].mime,
+        'content-disposition': `attachment; filename="${name.replace(/[^\x20-\x7e]/g, '_').replace(/"/g, '')}"; filename*=UTF-8''${encodeURIComponent(name)}`,
+        'cache-control': 'no-store',
+      });
+      res.end(out);
+      return true;
     }
 
     if (parts[0] === 'boards') {

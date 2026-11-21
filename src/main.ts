@@ -4,6 +4,7 @@ import './style.css';
 import { paintLogos } from './brand';
 import { initVim } from './vim';
 import { initAccount } from './account';
+import { initVoice } from './voice';
 import { startTour, tourSeen } from './tour';
 import { loadPrefs, requestRender } from './state';
 import { applyCamera, render } from './render';
@@ -44,6 +45,7 @@ async function main() {
   initCollab();
   initVim();
   initAccount();
+  initVoice();
   initInput();
   updateToolUI();
   applyCamera();

@@ -1,20 +1,23 @@
 # brainboard
 
+[![Brainboard: think it through, together. An infinite whiteboard for notes, images, sketches and flow charts, live with your team and your agents.](public/og.png)](https://brainboard.ink)
+
 A minimal, near-infinite whiteboard for notes, images, sketches and flow charts. Invite people to edit with you in real time, drive it from the keyboard with vim keys, and let AI agents read and edit your boards over MCP.
 
 Live at **[brainboard.ink](https://brainboard.ink)**, or run your own: boards are plain JSON files on the server's disk.
-
-![A brainboard with a flow chart, notes, images and two collaborators](docs/screenshots/board-dark.png)
 
 ## Features
 
 - **Infinite canvas.** Pan and zoom freely. Paste or drop images, write sticky notes and text, and sketch with a pen.
 - **Flow charts.** Bubbles, boxes, pills and decisions with curved, labelled connectors. Press `Tab` to grow the next step.
-- **Live collaboration.** Invite links that can edit or only view. Everyone's cursor, selection and typing shows up live, and you can follow someone or present to the room.
+- **Live collaboration.** Invite links that can edit or only view. Everyone's cursor, selection and typing shows up live. Talk over built-in voice chat, follow someone, or present to the room.
 - **Vim keys.** A `:` command line with completion, `/` search, find and replace, and an optional vim mode with `hjkl` navigation.
 - **Agent friendly.** A built-in MCP server lets Claude, Cursor and other agents list, read, render and edit boards. Their edits appear live in your tab.
 - **No sign-up wall.** Start drawing straight away. Create an account (with a passkey, or email and password) when you want to keep your boards and open them anywhere.
-- **Yours.** Self-host it in one command. Light and dark themes, per-user undo, and JSON export.
+- **Export anywhere.** PNG, PDF, SVG, a Markdown outline, or a full brainboard file, saved wherever you choose.
+- **Yours.** Self-host it in one command. Light and dark themes and per-user undo.
+
+![A brainboard with a flow chart, notes, images and two collaborators](docs/screenshots/board-dark.png)
 
 ## Quick start
 
@@ -39,6 +42,13 @@ Open http://localhost:5317. A short tour walks you through the basics the first 
 
 Boards are saved in `~/.brainboard/`, with images next to them. Set `BRAINBOARD_DIR` to use another folder. Deleted boards go to `~/.brainboard/trash/`.
 
+To keep the dev server running in the background and across restarts, run it under [pm2](https://pm2.keymetrics.io):
+
+```sh
+pm2 start node_modules/.bin/vite --name brainboard-dev
+pm2 save
+```
+
 ## Using the canvas
 
 | | |
@@ -52,6 +62,7 @@ Boards are saved in `~/.brainboard/`, with images next to them. Set `BRAINBOARD_
 | | Drag a shape's dot onto another shape to connect them, or onto empty space to grow a new bubble. `Tab` adds a connected bubble to the right, even while you type. |
 | **Organise** | `⌘D` duplicate · `]` / `[` bring to front or send to back · `⌫` delete |
 | **Boards** | Open the menu at the top left · `⌥N` new board · double-click the board name to rename it |
+| **Export** | `⇧⌘E`, or **Export…** in the menu: PNG (1–3×, transparent if you like), PDF, SVG, a Markdown outline of the text and flow, or a brainboard file you can import again. Pick the whole board or just the selection, and a light or dark theme. **Save as…** lets you choose the folder and file name in Chrome, Edge and Opera. Other browsers save to Downloads |
 | **Undo** | `⌘Z` / `⇧⌘Z` undo only *your* changes, never anyone else's |
 
 Press `?` in the app for every shortcut.
@@ -76,6 +87,7 @@ Click **Share** to create invite links. Each link either **can edit** or **can v
 
 - **Presence.** Everyone's cursor, selection and "typing" marker appear in their colour. Click an avatar to follow that person's view.
 - **Present.** Everyone follows your view while you walk through the board. You can lock the view so nobody wanders off.
+- **Voice chat.** Click the headphones to join. Audio goes directly between browsers. Avatars light up and cursors show sound bars while someone talks. The board owner and the presenter can mute anyone, mute everyone, or turn on **Stage mode** in Share so only they can talk. Mutes apply on every listener's side, not just the muted person's. Peer-to-peer audio suits small groups of up to about 8 people.
 - **Cinematic follow.** Followers get a calm camera by default. Instead of mirroring every twitch, it frames what the presenter is working on: the note they're typing in, what they just selected, or the item their cursor rests on. It holds still while that's already in view, eases over when it isn't, and flies across the board for long jumps. Switch to **Exact** in the follow banner to mirror their screen instead.
 - **Session controls.** *Pause editing* makes everyone else view-only. *Show viewers' cursors* can be turned off for big audiences. Each person has a **Remove** button.
 - **Reaching people.** On brainboard.ink, links just work. When you run it yourself, `npm run dev` and `npm start` listen only on your computer. For people on the same Wi-Fi, run `npm run share` and the Share dialog picks your network address. For anyone else, run `npm start` behind a tunnel, for example `cloudflared tunnel --url http://localhost:5317`, and paste the tunnel's address into **Link address**.
@@ -167,6 +179,7 @@ npm run prod   # builds, then serves on $PORT (default 5317) with BRAINBOARD_PUB
 | `PORT` | `5317` | Port to listen on |
 | `HOST` | `0.0.0.0` when hosted | Interface to listen on |
 | `BRAINBOARD_DIR` | `~/.brainboard` | Boards, images, accounts and sessions. Back this up |
+| `BRAINBOARD_ICE_SERVERS` | Google's public STUN server | JSON list of WebRTC ICE servers for voice chat. Add a TURN server (for example coturn) so voice works on strict corporate networks |
 
 Put it behind HTTPS. A reverse proxy must forward WebSockets and keep the original `Host` header. With [Caddy](https://caddyserver.com):
 
@@ -177,6 +190,18 @@ brainboard.ink {
 ```
 
 Passkeys only work on the real domain (and on `localhost` in development), not on raw IP addresses. Email sign-in works everywhere.
+
+### Link previews
+
+`index.html` carries Open Graph, X (Twitter) and JSON-LD tags, so a pasted brainboard.ink link unfurls with the card at the top of this README in Slack, iMessage, Discord, LinkedIn and X. The tags point at `https://brainboard.ink`; if you host it on another domain, change the `canonical`, `og:url`, `og:image` and `twitter:image` addresses to yours.
+
+The card (`public/og.png`, 1200×630) is a web page, `scripts/og.html`, drawn with the app's own fonts and colours. Edit it, then redraw the PNG with headless Chrome:
+
+```sh
+node scripts/og.ts   # set CHROME=/path/to/chrome if it isn't in the default macOS location
+```
+
+App icons and the favicon come from the brand mark in `src/brand.ts`: `node scripts/icons.ts` regenerates them.
 
 ## How it works
 
@@ -190,7 +215,9 @@ Passkeys only work on the real domain (and on `localhost` in development), not o
 | `src/render.ts` · `src/input.ts` · `src/actions.ts` · `src/ui.ts` | Canvas, input, operations, interface |
 | `src/collab.ts` · `src/vim.ts` · `src/tour.ts` | Presence, follow and sharing · vim keys · first-run tour |
 | `src/account.ts` | Sign-in sheet, save reminders, screen names |
+| `src/voice.ts` · `src/director.ts` | Voice chat (WebRTC) · cinematic follow camera |
 | `server/store.ts` · `server/api.ts` · `server/realtime.ts` | Board and image files · HTTP API · live rooms |
 | `server/mcp.ts` · `server/agent.ts` · `server/render.ts` | MCP server · outlines and auto-layout · PNG rendering |
 | `server/auth.ts` · `server/sharing.ts` | Who is asking (account, anonymous browser, guest) · board owners and invite links |
 | `server/accounts.ts` · `server/passkeys.ts` · `server/config.ts` | Accounts, passwords and sessions · passkeys (WebAuthn) · hosted vs local mode |
+| `scripts/og.ts` · `scripts/icons.ts` | Social share card · app icons and favicon |
