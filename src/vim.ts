@@ -4,6 +4,7 @@
 //   :  /  u  ⌃R  x  yy  w  b  gg  G  a  zz  zi  zo  gt  gT  m{a-z}  '{a-z}
 // Vim mode (`:set vim`, or the menu) adds the keys that would otherwise pick a tool:
 //   h j k l  H J K L  i  o O  p P  n N  dd  cc  s  e
+import { replaceItemText } from './text-runs';
 import { S, changed, checkpoint, getItem, redo, requestRender, undo } from './state';
 import { COLORS, type Box, type ColorKey, type Item, type NodeItem, type ShapeKind, type Tool } from './types';
 import { hooks, selBounds, textElOf } from './render';
@@ -356,8 +357,7 @@ function substitute(whole: boolean, body: string) {
     const after = before.replace(re, replacement);
     if (after === before) continue;
     if (!began) { checkpoint(); began = true; }
-    if (it.type === 'edge') it.label = after;
-    else if (isTextual(it)) it.text = after;
+    if (canEditText(it)) replaceItemText(it, after);
     subs += flags.includes('g') ? found : 1;
     items++;
   }

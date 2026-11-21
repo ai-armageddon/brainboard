@@ -809,6 +809,9 @@ body:not(.ready) .panel { opacity: 0; }
 #ctxbar {
   position: fixed;
   touch-action: manipulation;
+  width: max-content;
+  max-width: calc(100vw - 24px);
+  flex-wrap: wrap;
   left: 0;
   top: 0;
   display: flex;
@@ -821,6 +824,22 @@ body:not(.ready) .panel { opacity: 0; }
   transition: opacity 0.12s;
   border-radius: var(--r);
 }
+.font-picker { position: relative; }
+@media (max-width: 760px) { .font-picker { position: static; } }
+.font-picker summary {
+  display: flex; align-items: center; justify-content: space-between; gap: 3px;
+  width: 94px; height: 32px; padding: 0 6px; border-radius: var(--r-sm);
+  font-size: 12px; cursor: pointer; list-style: none;
+}
+.font-picker summary::-webkit-details-marker { display: none; }
+.font-picker summary:hover, .font-list button:hover, .font-list button[aria-pressed="true"] { background: var(--hover); }
+.font-list {
+  position: absolute; top: calc(100% + 4px); left: 0; z-index: 1;
+  display: grid; width: max-content; grid-template-columns: repeat(2, 1fr); padding: 4px;
+  border-radius: var(--r); background: var(--panel-solid); max-height: 40vh; overflow: auto;
+}
+#ctxbar.fonts-above .font-list { top: auto; bottom: calc(100% + 4px); }
+.font-list button { text-align: left; padding: 7px 10px; font-size: 15px; color: var(--fg); background: none; border: 0; border-radius: var(--r-sm); cursor: pointer; }
 #ctxbar.show { opacity: 1; pointer-events: auto; }
 @media (prefers-reduced-motion: no-preference) {
   #ctxbar.glide { transition: opacity 0.12s, transform 0.18s ease-out; }
@@ -870,6 +889,8 @@ body.busy #ctxbar { opacity: 0; pointer-events: none; transition: none; }
 
 /* pen bar */
 #penbar {
+  width: max-content;
+  touch-action: manipulation;
   position: fixed;
   left: 50%;
   bottom: 74px;
@@ -880,6 +901,14 @@ body.busy #ctxbar { opacity: 0; pointer-events: none; transition: none; }
   z-index: 20;
   border-radius: var(--r);
   animation: rise 0.14s ease-out;
+}
+#pen-presets, .pen-stepper { display: flex; align-items: center; }
+#pen-size { min-width: 5ch; text-align: center; white-space: nowrap; font: 12px var(--mono); }
+.pen-stepper button:disabled { opacity: 0.35; cursor: default; }
+@media (max-width: 500px) {
+  #penbar { flex-wrap: wrap; justify-content: center; width: 280px; }
+  #penbar > .swatches { flex-basis: 100%; justify-content: center; }
+  #penbar > .swatches + .sep { display: none; }
 }
 #penbar[hidden] { display: none; }
 #penbar .sw::after { background: var(--s); box-shadow: none; }

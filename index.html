@@ -204,7 +204,17 @@
     </div>
     <div id="modeline" role="status" aria-live="polite" hidden></div>
 
-    <div id="penbar" class="panel" hidden></div>
+    <div id="penbar" class="panel" hidden>
+      <div id="pen-colors" class="swatches"></div>
+      <span class="sep"></span>
+      <div id="pen-presets"></div>
+      <span class="sep"></span>
+      <div class="pen-stepper">
+        <button class="size" data-step="-1" data-icon="minus" aria-label="Decrease pen size" title="Decrease pen size · ["></button>
+        <output id="pen-size" aria-label="Pen size"></output>
+        <button class="size" data-step="1" data-icon="plus" aria-label="Increase pen size" title="Increase pen size · ]"></button>
+      </div>
+    </div>
     <div id="ctxbar" class="panel"></div>
 
     <div id="undobar" class="panel">
@@ -232,6 +242,7 @@
               <dt>Select</dt><dd><kbd>V</kbd></dd>
               <dt>Pan</dt><dd><kbd>H</kbd>, hold <kbd>Space</kbd>, or <kbd class="pan-key">⌘</kbd>-drag</dd>
               <dt>Pen / Eraser</dt><dd><kbd>P</kbd> <kbd>E</kbd></dd>
+              <dt>Pen size − / + 1 px</dt><dd><kbd>[</kbd> <kbd>]</kbd></dd>
               <dt>Sticky note / Text</dt><dd><kbd>N</kbd> <kbd>T</kbd></dd>
               <dt>Bubble / Box / Decision</dt><dd><kbd>O</kbd> <kbd>R</kbd> <kbd>D</kbd></dd>
               <dt>Connector</dt><dd><kbd>C</kbd></dd>
@@ -253,6 +264,7 @@
             <dl>
               <dt>Write anywhere</dt><dd>Double-click</dd>
               <dt>Edit selected</dt><dd><kbd>Enter</kbd></dd>
+              <dt>Bold / Underline</dt><dd><kbd>⌘/Ctrl B</kbd> <kbd>⌘/Ctrl U</kbd></dd>
               <dt>Finish editing</dt><dd><kbd>Esc</kbd></dd>
               <dt>Add connected bubble</dt><dd><kbd>Tab</kbd> (<kbd>⇧Tab</kbd> below)</dd>
               <dt>Duplicate</dt><dd><kbd>⌘D</kbd> or <kbd>⌥</kbd>-drag</dd>

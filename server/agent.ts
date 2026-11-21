@@ -1,4 +1,5 @@
 // Agent-friendly operations on a board: readable outlines, batch creation with auto-layout, edits.
+import { replaceItemText } from '../src/text-runs.ts';
 import type { Box, ColorKey, EdgeItem, Item, NodeItem, ShapeKind, TextualItem } from '../src/types.ts';
 import { COLORS } from '../src/types.ts';
 import { intersects, unionBox } from '../src/geometry.ts';
@@ -374,7 +375,7 @@ export function addItems(board: Board, specs: AddSpec[], direction: 'right' | 'd
   for (const e of edges) {
     const dup = board.items.find((i) => isEdge(i) && i.from === e.from && i.to === e.to) as EdgeItem | undefined;
     if (dup) {
-      if (e.spec.label !== undefined) dup.label = e.spec.label;
+      if (e.spec.label !== undefined) replaceItemText(dup, e.spec.label);
       result.push({ ref: e.spec.ref, id: dup.id, type: 'connection', summary: 'connection already existed' + (e.spec.label !== undefined ? ' (label updated)' : '') });
       continue;
     }
@@ -428,9 +429,9 @@ export function updateItems(board: Board, updates: UpdateSpec[]): string[] {
     const changes: string[] = [];
     if (it.type === 'edge') {
       const label = u.label ?? u.text;
-      if (label !== undefined) { it.label = label; changes.push('label'); }
+      if (label !== undefined) { replaceItemText(it, label); changes.push('label'); }
     } else {
-      if (u.text !== undefined && isTextual(it)) { it.text = u.text; changes.push('text'); }
+      if (u.text !== undefined && isTextual(it)) { replaceItemText(it, u.text); changes.push('text'); }
       if (u.shape && it.type === 'shape') { it.shape = normShape(u.shape); changes.push('shape'); }
       if (u.x !== undefined) it.x = u.x;
       if (u.y !== undefined) it.y = u.y;

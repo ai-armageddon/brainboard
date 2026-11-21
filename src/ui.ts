@@ -1,9 +1,9 @@
 import { icon } from './icons';
-import { S, canRedo, canUndo, checkpoint, redo, requestRender, undo } from './state';
+import { S, canRedo, canUndo, checkpoint, getItem, redo, requestRender, savePrefs, undo } from './state';
 import { hooks, selBounds, viewport } from './render';
-import { COLORS, SHAPES, type ColorKey, type Item, type ShapeKind, type Tool } from './types';
+import { COLORS, FONTS, SHAPES, type FontKey, type ColorKey, type Item, type ShapeKind, type Tool } from './types';
 import {
-  addImages, bumpFont, canEditText, clearBoard, deleteSelection, duplicateSelection,
+  addImages, bumpFont, canEditText, currentTextStyle, formatSelection, clearBoard, deleteSelection, duplicateSelection,
   importBoard, reorder, setColor, setShape, setTool, setZoom, startEditing, viewCenter, zoomBy, zoomToFit,
 } from './actions';
 import { clamp } from './geometry';
@@ -46,15 +46,23 @@ export function updateToolUI() {
     b.classList.toggle('active', b.dataset.tool === S.tool);
   });
   penbar.hidden = S.tool !== 'pen';
-  if (!penbar.hidden) buildPenbar();
+  if (!penbar.hidden) updatePenSize();
 }
 
-function buildPenbar() {
-  const sizes = [2, 4, 8, 16];
-  penbar.innerHTML =
-    `<div class="swatches">${COLORS.map((c) => swatch(c, c === S.pen.color)).join('')}</div>` +
-    `<span class="sep"></span>` +
-    sizes.map((s) => `<button class="size ${s === S.pen.size ? 'on' : ''}" data-size="${s}" aria-label="Pen size ${s}"><i style="width:${Math.max(3, s)}px;height:${Math.max(3, s)}px"></i></button>`).join('');
+export function setPenSize(size: number) {
+  S.pen.size = Math.max(1, Math.round(size));
+  updatePenSize();
+  savePrefs();
+}
+
+function updatePenSize() {
+  $('pen-size').textContent = `${S.pen.size} px`;
+  penbar.querySelector<HTMLButtonElement>('[data-step="-1"]')!.disabled = S.pen.size <= 1;
+  for (const b of penbar.querySelectorAll<HTMLElement>('[data-size]')) {
+    const on = Number(b.dataset.size) === S.pen.size;
+    b.classList.toggle('on', on);
+    b.setAttribute('aria-pressed', String(on));
+  }
 }
 
 export const openImagePicker = () => fileImages.click();
@@ -68,6 +76,7 @@ const btn = (act: string, ic: string, tip: string, extra = '') =>
 const SEP = '<span class="sep"></span>';
 
 let ctxSig = '';
+let textToolSig = '';
 let sizingText = false;
 
 function buildCtx(sel: Item[]) {
@@ -82,8 +91,14 @@ function buildCtx(sel: Item[]) {
     const names: Record<ShapeKind, string> = { ellipse: 'Bubble', pill: 'Pill', rect: 'Box', diamond: 'Decision' };
     parts.push(SHAPES.map((k) => `<button class="cbtn ${kinds.size === 1 && kinds.has(k) ? 'on' : ''}" data-shape="${k}" data-tip="${names[k]}" aria-label="${names[k]}">${icon(k, 18)}</button>`).join(''));
   }
-  if (sel.some((i) => 'fs' in i)) {
-    parts.push(btn('font-down', 'sizeDown', 'Smaller text') + btn('font-up', 'sizeUp', 'Larger text'));
+  if (sel.some(canEditText)) {
+    const fonts = Object.entries(FONTS).map(([id, [name, family]]) =>
+      `<button data-font="${id}" style="font-family:${family.replaceAll('"', '&quot;')}">${name}</button>`).join('');
+    parts.push(`<details class="font-picker"><summary aria-label="Choose font"><span>Font</span>${icon('chevron', 14)}</summary>
+      <div class="font-list panel">${fonts}</div></details>` +
+      '<button class="cbtn" data-act="bold" aria-label="Bold" title="Bold · ⌘/Ctrl+B"><b>B</b></button>' +
+      '<button class="cbtn" data-act="underline" aria-label="Underline" title="Underline · ⌘/Ctrl+U"><u>U</u></button>' +
+      btn('font-down', 'sizeDown', 'Smaller text') + btn('font-up', 'sizeUp', 'Larger text'));
   }
   const tail: string[] = [];
   if (sel.length === 1 && canEditText(sel[0])) tail.push(btn('edit', 'type', sel[0].type === 'edge' ? 'Label · Enter' : 'Edit text · Enter'));
@@ -93,6 +108,23 @@ function buildCtx(sel: Item[]) {
   tail.push(btn('delete', 'trash', 'Delete · ⌫', 'danger'));
   parts.push(tail.join(''));
   ctx.innerHTML = parts.join(SEP);
+  textToolSig = '';
+}
+
+function updateTextTools(sel: Item[]) {
+  const items = sel.filter(canEditText);
+  if (!items.length) return;
+  const style = currentTextStyle(items);
+  const sig = `${style.bold}|${style.underline}|${style.font}`;
+  if (sig === textToolSig) return;
+  textToolSig = sig;
+  for (const key of ['bold', 'underline'] as const) {
+    const b = ctx.querySelector<HTMLElement>(`[data-act="${key}"]`)!;
+    b.classList.toggle('on', style[key]);
+    b.setAttribute('aria-pressed', String(style[key]));
+  }
+  ctx.querySelector('.font-picker summary span')!.textContent = style.font ? FONTS[style.font]?.[0] ?? 'Font' : 'Font';
+  for (const b of ctx.querySelectorAll<HTMLElement>('[data-font]')) b.setAttribute('aria-pressed', String(b.dataset.font === style.font));
 }
 
 function updateCtxBar() {
@@ -108,6 +140,7 @@ function updateCtxBar() {
     sizingText = false;
     buildCtx(sel);
   }
+  updateTextTools(sel);
   const wasVisible = ctx.classList.contains('show');
   ctx.classList.add('show');
   if (!sizingText) positionCtxBar(wasVisible);
@@ -139,6 +172,7 @@ function positionCtxBar(glide: boolean) {
   let top = T - h - 18;
   if (top < 64) top = B + 18;
   top = clamp(top, 64, Math.max(64, innerHeight - h - 84));
+  ctx.classList.toggle('fonts-above', top + h + 210 > innerHeight && top > innerHeight / 2);
   ctx.style.transform = `translate(${Math.round(left)}px,${Math.round(top)}px)`;
 }
 
@@ -183,14 +217,29 @@ export function buildUI() {
     else if (b.id === 'img-btn') openImagePicker();
   });
 
+  const penColors = $('pen-colors');
+  const showPenColors = () => { penColors.innerHTML = COLORS.map((c) => swatch(c, c === S.pen.color)).join(''); };
+  showPenColors();
+  $('pen-presets').innerHTML = [2, 4, 8, 16].map((s) =>
+    `<button class="size" data-size="${s}" aria-label="Pen size ${s}" title="${s} px"><i style="width:${s}px;height:${s}px"></i></button>`).join('');
   penbar.addEventListener('click', (e) => {
     const b = (e.target as Element).closest<HTMLElement>('button');
     if (!b) return;
-    if (b.dataset.color) S.pen.color = b.dataset.color as ColorKey;
-    if (b.dataset.size) S.pen.size = Number(b.dataset.size);
-    buildPenbar();
+    if (b.dataset.size) setPenSize(Number(b.dataset.size));
+    else if (b.dataset.step) setPenSize(S.pen.size + Number(b.dataset.step));
+    else if (b.dataset.color) {
+      S.pen.color = b.dataset.color as ColorKey;
+      showPenColors();
+      savePrefs();
+    }
   });
 
+  document.addEventListener('selectionchange', () => {
+    if (S.editing && ctx.classList.contains('show')) {
+      const it = getItem(S.editing);
+      if (it && ctx.querySelector('.font-picker')) updateTextTools([it]);
+    }
+  });
   ctx.addEventListener('pointerdown', (e) => {
     e.preventDefault(); // keep text focus while styling
     if ((e.target as Element).closest('[data-act="font-down"], [data-act="font-up"]')) beginTextSizing();
@@ -205,9 +254,15 @@ export function buildUI() {
   ctx.addEventListener('click', (e) => {
     const b = (e.target as Element).closest<HTMLElement>('button');
     if (!b) return;
+    if (b.dataset.font && Object.hasOwn(FONTS, b.dataset.font)) {
+      formatSelection('font', b.dataset.font as FontKey);
+      ctx.querySelector<HTMLDetailsElement>('.font-picker')!.open = false;
+      return;
+    }
     if (b.dataset.color) return setColor(b.dataset.color as ColorKey);
     if (b.dataset.shape) return setShape(b.dataset.shape as ShapeKind);
     switch (b.dataset.act) {
+      case 'bold': case 'underline': return formatSelection(b.dataset.act);
       case 'font-down':
       case 'font-up':
         beginTextSizing();
@@ -261,6 +316,8 @@ export function buildUI() {
   window.addEventListener('pointerdown', (e) => {
     const t = e.target as Element;
     if (!ctx.contains(t)) finishTextSizing();
+    const picker = ctx.querySelector<HTMLDetailsElement>('.font-picker[open]');
+    if (picker && !picker.contains(t)) picker.open = false;
     if (!menu.hidden && !t.closest('#menu, #menu-btn')) closePopovers();
   });
 

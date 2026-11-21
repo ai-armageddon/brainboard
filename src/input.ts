@@ -2,13 +2,13 @@ import { S, changed, checkpoint, getItem, redo, requestRender, undo } from './st
 import type { Box, Item, NodeItem, StrokeItem, Tool } from './types';
 import { applyCamera, live, marquee, nodeElOf, viewport } from './render';
 import {
-  addImages, canEditText, createNode, createSibling, defaultSize, deleteSelection, duplicateSelection,
+  addImages, canEditText, createNode, createSibling, formatSelection, defaultSize, deleteSelection, duplicateSelection,
   importBoard, isNode, isTextual, liveText, makeEdge, nudge, pasteItems, reorder, screenToWorld, selectAll,
   selectionItems, setTool, siblingOf, startEditing, stopCamAnim, stopEditing, uid, zoomAt, zoomBy,
   zoomToFit, setZoom, type Side,
 } from './actions';
 import { clamp, contains, distToSeg, edgeGeom, strokePath, unionBox } from './geometry';
-import { closePopovers, openImagePicker, toggleShortcuts } from './ui';
+import { closePopovers, openImagePicker, setPenSize, toggleShortcuts } from './ui';
 import { canEdit } from './net';
 import { userMovedCamera } from './collab';
 import { vimKey } from './vim';
@@ -20,7 +20,7 @@ type Drag =
   | { kind: 'move'; sx: number; sy: number; started: boolean; orig: Map<string, { x: number; y: number }>; clickId: string; wasSelected: boolean; shift: boolean }
   | { kind: 'marquee'; sx: number; sy: number; base: Set<string> }
   | { kind: 'resize'; corner: string; start: Box; origs: Map<string, NodeItem> ; lock: boolean }
-  | { kind: 'draw'; pts: number[]; id: string }
+  | { kind: 'draw'; pts: number[]; id: string; size: number; color: StrokeItem['color'] }
   | { kind: 'erase'; last: { x: number; y: number }; did: boolean }
   | { kind: 'create'; tool: Tool; start: { x: number; y: number }; sx: number; sy: number; id: string | null }
   | { kind: 'connect'; from: string; side: Side | null; sx: number; sy: number; moved: boolean; target: string | null };
@@ -82,9 +82,13 @@ function onDown(e: PointerEvent) {
     case 'pen': {
       const pts = [p.x, p.y];
       const id = uid();
-      begin({ kind: 'draw', pts, id }, e);
+      const size = S.pen.size / S.cam.z;
+      const color = S.pen.color;
+      begin({ kind: 'draw', pts, id, size, color }, e);
+      live.stroke.style.strokeWidth = `${size}px`;
+      live.stroke.style.stroke = `var(--s-${color})`;
       drawLive(pts);
-      inkStart(id, S.pen.color, S.pen.size / S.cam.z, pts);
+      inkStart(id, color, size, pts);
       return;
     }
     case 'eraser':
@@ -304,7 +308,7 @@ function onUp(e: PointerEvent) {
       break;
     case 'draw':
       live.stroke.setAttribute('d', '');
-      if (e.type !== 'pointercancel') finishStroke(d.pts, d.id);
+      if (e.type !== 'pointercancel') finishStroke(d);
       inkEnd(e.type === 'pointercancel' ? 'cancel' : 'done');
       break;
     case 'create': {
@@ -367,13 +371,10 @@ function finishConnect(d: Extract<Drag, { kind: 'connect' }>, p: { x: number; y:
 
 function drawLive(pts: number[]) {
   live.stroke.setAttribute('d', strokePath(pts.length === 2 ? [...pts, pts[0] + 0.01, pts[1]] : pts));
-  live.stroke.style.strokeWidth = `${S.pen.size / S.cam.z}px`;
-  live.stroke.style.stroke = `var(--s-${S.pen.color})`;
 }
 
-function finishStroke(pts: number[], id: string) {
+function finishStroke({ pts, id, size, color }: Extract<Drag, { kind: 'draw' }>) {
   if (pts.length === 2) pts.push(pts[0] + 0.01, pts[1]);
-  const size = S.pen.size / S.cam.z;
   let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
   for (let i = 0; i < pts.length; i += 2) {
     x0 = Math.min(x0, pts[i]); x1 = Math.max(x1, pts[i]);
@@ -383,7 +384,7 @@ function finishStroke(pts: number[], id: string) {
   const x = x0 - pad, y = y0 - pad;
   const rel = pts.map((v, i) => Math.round((i % 2 ? v - y : v - x) * 100) / 100);
   checkpoint();
-  const stroke: StrokeItem = { id, type: 'stroke', x, y, w: x1 - x0 + pad * 2, h: y1 - y0 + pad * 2, points: rel, color: S.pen.color, size };
+  const stroke: StrokeItem = { id, type: 'stroke', x, y, w: x1 - x0 + pad * 2, h: y1 - y0 + pad * 2, points: rel, color, size };
   S.items.push(stroke);
   changed();
 }
@@ -427,6 +428,20 @@ function onKeyDown(e: KeyboardEvent) {
   const mod = e.metaKey || e.ctrlKey;
   if (e.key === PAN_KEY && !S.editing) viewport.classList.add('panmod');
 
+  const target = e.target instanceof HTMLElement ? e.target : null;
+  if (e.key === 'Escape' && document.querySelector('.font-picker[open]')) {
+    document.querySelector<HTMLDetailsElement>('.font-picker[open]')!.open = false;
+    e.preventDefault();
+    return;
+  }
+  if (target?.closest('#penbar, #ctxbar') && ['Tab', 'Enter', ' '].includes(e.key)) return;
+  const formatKey = mod && !e.altKey && !e.shiftKey ? e.key.toLowerCase() : '';
+  if ((formatKey === 'b' || formatKey === 'u') && (S.editing || !isEditableTarget(e.target)) &&
+      canEdit() && selectionItems().some(canEditText)) {
+    e.preventDefault();
+    formatSelection(formatKey === 'b' ? 'bold' : 'underline');
+    return;
+  }
   if (S.editing) {
     if (e.key === 'Escape' || (e.key === 'Enter' && mod)) {
       e.preventDefault();
@@ -504,8 +519,11 @@ function onKeyDown(e: KeyboardEvent) {
       nudge(dx, dy);
       return;
     }
-    case ']': reorder(true); return;
-    case '[': reorder(false); return;
+    case ']': case '[':
+      e.preventDefault();
+      if (S.tool === 'pen') setPenSize(S.pen.size + (e.key === ']' ? 1 : -1));
+      else reorder(e.key === ']');
+      return;
     case '?': toggleShortcuts(); return;
   }
   if (e.code === 'Digit1' && e.shiftKey) { e.preventDefault(); if (userMovedCamera()) zoomToFit(); return; }

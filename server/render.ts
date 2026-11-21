@@ -1,6 +1,7 @@
 // Render a board (or part of it) to PNG so multimodal agents can see what the user sees.
 import { Resvg } from '@resvg/resvg-js';
-import type { Box, ColorKey, Item, NodeItem } from '../src/types.ts';
+import { textSpans } from '../src/text-runs.ts';
+import { FONTS, type Box, type ColorKey, type Item, type NodeItem, type TextualItem, type EdgeItem } from '../src/types.ts';
 import { edgeGeom, shapePath, strokePath, unionBox } from '../src/geometry.ts';
 import { imageSize, readImage, type Board } from './store.ts';
 import { SHAPE_TEXT_W, isEdge, isNode, wrapLines } from './agent.ts';
@@ -25,8 +26,30 @@ const FONT = "'Geist Variable', Geist, Inter, 'Helvetica Neue', Helvetica, Arial
 const esc = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 const n = (v: number) => Math.round(v * 100) / 100;
 
-function textBlock(lines: string[], x: number, y: number, fs: number, lh: number, fill: string, anchor: 'start' | 'middle', weight = 400) {
-  const spans = lines.map((l, i) => `<tspan x="${n(x)}" dy="${i ? n(lh) : 0}">${esc(l) || ' '}</tspan>`).join('');
+function textBlock(lines: string[], x: number, y: number, fs: number, lh: number, fill: string, anchor: 'start' | 'middle', weight = 400, item?: TextualItem | EdgeItem) {
+  const text = item?.type === 'edge' ? item.label : item?.text ?? '';
+  const pieces = item?.runs?.length ? [...textSpans(text, item.runs)] : [];
+  let offset = 0, piece = 0;
+  function lineContent(line: string) {
+    if (!pieces.length || !line) return esc(line) || ' ';
+    const start = text.indexOf(line, offset);
+    if (start < 0) return esc(line);
+    offset = start + line.length;
+    let content = '';
+    while (piece < pieces.length) {
+      const { start: a, end: b, style } = pieces[piece];
+      if (a >= offset) break;
+      if (b > start) {
+        const value = esc(text.slice(Math.max(a, start), Math.min(b, offset)));
+        const face = style.font && Object.hasOwn(FONTS, style.font) ? FONTS[style.font][1] : '';
+        content += `<tspan${face ? ` font-family="${esc(face)}"` : ''}${style.bold ? ' font-weight="700"' : ''}${style.underline ? ' text-decoration="underline"' : ''}>${value}</tspan>`;
+      }
+      if (b > offset) break;
+      piece++;
+    }
+    return content;
+  }
+  const spans = lines.map((l, i) => `<tspan x="${n(x)}" dy="${i ? n(lh) : 0}">${lineContent(l)}</tspan>`).join('');
   return `<text x="${n(x)}" y="${n(y)}" font-family="${esc(FONT)}" font-size="${n(fs)}" font-weight="${weight}" fill="${fill}" text-anchor="${anchor}" xml:space="preserve">${spans}</text>`;
 }
 
@@ -37,18 +60,18 @@ async function nodeSvg(it: NodeItem, P: (typeof PALETTE)[Theme]): Promise<string
       const lines = wrapLines(it.text, fs, it.w - padX * 2);
       const h = Math.max(it.h, lines.length * lh + padY * 2);
       return `<rect x="${n(it.x)}" y="${n(it.y)}" width="${n(it.w)}" height="${n(h)}" rx="${n(fs * 0.08)}" fill="${P.fill[it.color]}" stroke="${P.noteEdge}"/>` +
-        textBlock(lines, it.x + padX, it.y + padY + fs * 1.0, fs, lh, P.text, 'start');
+        textBlock(lines, it.x + padX, it.y + padY + fs * 1.0, fs, lh, P.text, 'start', 400, it);
     }
     case 'text': {
       const lh = it.fs * 1.25;
-      return textBlock(it.text.split('\n'), it.x + it.fs * 0.15, it.y + it.fs * 1.0, it.fs, lh, P.ink[it.color], 'start', 500);
+      return textBlock(it.text.split('\n'), it.x + it.fs * 0.15, it.y + it.fs * 1.0, it.fs, lh, P.ink[it.color], 'start', 500, it);
     }
     case 'shape': {
       const sw = it.fs / 8, lh = it.fs * 1.38;
       const lines = wrapLines(it.text, it.fs, it.w * SHAPE_TEXT_W[it.shape] - it.fs * 1.4);
       const top = it.y + it.h / 2 - (lines.length * lh) / 2 + it.fs * 0.98;
       return `<path transform="translate(${n(it.x)} ${n(it.y)})" d="${shapePath(it.shape, it.w, it.h, sw / 2)}" fill="${P.fill[it.color]}" stroke="${P.ink[it.color]}" stroke-width="${n(sw)}" stroke-linejoin="round"/>` +
-        textBlock(lines, it.x + it.w / 2, top, it.fs, lh, P.text, 'middle', 500);
+        textBlock(lines, it.x + it.w / 2, top, it.fs, lh, P.text, 'middle', 500, it);
     }
     case 'image': {
       const img = await readImage(it.blob);
@@ -99,7 +122,7 @@ export async function boardSvg(b: Board, opts: SvgOpts = {}): Promise<{ svg: str
     const w = Math.max(...lines.map((l) => l.length)) * e.fs * 0.56 + e.fs * 1.1;
     const h = lines.length * e.fs * 1.3 + e.fs * 0.36;
     parts.push(`<rect x="${n(g.mid.x - w / 2)}" y="${n(g.mid.y - h / 2)}" width="${n(w)}" height="${n(h)}" rx="${n(e.fs * 0.25)}" fill="${P.bg}"/>` +
-      textBlock(lines, g.mid.x, g.mid.y - h / 2 + e.fs * 1.12, e.fs, e.fs * 1.3, P.label, 'middle', 500));
+      textBlock(lines, g.mid.x, g.mid.y - h / 2 + e.fs * 1.12, e.fs, e.fs * 1.3, P.label, 'middle', 500, e));
   }
   if (opts.showIds) {
     const fs = 11 / (opts.idScale ?? 1);

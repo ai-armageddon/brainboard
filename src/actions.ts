@@ -2,6 +2,8 @@ import { S, changed, checkpoint, getItem, requestRender, scheduleSave } from './
 import type { Box, Camera, ColorKey, EdgeItem, Item, NodeItem, ShapeKind, TextualItem, Tool } from './types';
 import { applyCamera, render, textElOf, viewport } from './render';
 import { api, canEdit } from './net';
+import { FONTS, type FontKey, type TextRun } from './types';
+import { appendStyle, drawText, editorFont, forgetDrawnText, readEditor, sameStyle, type TextStyle } from './format';
 import { clamp, intersects, unionBox } from './geometry';
 import { toast, updateToolUI } from './ui';
 
@@ -134,6 +136,48 @@ export function setShape(kind: ShapeKind) {
   changed();
 }
 
+type Format = 'bold' | 'underline' | 'font';
+function stylesFromStart(it: TextualItem | EdgeItem): TextRun[] {
+  const runs = it.runs ?? [];
+  return runs[0]?.at === 0 ? runs : [{ at: 0 }, ...runs];
+}
+
+export function currentTextStyle(items: (TextualItem | EdgeItem)[]) {
+  if (S.editing) return { bold: document.queryCommandState('bold'), underline: document.queryCommandState('underline'), font: editorFont() };
+  const styles = items.flatMap(stylesFromStart);
+  const font = styles[0]?.font ?? 'geist';
+  return {
+    bold: styles.every((s) => s.bold), underline: styles.every((s) => s.underline),
+    font: styles.every((s) => (s.font ?? 'geist') === font) ? font : null,
+  };
+}
+
+export function formatSelection(key: Format, font: FontKey = 'geist') {
+  if (!canEdit()) return;
+  const items = S.items.filter((it) => S.selected.has(it.id)).filter(canEditText);
+  if (!items.length) return;
+  if (S.editing) {
+    document.execCommand(key === 'font' ? 'fontName' : key, false, key === 'font' ? FONTS[font][1] : undefined);
+    liveText();
+    requestRender();
+    return;
+  }
+  const enable = key !== 'font' && !currentTextStyle(items)[key];
+  checkpoint();
+  for (const it of items) {
+    const runs: TextRun[] = [];
+    for (const { at, bold, underline, font: face } of stylesFromStart(it)) {
+      const style: TextStyle = { bold, underline, font: face };
+      if (key === 'font') style.font = font === 'geist' ? undefined : font;
+      else style[key] = enable || undefined;
+      appendStyle(runs, at, style);
+    }
+    if (runs.length) it.runs = runs;
+    else delete it.runs;
+  }
+  changed();
+}
+
 export function bumpFont(f: number) {
   if (!canEdit()) return;
   const its = S.items.filter((i) => S.selected.has(i.id) && 'fs' in i) as (Item & { fs: number })[];
@@ -243,7 +287,9 @@ export function startEditing(id: string) {
   render();
   const t = textElOf(id);
   if (!t) return;
-  try { t.contentEditable = 'plaintext-only'; } catch { t.contentEditable = 'true'; }
+  const text = it.type === 'edge' ? it.label : it.text;
+  drawText(t, text, it.runs);
+  t.contentEditable = 'true';
   t.classList.add('editing');
   t.focus({ preventScroll: true });
   const range = document.createRange();
@@ -251,6 +297,12 @@ export function startEditing(id: string) {
   const sel = getSelection();
   sel?.removeAllRanges();
   sel?.addRange(range);
+  if (!text && it.runs?.[0]) {
+    const style = it.runs[0];
+    if (style.font && Object.hasOwn(FONTS, style.font)) document.execCommand('fontName', false, FONTS[style.font][1]);
+    if (style.bold) document.execCommand('bold');
+    if (style.underline) document.execCommand('underline');
+  }
   if (isNode(it)) panIntoView(it);
 }
 
@@ -260,41 +312,34 @@ export function liveText() {
   if (!id) return;
   const it = getItem(id);
   const t = textElOf(id);
-  if (!it || !t) return;
-  const text = t.innerText.replace(/\n+$/, '');
-  if (it.type === 'edge') {
-    if (text === it.label) return;
-    if (!liveSession) { checkpoint(); liveSession = true; }
-    it.label = text;
-  } else if (isTextual(it)) {
-    if (text === it.text) return;
-    if (!liveSession) { checkpoint(); liveSession = true; }
-    it.text = text;
-  } else return;
+  if (!canEditText(it) || !t) return;
+  const { text, runs } = readEditor(t);
+  const prev = it.runs ?? [];
+  const sameRuns = prev.length === runs.length && runs.every((r, i) => r.at === prev[i].at && sameStyle(r, prev[i]));
+  if (text === (it.type === 'edge' ? it.label : it.text) && (sameRuns || !text)) return;
+  if (!liveSession) { checkpoint(); liveSession = true; }
+  if (it.type === 'edge') it.label = text;
+  else it.text = text;
+  if (runs.length) it.runs = runs;
+  else delete it.runs;
   scheduleSave();
 }
 
 export function stopEditing() {
   const id = S.editing;
   if (!id) return;
+  liveText();
   S.editing = null;
   const t = textElOf(id);
   const it = getItem(id);
   if (t) {
     t.contentEditable = 'false';
     t.classList.remove('editing');
+    forgetDrawnText(t);
   }
-  if (it && t) {
-    const text = t.innerText.replace(/\n+$/, '');
-    if (it.type === 'edge') {
-      if (text !== it.label) { if (!liveSession) checkpoint(); it.label = text; }
-    } else if (isTextual(it)) {
-      if (text !== it.text) { if (!liveSession) checkpoint(); it.text = text; }
-      if (it.type === 'text' && !text.trim()) {
-        S.items = S.items.filter((i) => i !== it && !(i.type === 'edge' && (i.from === it.id || i.to === it.id)));
-        S.selected.delete(it.id);
-      }
-    }
+  if (it?.type === 'text' && !it.text.trim()) {
+    S.items = S.items.filter((i) => i !== it && !(i.type === 'edge' && (i.from === it.id || i.to === it.id)));
+    S.selected.delete(it.id);
   }
   liveSession = false;
   getSelection()?.removeAllRanges();

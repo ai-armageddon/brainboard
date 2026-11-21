@@ -1,6 +1,7 @@
 import { S, setRenderer, scheduleSave } from './state';
 import type { Box, Item, NodeItem } from './types';
 import { edgeGeom, shapePath, strokePath, unionBox } from './geometry';
+import { drawText } from './format';
 import { imageUrl } from './net';
 
 const q = <T extends Element>(sel: string) => document.querySelector(sel) as T;
@@ -140,7 +141,7 @@ function updateNodeEl(el: NodeEl, it: NodeItem, z: number) {
   if (el._txt && 'text' in it) {
     const editing = S.editing === it.id;
     el.classList.toggle('editing', editing);
-    if (!editing && el._txt.textContent !== it.text) el._txt.textContent = it.text;
+    if (!editing) drawText(el._txt, it.text, it.runs);
   }
 }
 
@@ -192,7 +193,7 @@ function renderEdges(map: Map<string, Item>) {
     if (show) {
       e.label.style.transform = `translate(${g.mid.x}px,${g.mid.y}px) translate(-50%,-50%)`;
       e.label.style.fontSize = `${it.fs}px`;
-      if (!editing && e.txt.textContent !== it.label) e.txt.textContent = it.label;
+      if (!editing) drawText(e.txt, it.label, it.runs);
     }
   }
   for (const [id, e] of edgeEls) {

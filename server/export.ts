@@ -4,7 +4,8 @@ import type { Board } from './store.ts';
 import { readImage } from './store.ts';
 import { boardSvg, rasterize, type Theme } from './render.ts';
 import { isEdge, isNode } from './agent.ts';
-import type { Box, Item, NodeItem } from '../src/types.ts';
+import { textSpans } from '../src/text-runs.ts';
+import type { Box, Item, NodeItem, TextualItem, EdgeItem } from '../src/types.ts';
 
 export type ExportFormat = 'png' | 'pdf' | 'svg' | 'md' | 'json';
 export const EXPORT_TYPES: Record<ExportFormat, { mime: string; ext: string }> = {
@@ -97,7 +98,20 @@ function readingOrder<T extends Box>(items: T[]): T[] {
   });
 }
 
-const textOf = (i: Item | undefined) => (i && 'text' in i ? i.text.trim() : i?.type === 'image' ? '(image)' : '');
+function markdownText(it: TextualItem | EdgeItem) {
+  const text = it.type === 'edge' ? it.label : it.text;
+  if (!it.runs?.length) return text.trim();
+  let result = '';
+  for (const { style, start, end } of textSpans(text, it.runs)) {
+    let value = text.slice(start, end);
+    if (style.bold) value = `<strong>${value}</strong>`;
+    if (style.underline) value = `<u>${value}</u>`;
+    result += value;
+  }
+  return result.trim();
+}
+
+const textOf = (i: Item | undefined) => (i && 'text' in i ? markdownText(i) : i?.type === 'image' ? '(image)' : '');
 const oneLine = (s: string) => s.replace(/\s*\n\s*/g, ' / ');
 
 export function markdown(b: Board): string {
@@ -111,15 +125,15 @@ export function markdown(b: Board): string {
   for (const it of readingOrder(nodes)) {
     if (linked.has(it.id)) continue;
     if (it.type === 'text') {
-      const t = it.text.trim();
-      if (!t || t === b.name.trim()) continue; // the board's own title is already the heading
+      const t = markdownText(it);
+      if (!t || it.text.trim() === b.name.trim()) continue; // the board's own title is already the heading
       L.push(it.fs >= 28 ? `## ${oneLine(t)}` : t, '');
     } else if (it.type === 'note') {
-      const t = it.text.trim();
+      const t = markdownText(it);
       if (!t) continue;
       L.push(...t.split('\n').map((l) => `> ${l}`), '');
     } else if (it.type === 'shape' && it.text.trim()) {
-      L.push(`- ${oneLine(it.text.trim())}`, '');
+      L.push(`- ${oneLine(markdownText(it))}`, '');
     }
   }
 
@@ -130,7 +144,7 @@ export function markdown(b: Board): string {
     for (const e of edges) {
       if (!byId.has(e.from) || !byId.has(e.to)) continue;
       if (!out.has(e.from)) out.set(e.from, []);
-      out.get(e.from)!.push({ to: e.to, label: e.label });
+      out.get(e.from)!.push({ to: e.to, label: markdownText(e) });
       indeg.set(e.to, (indeg.get(e.to) ?? 0) + 1);
       if (!indeg.has(e.from)) indeg.set(e.from, 0);
     }
