@@ -15,6 +15,7 @@ import { openBoard, openDraft, restoreCamera } from './boards';
 import { initCollab } from './collab';
 import { initInk } from './ink';
 import { initHome } from './home';
+import { initViews } from './views';
 import { blobGet, kvGet, kvSet } from './db';
 import type { Item } from './types';
 
@@ -47,6 +48,7 @@ async function main() {
   initCollab();
   initInk();
   initHome();
+  initViews();
   initVim();
   initAccount();
   initVoice();

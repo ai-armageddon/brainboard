@@ -12,7 +12,7 @@ import { inviteToken, isCrossSite, ownerKeyOf, owns, principal } from './auth.ts
 type Identity = { owner: true; token: null } | { owner: false; token: string; key: string | null };
 import { getSharing, inviteRole, noteInviteUse, revokeInvite, setSettings } from './sharing.ts';
 import { applyOps, diffItems, validOp } from '../src/ops.ts';
-import type { BoardSettings, ClientMsg, Op, PeerInfo, Presence, Role, ServerMsg } from '../src/protocol.ts';
+import { MAX_VIEWS, cleanView, type BoardSettings, type ClientMsg, type Op, type PeerInfo, type Presence, type Role, type ServerMsg } from '../src/protocol.ts';
 import { COLORS, type Item } from '../src/types.ts';
 
 interface Client {
@@ -117,6 +117,11 @@ async function onFileChange(id: string) {
   if (b.name !== room.board.name) {
     room.board.name = b.name;
     broadcast(room, { t: 'meta', name: b.name });
+  }
+  const views = (b.views ?? []).map(cleanView).filter((v) => v !== null);
+  if (JSON.stringify(views) !== JSON.stringify(room.board.views ?? [])) {
+    room.board.views = views;
+    broadcast(room, { t: 'views', views });
   }
   if (ops.length) {
     room.board.items = applyOps(room.board.items, ops);
@@ -325,6 +330,26 @@ async function handle(room: Room, c: Client, raw: string) {
       }
       return;
     }
+    case 'view': {
+      if (roleOf(room, c) === 'viewer') return;
+      const list = room.board.views ?? [];
+      if (m.put) {
+        const v = cleanView(m.put);
+        if (!v) return;
+        const i = list.findIndex((o) => o.id === v.id);
+        if (i >= 0) list[i] = v;
+        else if (list.length < MAX_VIEWS) list.push(v);
+        else return;
+        room.board.views = list;
+        schedulePersist(room);
+        broadcast(room, { t: 'view', put: v }, c);
+      } else if (typeof m.del === 'string') {
+        room.board.views = list.filter((o) => o.id !== m.del);
+        schedulePersist(room);
+        broadcast(room, { t: 'view', del: m.del }, c);
+      }
+      return;
+    }
     case 'ink': {
       // Live pen strokes: pass them on to everyone else as-is, never store them.
       if (roleOf(room, c) === 'viewer') return;
@@ -374,7 +399,7 @@ async function onConnection(ws: WebSocket, identity: Identity, baseRole: Role, b
   send(c, {
     t: 'welcome',
     you: info(room, c, false),
-    board: { id: room.id, name: room.board.name, items: room.board.items },
+    board: { id: room.id, name: room.board.name, items: room.board.items, views: room.board.views ?? [] },
     peers: [...room.clients].filter((o) => o !== c).map((o) => info(room, o)),
     presenter: room.presenter,
     settings: room.settings,

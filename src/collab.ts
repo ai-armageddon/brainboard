@@ -35,8 +35,12 @@ let followAuto = false; // started because someone is presenting
 const followLocked = () =>
   !!session.presenter && session.presenter === following && session.settings.lockFollow && session.role !== 'owner';
 
+export const followingId = () => following;
+export const isFollowLocked = () => followLocked();
+
 export function follow(id: string | null, auto = false) {
   following = id;
+  events.dispatchEvent(new Event('follow'));
   followAuto = auto && !!id;
   const p = id ? session.peers.get(id) : undefined;
   viewport.classList.toggle('following', !!p);
