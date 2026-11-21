@@ -13,6 +13,8 @@ export interface Invite {
   created: string;
 }
 export interface Sharing {
+  /** "user:<id>" or "anon:<id>"; missing for boards that belong to this machine (older boards, MCP-made boards) */
+  owner?: string;
   invites: Invite[];
   settings: BoardSettings;
 }
@@ -31,7 +33,7 @@ export async function getSharing(boardId: string): Promise<Sharing> {
   let s: Sharing = { invites: [], settings: { ...DEFAULT_SETTINGS } };
   try {
     const raw = JSON.parse(await fs.readFile(file(boardId), 'utf8')) as Partial<Sharing>;
-    s = { invites: raw.invites ?? [], settings: { ...DEFAULT_SETTINGS, ...raw.settings } };
+    s = { owner: raw.owner, invites: raw.invites ?? [], settings: { ...DEFAULT_SETTINGS, ...raw.settings } };
   } catch { /* none yet */ }
   cache.set(boardId, s);
   return s;
@@ -43,6 +45,29 @@ async function save(boardId: string, s: Sharing) {
   const tmp = `${file(boardId)}.${process.pid}.tmp`;
   await fs.writeFile(tmp, JSON.stringify(s, null, 2));
   await fs.rename(tmp, file(boardId));
+}
+
+export async function getOwner(boardId: string): Promise<string | null> {
+  return (await getSharing(boardId)).owner ?? null;
+}
+
+export async function setOwner(boardId: string, owner: string) {
+  const s = await getSharing(boardId);
+  s.owner = owner;
+  await save(boardId, s);
+}
+
+/** Move every board owned by `from` to `to` (an anonymous browser signing in). Returns how many moved. */
+export async function transferOwnership(from: string, to: string): Promise<number> {
+  let files: string[] = [];
+  try { files = await fs.readdir(DIR); } catch { return 0; }
+  let n = 0;
+  for (const f of files) {
+    if (!f.endsWith('.json')) continue;
+    const id = f.slice(0, -5);
+    if ((await getOwner(id)) === from) { await setOwner(id, to); n++; }
+  }
+  return n;
 }
 
 export async function createInvite(boardId: string, role: InviteRole, label: string): Promise<Invite> {

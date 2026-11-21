@@ -5,11 +5,23 @@ import type { IncomingMessage, ServerResponse } from 'node:http';
 import {
   NotFoundError, createBoard, findImage, listBoards, metaOf, putImage, readBoard, renameBoard, trashBoard, isValidId,
 } from './store.ts';
-import { identify, isCrossSite, isOwner, ownerSecret } from './auth.ts';
-import { createInvite, getSharing, revokeInvite, tokenBoards, updateInvite, type InviteRole } from './sharing.ts';
+import {
+  anonKey, clearSessionCookie, clientIp, cookie, inviteToken, isCrossSite, ownerKeyOf, ownerSecret, owns, ownsKey,
+  principal, sessionCookie, userKey, type Principal,
+} from './auth.ts';
+import {
+  createInvite, getOwner, getSharing, inviteRole, revokeInvite, setOwner, tokenBoards, transferOwnership, updateInvite,
+  type InviteRole,
+} from './sharing.ts';
 import { liveCounts, refreshAccess } from './realtime.ts';
+import {
+  checkPassword, cleanEmail, cleanName, createSession, createUser, endSession, limited, publicUser, updateUser, userByEmail,
+  validEmail, type User,
+} from './accounts.ts';
+import { authenticationOptions, authenticationVerify, registrationOptions, registrationVerify, relyingParty } from './passkeys.ts';
+import { HOSTED, PUBLIC_URL } from './config.ts';
 
-const MAX_BODY = 80 * 1024 * 1024;
+const MAX_BODY = 30 * 1024 * 1024;
 
 /** Set by the server entry point: is this server reachable from other machines? */
 export const network = { lan: false };
@@ -52,7 +64,7 @@ export async function handleApi(req: IncomingMessage, res: ServerResponse): Prom
 
   // Owner sign-in link for other devices: /?owner=<secret> sets a cookie and strips the secret.
   const ownerParam = url.searchParams.get('owner');
-  if (ownerParam && method === 'GET' && !url.pathname.startsWith('/api/')) {
+  if (ownerParam && !HOSTED && method === 'GET' && !url.pathname.startsWith('/api/')) {
     if (ownerParam === ownerSecret()) {
       url.searchParams.delete('owner');
       res.writeHead(302, {
@@ -69,22 +81,34 @@ export async function handleApi(req: IncomingMessage, res: ServerResponse): Prom
 
   try {
     if (isCrossSite(req)) return send(res, 403, { error: 'cross-site request refused' }), true;
-    const owner = isOwner(req);
+    const p = principal(req, res);
 
-    // ---- images: owners, plus guests holding an invite (editors may upload)
+    // ---- session & accounts
+    if (parts[0] === 'session' && method === 'GET') {
+      return send(res, 200, {
+        user: p.user ? publicUser(p.user) : null,
+        local: p.local,
+        hosted: HOSTED,
+        publicUrl: PUBLIC_URL,
+        passkeys: !!relyingParty(req),
+      }), true;
+    }
+    if (parts[0] === 'auth') return await handleAuth(req, res, parts.slice(1), method, p), true;
+
+    // ---- images: anyone with a browser identity or an invite (guests read; editors upload)
     if (parts[0] === 'images') {
       const id = parts[1];
-      const ident = identify(req, url);
-      const guestBoards = !owner && ident && !ident.owner ? await tokenBoards(ident.token) : [];
+      const token = inviteToken(req, url);
       if (!id && method === 'POST') {
-        if (!owner && !guestBoards.some((g) => g.role === 'editor')) return send(res, 403, { error: 'forbidden' }), true;
+        const guestEditor = token ? (await tokenBoards(token)).some((g) => g.role === 'editor') : false;
+        if (!p.user && !p.anonId && !p.local && !guestEditor) return send(res, 403, { error: 'forbidden' }), true;
         const want = url.searchParams.get('id');
         const buf = await readBody(req);
-        const saved = await putImage(buf, req.headers['content-type'] ?? null, owner && want && isValidId(want) ? want : undefined);
+        const saved = await putImage(buf, req.headers['content-type'] ?? null, p.local && want && isValidId(want) ? want : undefined);
         return send(res, 201, { id: saved }), true;
       }
       if (id && method === 'GET') {
-        if (!owner && !guestBoards.length) return send(res, 403, { error: 'forbidden' }), true;
+        if (!p.user && !p.anonId && !p.local && !(token && (await tokenBoards(token)).length)) return send(res, 403, { error: 'forbidden' }), true;
         const f = await findImage(id);
         if (!f) return send(res, 404, { error: 'not found' }), true;
         res.writeHead(200, { 'content-type': f.mime, 'cache-control': 'private, max-age=31536000, immutable' });
@@ -93,19 +117,21 @@ export async function handleApi(req: IncomingMessage, res: ServerResponse): Prom
       }
     }
 
-    // ---- who am I (lets a guest page check its invite before connecting)
+    // ---- my role on a board (owner, or the role an invite gives)
     if (parts[0] === 'me' && method === 'GET') {
-      if (owner) return send(res, 200, { role: 'owner' }), true;
-      const ident = identify(req, url);
       const boardId = url.searchParams.get('board') ?? '';
-      const hit = ident && !ident.owner ? (await tokenBoards(ident.token)).find((g) => g.boardId === boardId) : undefined;
-      return send(res, hit ? 200 : 403, hit ? { role: hit.role } : { error: 'invalid invite' }), true;
+      if (isValidId(boardId) && await owns(p, boardId)) {
+        const owner = await getOwner(boardId);
+        // "saved" = kept in an account (or on this machine's disk), not just tied to this browser
+        return send(res, 200, { role: 'owner', saved: !owner || owner.startsWith('user:') }), true;
+      }
+      const token = inviteToken(req, url);
+      const role = token && isValidId(boardId) ? await inviteRole(boardId, token) : null;
+      return send(res, role ? 200 : 403, role ? { role } : { error: 'invalid invite' }), true;
     }
 
-    if (!owner) return send(res, 403, { error: 'Only the board owner can do that.' }), true;
-
     if (parts[0] === 'net' && method === 'GET') {
-      return send(res, 200, { lan: network.lan, lanUrls: network.lan ? lanUrls(req) : [] }), true;
+      return send(res, 200, { lan: network.lan, lanUrls: network.lan ? lanUrls(req) : [], hosted: HOSTED, publicUrl: PUBLIC_URL }), true;
     }
 
     if (parts[0] === 'boards') {
@@ -113,15 +139,25 @@ export async function handleApi(req: IncomingMessage, res: ServerResponse): Prom
       if (!id) {
         if (method === 'GET') {
           const live = await liveCounts();
-          return send(res, 200, (await listBoards()).map((b) => ({ ...b, live: Math.max(0, (live[b.id] ?? 0)) }))), true;
+          const mine = [];
+          for (const b of await listBoards()) if (ownsKey(p, await getOwner(b.id))) mine.push({ ...b, live: Math.max(0, live[b.id] ?? 0) });
+          return send(res, 200, mine), true;
         }
         if (method === 'POST') {
+          const key = ownerKeyOf(p);
+          if (!key && !p.local) return send(res, 403, { error: 'forbidden' }), true;
           const body = await readJson<{ name?: string; items?: unknown[] }>(req);
-          const b = await createBoard(body.name ?? 'Untitled board', Array.isArray(body.items) ? (body.items as never[]) : []);
+          const b = await createBoard(String(body.name ?? 'Untitled board').slice(0, 80), Array.isArray(body.items) ? (body.items as never[]) : []);
+          if (key) await setOwner(b.id, key);
           return send(res, 201, metaOf(b)), true;
         }
-      } else if (parts[2] === 'share') {
-        if (method === 'GET') return send(res, 200, await getSharing(id)), true;
+      }
+      if (!isValidId(id) || !(await owns(p, id))) return send(res, 403, { error: 'Only the board owner can do that.' }), true;
+      if (parts[2] === 'share') {
+        if (method === 'GET') {
+          const s = await getSharing(id);
+          return send(res, 200, { invites: s.invites, settings: s.settings }), true;
+        }
       } else if (parts[2] === 'invites') {
         const token = parts[3];
         if (!token && method === 'POST') {
@@ -147,7 +183,7 @@ export async function handleApi(req: IncomingMessage, res: ServerResponse): Prom
         }
         if (method === 'PATCH') {
           const body = await readJson<{ name?: string }>(req);
-          return send(res, 200, metaOf(await renameBoard(id, String(body.name ?? '')))), true;
+          return send(res, 200, metaOf(await renameBoard(id, String(body.name ?? '').slice(0, 80)))), true;
         }
         if (method === 'DELETE') {
           await trashBoard(id);
@@ -165,4 +201,85 @@ export async function handleApi(req: IncomingMessage, res: ServerResponse): Prom
     }
   }
   return true;
+}
+
+// ---------------------------------------------------------------- accounts
+
+class AuthError extends Error {
+  status: number;
+  constructor(status: number, msg: string) { super(msg); this.status = status; }
+}
+
+/** Sign the browser in and move its anonymous boards into the account. */
+async function signIn(res: ServerResponse, p: Principal, user: User) {
+  sessionCookie(res, await createSession(user.id));
+  const claimed = p.anonId ? await transferOwnership(anonKey(p.anonId), userKey(user.id)) : 0;
+  return { user: publicUser(user), claimed };
+}
+
+async function handleAuth(req: IncomingMessage, res: ServerResponse, parts: string[], method: string, p: Principal) {
+  const route = `${method} ${parts.join('/')}`;
+  const ip = clientIp(req);
+  try {
+    if (method === 'POST' && route !== 'POST logout' && limited(`auth:${ip}`, 30)) {
+      throw new AuthError(429, 'Too many attempts. Please wait a few minutes and try again.');
+    }
+    switch (route) {
+      case 'POST signup': {
+        const b = await readJson<{ name?: string; email?: string; password?: string }>(req);
+        const name = cleanName(b.name), email = cleanEmail(b.email), password = String(b.password ?? '');
+        if (!name) throw new AuthError(400, 'Choose a screen name.');
+        if (!validEmail(email)) throw new AuthError(400, 'That email doesn’t look right.');
+        if (password.length < 8) throw new AuthError(400, 'Use at least 8 characters for your password.');
+        if (password.length > 200) throw new AuthError(400, 'That password is too long.');
+        if (userByEmail(email)) throw new AuthError(409, 'There’s already an account with this email. Sign in instead.');
+        const user = await createUser({ name, email, password });
+        return send(res, 201, await signIn(res, p, user));
+      }
+      case 'POST login': {
+        const b = await readJson<{ email?: string; password?: string }>(req);
+        const email = cleanEmail(b.email);
+        if (limited(`login:${email}`, 10)) throw new AuthError(429, 'Too many attempts. Please wait a few minutes and try again.');
+        const user = userByEmail(email);
+        if (!(await checkPassword(user, String(b.password ?? '')))) throw new AuthError(401, 'Email or password is incorrect.');
+        return send(res, 200, await signIn(res, p, user!));
+      }
+      case 'POST passkey/register/options': {
+        const b = await readJson<{ name?: string }>(req);
+        const name = cleanName(b.name);
+        if (!p.user && !name) throw new AuthError(400, 'Choose a screen name.');
+        return send(res, 200, await registrationOptions(req, { name, user: p.user }));
+      }
+      case 'POST passkey/register/verify': {
+        const b = await readJson<{ flow?: string; response?: never }>(req);
+        const user = await registrationVerify(req, b.flow, b.response!);
+        if (p.user?.id === user.id) return send(res, 200, { user: publicUser(user), claimed: 0 });
+        return send(res, 201, await signIn(res, p, user));
+      }
+      case 'POST passkey/login/options':
+        return send(res, 200, await authenticationOptions(req));
+      case 'POST passkey/login/verify': {
+        const b = await readJson<{ flow?: string; response?: never }>(req);
+        const user = await authenticationVerify(req, b.flow, b.response!);
+        return send(res, 200, await signIn(res, p, user));
+      }
+      case 'POST logout':
+        await endSession(cookie(req, 'bb_session'));
+        clearSessionCookie(res);
+        return send(res, 200, { ok: true });
+      case 'PATCH me': {
+        if (!p.user) throw new AuthError(401, 'Sign in first.');
+        const b = await readJson<{ name?: string }>(req);
+        const name = cleanName(b.name);
+        if (!name) throw new AuthError(400, 'Choose a screen name.');
+        const u = await updateUser(p.user.id, (x) => { x.name = name; });
+        return send(res, 200, { user: publicUser(u!) });
+      }
+    }
+    send(res, 404, { error: 'unknown endpoint' });
+  } catch (err) {
+    if (err instanceof AuthError) return send(res, err.status, { error: err.message });
+    console.warn('[brainboard auth]', (err as Error).message);
+    send(res, 400, { error: (err as Error).message || 'Something went wrong.' });
+  }
 }

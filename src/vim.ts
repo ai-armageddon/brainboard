@@ -15,6 +15,7 @@ import { api, canEdit, isOwner, session } from './net';
 import { closePopovers, getTheme, applyTheme, newBoard, openImagePicker, toggleShortcuts, type Theme } from './ui';
 import { follow, userMovedCamera } from './collab';
 import { openBoard } from './boards';
+import { saveCommand } from './account';
 import { pointerWorld, putClip, yank, clipBounds } from './input';
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
@@ -445,8 +446,9 @@ const peerNames = () =>
   [...session.peers.values()].filter((p) => p.id !== session.you?.id).map((p) => p.name);
 
 const COMMANDS: Cmd[] = [
-  { names: ['write', 'w', 'update'], desc: 'Save (brainboard saves as you go)', run: () => {
-    message(session.status === 'live' ? `"${session.boardName}" saved` : 'Offline: changes will sync when you reconnect', session.status !== 'live');
+  { names: ['write', 'w', 'update'], desc: 'Save (to an account if this board isn’t yet)', run: () => {
+    if (session.status !== 'live') return message('Offline: changes will sync when you reconnect', true);
+    saveCommand();
   } },
   { names: ['quit', 'q', 'wq', 'x', 'xit', 'qa', 'qall', 'wqa', 'close'], desc: 'Close menus and clear the selection', run: () => {
     closePopovers();

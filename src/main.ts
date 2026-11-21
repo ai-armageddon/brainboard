@@ -3,12 +3,13 @@ import '@fontsource-variable/geist-mono';
 import './style.css';
 import { paintLogos } from './brand';
 import { initVim } from './vim';
+import { initAccount } from './account';
 import { startTour, tourSeen } from './tour';
 import { loadPrefs, requestRender } from './state';
 import { applyCamera, render } from './render';
 import { buildUI, showOverlay, updateToolUI } from './ui';
 import { initInput } from './input';
-import { api, events, session } from './net';
+import { api, events, loadSession, session } from './net';
 import { openBoard, restoreCamera } from './boards';
 import { initCollab } from './collab';
 import { blobGet, kvGet, kvSet } from './db';
@@ -42,6 +43,7 @@ async function main() {
   buildUI();
   initCollab();
   initVim();
+  initAccount();
   initInput();
   updateToolUI();
   applyCamera();
@@ -57,6 +59,14 @@ async function main() {
       setTimeout(startTour, 900);
     }
   });
+
+  // Who are we? (Also hands this browser an anonymous identity, so nobody has to sign in.)
+  try {
+    await loadSession();
+  } catch {
+    showOverlay('offline');
+    return;
+  }
 
   const params = new URLSearchParams(location.search);
   const invite = params.get('invite');

@@ -4,8 +4,10 @@ import { hooks, nodeElOf, viewport } from './render';
 import { icon } from './icons';
 import { paintLogos } from './brand';
 import {
-  api, canEdit, events, isOwner, kick, present, saveProfile, session, setPresence, updateSettings, type Invite,
+  account, api, canEdit, events, isOwner, kick, present, saveProfile, session, setAccount, setPresence, updateSettings,
+  type Invite,
 } from './net';
+import { addPasskey, ensureScreenName, openAuth, signOut } from './account';
 import { animateCam, setTool, stopEditing } from './actions';
 import { toast } from './ui';
 import type { PeerInfo, Role } from './protocol';
@@ -166,12 +168,32 @@ function openPeerPop(anchor: HTMLElement, id: string) {
         <div class="colors">${['#f2555a', '#f5871f', '#e0b400', '#2fb36d', '#14a3c7', '#4f6bff', '#9b5cf0', '#e0559c'].map((c) => `<label class="color-pick"><input type="radio" name="color" value="${c}" ${c === p.color ? 'checked' : ''}/><i style="background:${c}"></i></label>`).join('')}</div>
         <label class="toggle"><input type="checkbox" name="cursors" ${showCursors ? 'checked' : ''}/><span>Show other people’s cursors</span></label>
         <button class="primary" type="submit">Save</button>
-      </form>`;
+      </form>
+      ${session.invite ? '' : `<div class="pop-account">
+        ${account.user
+          ? `<div class="pop-acc-who">Signed in${account.user.email ? ` as <b>${esc(account.user.email)}</b>` : ` · ${account.user.passkeys} passkey${account.user.passkeys === 1 ? '' : 's'}`}</div>
+             ${account.passkeys ? `<button class="pop-btn" data-acc="passkey">${icon('passkey', 18)}Add a passkey</button>` : ''}
+             <button class="pop-btn" data-acc="signout">${icon('logout', 18)}Sign out</button>`
+          : `<div class="pop-acc-who">Not signed in. Your boards live in this browser.</div>
+             <button class="pop-btn" data-acc="save">${icon('save', 18)}Save to an account</button>`}
+      </div>`}`;
     const form = pop.querySelector('form')!;
+    pop.querySelector('.pop-account')?.addEventListener('click', (e) => {
+      const act = (e.target as Element).closest<HTMLElement>('[data-acc]')?.dataset.acc;
+      if (!act) return;
+      pop.hidden = true;
+      if (act === 'passkey') void addPasskey();
+      if (act === 'signout') void signOut();
+      if (act === 'save') openAuth('save');
+    });
     form.addEventListener('submit', (e) => {
       e.preventDefault();
       const fd = new FormData(form);
-      saveProfile(String(fd.get('name') ?? ''), String(fd.get('color') ?? p.color));
+      const newName = String(fd.get('name') ?? '').trim();
+      saveProfile(newName, String(fd.get('color') ?? p.color));
+      if (account.user && newName && newName !== account.user.name) {
+        void api.auth<{ user: NonNullable<typeof account.user> }>('me', { name: newName }, 'PATCH').then((r) => setAccount(r.user)).catch(() => toast('Couldn’t rename your account'));
+      }
       showCursors = fd.get('cursors') === 'on';
       try { localStorage.setItem('bb-show-cursors', showCursors ? '1' : '0'); } catch { /* ignore */ }
       placeCursors();
@@ -206,6 +228,7 @@ const inviteUrl = (inv: Invite) => `${linkBase.replace(/\/+$/, '')}/?invite=${en
 
 async function openShare() {
   if (!session.boardId) return;
+  if (!(await ensureScreenName('share'))) return;
   const sheet = $('share');
   sheet.hidden = false;
   const body = sheet.querySelector<HTMLElement>('.share-body')!;
@@ -216,17 +239,17 @@ async function openShare() {
     let saved = '';
     try { saved = localStorage.getItem(linkBaseKey) ?? ''; } catch { /* ignore */ }
     const local = /^(localhost|127\.0\.0\.1|\[::1\])$/.test(location.hostname);
-    linkBase = saved || (local && net.lanUrls[0]) || location.origin;
+    linkBase = net.hosted ? (net.publicUrl ?? location.origin) : saved || (local && net.lanUrls[0]) || location.origin;
     renderShare(sharing.invites, net);
   } catch (err) {
     body.innerHTML = `<p class="muted">Couldn’t load sharing settings: ${esc((err as Error).message)}</p>`;
   }
 }
 
-function renderShare(invites: Invite[], net: { lan: boolean; lanUrls: string[] }) {
+function renderShare(invites: Invite[], net: { lan: boolean; lanUrls: string[]; hosted: boolean }) {
   const body = $('share').querySelector<HTMLElement>('.share-body')!;
   const local = /^(localhost|127\.0\.0\.1|\[::1\])$/.test(new URL(linkBase).hostname);
-  const reachNote = !net.lan && (local || /^(localhost|127\.0\.0\.1)$/.test(location.hostname))
+  const reachNote = net.hosted ? '' : !net.lan && (local || /^(localhost|127\.0\.0\.1)$/.test(location.hostname))
     ? `<div class="note warn"><b>Only this computer can open links right now.</b> To invite people on the same Wi-Fi, restart with <code>npm run share</code>. To invite anyone else, put Brainboard behind a tunnel such as <code>cloudflared</code> or <code>ngrok</code> and paste its address below.</div>`
     : local ? `<div class="note warn">Links that point at <b>localhost</b> only work on this computer. Pick your network address below.</div>` : '';
   const people = [...session.peers.values()];
@@ -239,7 +262,7 @@ function renderShare(invites: Invite[], net: { lan: boolean; lanUrls: string[] }
         <input name="label" maxlength="60" placeholder="Who is it for? (optional)" aria-label="Label" />
         <button class="primary" type="submit">${icon('link', 16)} Create link</button>
       </form>
-      <label class="field base"><span>Link address</span>
+      <label class="field base" ${net.hosted ? 'hidden' : ''}><span>Link address</span>
         <input name="base" list="base-options" value="${esc(linkBase)}" spellcheck="false" />
         <datalist id="base-options">${[...net.lanUrls, location.origin].map((u) => `<option value="${esc(u)}">`).join('')}</datalist>
       </label>
@@ -357,8 +380,9 @@ export function initCollab() {
     }
   });
 
-  $('present-btn').addEventListener('click', () => {
+  $('present-btn').addEventListener('click', async () => {
     const on = session.presenter !== session.you?.id;
+    if (on && !(await ensureScreenName('present'))) return;
     present(on);
     if (on) toast('Presenting. Everyone now follows your view');
   });

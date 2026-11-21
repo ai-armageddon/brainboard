@@ -6,7 +6,10 @@ import { watch, type FSWatcher } from 'node:fs';
 import type { IncomingMessage, Server } from 'node:http';
 import type { Duplex } from 'node:stream';
 import { BOARDS_DIR, ensureDirs, isValidId, newId, readBoard, writeBoard, type Board } from './store.ts';
-import { identify, isCrossSite, type Identity } from './auth.ts';
+import { inviteToken, isCrossSite, owns, principal } from './auth.ts';
+
+/** How a client got in: as the board's owner, or with an invite token. */
+type Identity = { owner: true; token: null } | { owner: false; token: string };
 import { getSharing, inviteRole, setSettings } from './sharing.ts';
 import { applyOps, diffItems, validOp } from '../src/ops.ts';
 import type { BoardSettings, ClientMsg, Op, PeerInfo, Presence, Role, ServerMsg } from '../src/protocol.ts';
@@ -309,10 +312,18 @@ export function attachRealtime(server: Server) {
     void (async () => {
       if (isCrossSite(req)) return reject(socket, 403, 'Forbidden');
       const boardId = url.searchParams.get('board') ?? '';
-      const identity = identify(req, url);
-      if (!identity || !isValidId(boardId)) return reject(socket, 403, 'Forbidden');
-      let role: Role | null = 'owner';
-      if (!identity.owner) role = await inviteRole(boardId, identity.token);
+      if (!isValidId(boardId)) return reject(socket, 403, 'Forbidden');
+      let identity: Identity;
+      let role: Role | null;
+      if (await owns(principal(req), boardId)) {
+        identity = { owner: true, token: null };
+        role = 'owner';
+      } else {
+        const token = inviteToken(req, url);
+        if (!token) return reject(socket, 403, 'Forbidden');
+        identity = { owner: false, token };
+        role = await inviteRole(boardId, token);
+      }
       if (!role) return reject(socket, 403, 'Forbidden');
       wss.handleUpgrade(req, socket, head, (ws) => void onConnection(ws, identity, role, boardId, url));
     })();

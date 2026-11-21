@@ -33,6 +33,18 @@ export const session = {
   profile: loadProfile(),
 };
 
+export interface Account { id: string; name: string; email: string | null; passkeys: number; hasPassword: boolean }
+
+/** Who this browser is signed in as (null = anonymous), and what the server supports. */
+export const account = {
+  user: null as Account | null,
+  /** this machine owns ownerless boards (dev / self-hosted) */
+  local: false,
+  hosted: false,
+  publicUrl: null as string | null,
+  passkeys: false,
+};
+
 export const canEdit = () => session.role !== 'viewer';
 export const isOwner = () => session.role === 'owner';
 
@@ -41,7 +53,20 @@ export function saveProfile(name: string, color: string) {
   try { localStorage.setItem('bb-profile', JSON.stringify(session.profile)); } catch { /* ignore */ }
   sendMsg({ t: 'profile', name: session.profile.name || defaultName(), color });
 }
-const defaultName = () => (session.invite ? 'Guest' : 'Owner');
+const defaultName = () => account.user?.name ?? (session.invite ? 'Guest' : 'Owner');
+
+export async function loadSession() {
+  const s = await api.session();
+  Object.assign(account, s);
+  if (s.user && s.user.name !== session.profile.name) saveProfile(s.user.name, session.profile.color);
+  emit('account');
+}
+
+export function setAccount(user: Account | null) {
+  account.user = user;
+  if (user) saveProfile(user.name, session.profile.color);
+  emit('account');
+}
 
 /** UI subscribes to: status, welcome, peers, presence, presenter, settings, role, meta, fatal */
 export const events = new EventTarget();
@@ -69,8 +94,10 @@ export const api = {
   createInvite: (id: string, role: 'editor' | 'viewer', label = '') => j<Invite>('POST', `/api/boards/${id}/invites`, { role, label }),
   updateInvite: (id: string, token: string, patch: Partial<Pick<Invite, 'role' | 'label'>>) => j<Invite>('PATCH', `/api/boards/${id}/invites/${token}`, patch),
   revokeInvite: (id: string, token: string) => j<{ ok: true }>('DELETE', `/api/boards/${id}/invites/${token}`),
-  net: () => j<{ lan: boolean; lanUrls: string[] }>('GET', '/api/net'),
-  me: (board: string) => j<{ role: Role }>('GET', `/api/me?board=${encodeURIComponent(board)}`),
+  net: () => j<{ lan: boolean; lanUrls: string[]; hosted: boolean; publicUrl: string | null }>('GET', '/api/net'),
+  me: (board: string) => j<{ role: Role; saved?: boolean }>('GET', `/api/me?board=${encodeURIComponent(board)}`),
+  session: () => j<{ user: Account | null; local: boolean; hosted: boolean; publicUrl: string | null; passkeys: boolean }>('GET', '/api/session'),
+  auth: <T = { user: Account; claimed: number }>(path: string, body?: unknown, method = 'POST') => j<T>(method, `/api/auth/${path}`, body ?? {}),
   async uploadImage(blob: Blob, id?: string): Promise<string> {
     const res = await fetch(`/api/images${id ? `?id=${encodeURIComponent(id)}` : ''}`, {
       method: 'POST',

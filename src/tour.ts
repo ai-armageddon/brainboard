@@ -1,5 +1,5 @@
 // A small first-run tour: a card that steps through the main ideas and rings the relevant control.
-import { canEdit, isOwner, session } from './net';
+import { account, canEdit, isOwner, session } from './net';
 
 interface Step {
   target?: string; // CSS selector to ring; none = card floats above the toolbar
@@ -25,8 +25,9 @@ function steps(): Step[] {
   if (owner) {
     list.push(
       { target: '#menu-btn', title: 'Your boards', body: 'Switch, rename and export boards here. Everything saves as you go.' },
-      { target: '#share-btn', title: 'Invite people', body: 'Share a link that can edit or only view. Everyone’s cursor shows up live.' },
+      { target: '#share-btn', title: 'Invite people', body: 'Share a link that can edit or only view. Everyone’s cursor shows up live. All you need is a screen name.' },
     );
+    if (!account.user) list.push({ target: '#save-btn', title: 'Keep your work', body: 'Boards live in this browser until you save them to a free account. With a passkey it takes one tap. <kbd>⌘S</kbd> works too.' });
   } else {
     list.push({ target: '#avatars', title: 'Follow along', body: 'Click someone’s avatar to follow their view, or watch when they present.' });
   }

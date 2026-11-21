@@ -2,7 +2,7 @@
 
 A minimal, near-infinite whiteboard for notes, images, sketches and flow charts. Invite people to edit with you in real time, drive it from the keyboard with vim keys, and let AI agents read and edit your boards over MCP.
 
-Self-hosted and local-first: boards are plain JSON files on your own disk.
+Live at **[brainboard.ink](https://brainboard.ink)**, or run your own: boards are plain JSON files on the server's disk.
 
 ![A brainboard with a flow chart, notes, images and two collaborators](docs/screenshots/board-dark.png)
 
@@ -13,7 +13,8 @@ Self-hosted and local-first: boards are plain JSON files on your own disk.
 - **Live collaboration.** Invite links that can edit or only view. Everyone's cursor, selection and typing shows up live, and you can follow someone or present to the room.
 - **Vim keys.** A `:` command line with completion, `/` search, find and replace, and an optional vim mode with `hjkl` navigation.
 - **Agent friendly.** A built-in MCP server lets Claude, Cursor and other agents list, read, render and edit boards. Their edits appear live in your tab.
-- **Yours.** No account, no cloud. Light and dark themes, per-user undo, and JSON export.
+- **No sign-up wall.** Start drawing straight away. Create an account (with a passkey, or email and password) when you want to keep your boards and open them anywhere.
+- **Yours.** Self-host it in one command. Light and dark themes, per-user undo, and JSON export.
 
 ## Quick start
 
@@ -33,6 +34,7 @@ Open http://localhost:5317. A short tour walks you through the basics the first 
 | `npm run dev` | Development server with live reload, on this computer only |
 | `npm start` | Production build, on this computer only |
 | `npm run share` | Production build that people on your network can reach |
+| `npm run prod` | Production build in hosted mode for https://brainboard.ink (see [Deploy](#deploy)) |
 | `npm run mcp` | The MCP server on stdio, for AI agents |
 
 Boards are saved in `~/.brainboard/`, with images next to them. Set `BRAINBOARD_DIR` to use another folder. Deleted boards go to `~/.brainboard/trash/`.
@@ -56,17 +58,27 @@ Press `?` in the app for every shortcut.
 
 ![The same board in the light theme, with a shape selected](docs/screenshots/board-light.png)
 
+## Accounts and saving
+
+Nobody has to sign in. Every browser gets its own private, anonymous space, and the boards you make there are yours.
+
+- **Not saved yet.** Until you create an account, your boards are tied to this browser. If you clear its data or switch devices, they're gone. A **Save** button in the top right shows when this applies. If you head for the tab bar with unsaved work, brainboard shows a short in-app reminder. `⌘S` and `:w` save too.
+- **Create an account** with a **passkey** (Face ID, Touch ID or your device PIN, with no password) or with **email and password**. Everything you made in this browser moves into the account.
+- **Sign in anywhere** with the same passkey or email to see all your boards. Add more passkeys, rename yourself or sign out from your avatar in the top right.
+
+Passwords are hashed with scrypt, and sessions are random tokens stored only as hashes. Sign-in attempts are rate-limited.
+
 ## Collaborate in real time
 
-Click **Share** to create invite links. Each link either **can edit** or **can view**, and you can change or revoke it at any time. Changes apply instantly to everyone using that link. Guests choose a name and colour and see only the board they were invited to.
+Click **Share** to create invite links. Each link either **can edit** or **can view**, and you can change or revoke it at any time. Changes apply instantly to everyone using that link. Collaborating doesn't need an account, just a **screen name**: brainboard asks for one before you share or present, and guests pick theirs when they join. Guests see only the board they were invited to.
 
 ![The share dialog with two invite links and live session controls](docs/screenshots/share.png)
 
 - **Presence.** Everyone's cursor, selection and "typing" marker appear in their colour. Click an avatar to follow that person's view.
 - **Present.** Everyone follows your view while you walk through the board. You can lock the view so nobody wanders off.
 - **Session controls.** *Pause editing* makes everyone else view-only. *Show viewers' cursors* can be turned off for big audiences. Each person has a **Remove** button.
-- **Reaching people.** `npm run dev` and `npm start` listen only on your computer. For people on the same Wi-Fi, run `npm run share` and the Share dialog picks your network address. For anyone else, run `npm start` behind a tunnel, for example `cloudflared tunnel --url http://localhost:5317`, and paste the tunnel's address into **Link address**.
-- **Security.** Requests from your own computer are the owner. Everyone else needs an invite link, or the private owner link that `npm run share` prints. Cross-site requests are refused, and roles are enforced on the server, not just in the UI.
+- **Reaching people.** On brainboard.ink, links just work. When you run it yourself, `npm run dev` and `npm start` listen only on your computer. For people on the same Wi-Fi, run `npm run share` and the Share dialog picks your network address. For anyone else, run `npm start` behind a tunnel, for example `cloudflared tunnel --url http://localhost:5317`, and paste the tunnel's address into **Link address**.
+- **Security.** Each board belongs to the account or browser that made it. Everyone else needs an invite link. Cross-site requests are refused, and roles are enforced on the server, not just in the UI. When you run it locally, your own computer also sees boards that have no owner, such as older boards and ones AI agents create over MCP.
 
 ## Vim keys
 
@@ -139,6 +151,32 @@ New boards open with a small animated scene instead of a blank page. It stops as
 
 ![An empty board showing an animated preview of collaborators moving photos and typing](docs/screenshots/empty.png)
 
+## Deploy
+
+Production runs at **https://brainboard.ink**. Hosted mode turns on when `BRAINBOARD_PUBLIC_URL` is set. It switches off the "this computer is the owner" shortcut, issues `Secure` cookies, and uses the domain for passkeys and invite links.
+
+```sh
+npm ci
+npm run prod   # builds, then serves on $PORT (default 5317) with BRAINBOARD_PUBLIC_URL=https://brainboard.ink
+```
+
+| Variable | Default | Purpose |
+|---|---|---|
+| `BRAINBOARD_PUBLIC_URL` | unset (local mode) | The public address, e.g. `https://brainboard.ink` |
+| `PORT` | `5317` | Port to listen on |
+| `HOST` | `0.0.0.0` when hosted | Interface to listen on |
+| `BRAINBOARD_DIR` | `~/.brainboard` | Boards, images, accounts and sessions. Back this up |
+
+Put it behind HTTPS. A reverse proxy must forward WebSockets and keep the original `Host` header. With [Caddy](https://caddyserver.com):
+
+```
+brainboard.ink {
+  reverse_proxy 127.0.0.1:5317
+}
+```
+
+Passkeys only work on the real domain (and on `localhost` in development), not on raw IP addresses. Email sign-in works everywhere.
+
 ## How it works
 
 - **App** (`src/`): vanilla TypeScript and Vite, no framework. The canvas is DOM elements and SVG inside one transformed layer.
@@ -150,6 +188,8 @@ New boards open with a small animated scene instead of a blank page. It stops as
 | `src/state.ts` · `src/net.ts` | Board state and per-user undo · server connection and live sync |
 | `src/render.ts` · `src/input.ts` · `src/actions.ts` · `src/ui.ts` | Canvas, input, operations, interface |
 | `src/collab.ts` · `src/vim.ts` · `src/tour.ts` | Presence, follow and sharing · vim keys · first-run tour |
+| `src/account.ts` | Sign-in sheet, save reminders, screen names |
 | `server/store.ts` · `server/api.ts` · `server/realtime.ts` | Board and image files · HTTP API · live rooms |
 | `server/mcp.ts` · `server/agent.ts` · `server/render.ts` | MCP server · outlines and auto-layout · PNG rendering |
-| `server/auth.ts` · `server/sharing.ts` | Owner and guest access, invite links |
+| `server/auth.ts` · `server/sharing.ts` | Who is asking (account, anonymous browser, guest) · board owners and invite links |
+| `server/accounts.ts` · `server/passkeys.ts` · `server/config.ts` | Accounts, passwords and sessions · passkeys (WebAuthn) · hosted vs local mode |

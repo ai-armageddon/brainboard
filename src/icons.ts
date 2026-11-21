@@ -27,6 +27,10 @@ const P: Record<string, string> = {
   link: '<path d="M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1"/><path d="M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1"/>',
   users: '<circle cx="9" cy="8.5" r="3.2"/><path d="M3.5 19a5.5 5.5 0 0 1 11 0"/><path d="M15.5 5.6a3.2 3.2 0 0 1 0 5.8M17.5 14.2A5.5 5.5 0 0 1 20.5 19"/>',
   close: '<path d="M6.5 6.5l11 11M17.5 6.5l-11 11"/>',
+  passkey: '<circle cx="9" cy="7.5" r="3.5"/><path d="M3 19.5a6 6 0 0 1 9.5-4.9"/><circle cx="17" cy="13.5" r="2.5"/><path d="M17 16v5m0-2.2h2m-2 2.2h1.5"/>',
+  save: '<path d="M7 18.5a4.5 4.5 0 0 1-.6-8.96A6 6 0 0 1 18 9a4 4 0 0 1-.5 7.97"/><path d="M12 12v8m-3-5 3-3 3 3"/>',
+  logout: '<path d="M14 4.5h3.5a2 2 0 0 1 2 2v11a2 2 0 0 1-2 2H14"/><path d="M10 16l-4-4 4-4M6 12h9"/>',
+  mail: '<rect x="3.5" y="5.5" width="17" height="13" rx="2"/><path d="m4 7 8 6 8-6"/>',
   sizeDown: '<path d="M4 18 9 6l5 12"/><path d="M5.8 14h6.4"/><path d="M16 12h5"/>',
   sizeUp: '<path d="M4 18 9 6l5 12"/><path d="M5.8 14h6.4"/><path d="M16 12h5M18.5 9.5v5"/>',
 };

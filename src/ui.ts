@@ -7,12 +7,13 @@ import {
   importBoard, reorder, setColor, setShape, setTool, setZoom, startEditing, viewCenter, zoomBy, zoomToFit,
 } from './actions';
 import { clamp } from './geometry';
-import { api, events, saveProfile, session, type BoardMeta } from './net';
+import { account, api, events, saveProfile, session, type BoardMeta } from './net';
 import { openBoard, saveCamera } from './boards';
 import { paintLogos } from './brand';
 import { userMovedCamera } from './collab';
 import { isVimMode, setVimMode } from './vim';
 import { startTour } from './tour';
+import { openAuth, signOut } from './account';
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
 
@@ -211,6 +212,7 @@ export function buildUI() {
       case 'shortcuts': toggleShortcuts(true); break;
       case 'vim': setVimMode(!isVimMode()); break;
       case 'tour': startTour(); break;
+      case 'account': if (account.user) void signOut(); else openAuth('signin'); break;
       case 'clear': clearBoard(); break;
       case 'new-board': void newBoard(); break;
       case 'rename': startRename(); break;
