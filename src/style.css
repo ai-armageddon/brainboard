@@ -1991,3 +1991,12 @@ body.viewer #viewport[data-tool="select"] .item:hover::after { display: none; }
 @media (max-width: 520px) {
   .ai-new, .ai-url { flex-direction: column; }
 }
+
+.connect-body { gap: 14px; text-align: left; }
+.connect-body details { border-top: 1px solid var(--line); padding-top: 12px; }
+.connect-body summary { cursor: pointer; font-size: 13px; color: var(--fg-2); }
+.connect-body details[open] > summary { margin-bottom: 10px; }
+.ai-prompt { width: 100%; resize: vertical; font: 14px var(--font); color: var(--fg); background: var(--bg); border: 1px solid var(--line-strong); border-radius: var(--r); padding: 10px; }
+.ai-open { display: block; padding: 10px 15px; border-radius: var(--r-sm); background: var(--accent); color: var(--on-accent); text-align: center; text-decoration: none; font-weight: 600; }
+.ai-actions { display: flex; align-items: center; gap: 12px; }
+.ai-actions .primary { margin: 0; width: auto; }

@@ -15,7 +15,7 @@ import { openBoard, openDraft, restoreCamera } from './boards';
 import { initCollab } from './collab';
 import { initInk } from './ink';
 import { initHome } from './home';
-import { initConnect } from './connect';
+import { initConnect, openConnect } from './connect';
 import { initViews } from './views';
 import { blobGet, kvGet, kvSet } from './db';
 import type { Item } from './types';
@@ -49,7 +49,7 @@ async function main() {
   initCollab();
   initInk();
   initHome();
-initConnect();
+  initConnect();
   initViews();
   initVim();
   initAccount();
@@ -79,6 +79,12 @@ initConnect();
   }
 
   const params = new URLSearchParams(location.search);
+  const approval = params.get('ai_approval');
+  if (approval) {
+    document.body.classList.add('loaded');
+    openConnect(approval);
+    return;
+  }
   const invite = params.get('invite');
   const hashId = location.hash.slice(1);
 

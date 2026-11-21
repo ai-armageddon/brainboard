@@ -16,7 +16,7 @@ import { anonKey, isCrossSite, isLocalRequest, ownsKey, userKey, type Principal 
 import { getUser, limited } from './accounts.ts';
 import { findKey, touchKey, type AccessKey } from './keys.ts';
 import { createBoard, listBoards, readBoard, NotFoundError, type Board } from './store.ts';
-import { getOwner, setOwner, sharedWith } from './sharing.ts';
+import { getOwner, getSharing, setOwner, sharedWith } from './sharing.ts';
 import { editBoard, liveBoard, screensOf } from './realtime.ts';
 import { instructions, pickBoard, registerBoardTools, type BoardAccess } from './tools.ts';
 import type { Role } from '../src/protocol.ts';
@@ -41,7 +41,7 @@ const CORS = {
   'access-control-allow-origin': '*',
   'access-control-allow-methods': 'POST, GET, DELETE, OPTIONS',
   'access-control-allow-headers': 'authorization, content-type, accept, mcp-protocol-version, mcp-session-id, last-event-id',
-  'access-control-expose-headers': 'mcp-session-id',
+  'access-control-expose-headers': 'mcp-session-id, www-authenticate',
 };
 
 function reply(res: ServerResponse, status: number, body: unknown, headers: Record<string, string> = {}) {
@@ -67,26 +67,28 @@ function callerFromKey(k: AccessKey): Caller {
 
 // ---------------------------------------------------------------- what the caller may touch
 
+export async function aiBoards(principal: Principal, boardId?: string, everything = false) {
+  const accountKeys = [principal.user ? userKey(principal.user.id) : null, principal.anonId ? anonKey(principal.anonId) : null].filter((k): k is string => !!k);
+  const out: (Awaited<ReturnType<typeof listBoards>>[number] & { role: Role; from?: string | null })[] = [];
+  const all = (await listBoards()).filter(b => !boardId || b.id === boardId);
+  for (const b of all) if (everything || ownsKey(principal, await getOwner(b.id))) out.push({ ...b, role: 'owner' });
+  if (!everything && accountKeys.length) {
+    const byId = new Map(all.map((b) => [b.id, b]));
+    for (const s of await sharedWith(accountKeys, principal.user?.id ?? null)) {
+      const meta = byId.get(s.boardId);
+      if (!meta || out.some((o) => o.id === s.boardId)) continue;
+      const owner = await getOwner(s.boardId);
+      const from = owner?.startsWith('user:') ? getUser(owner.slice(5))?.name ?? null : s.invite.from ?? null;
+      const paused = s.invite.role === 'editor' && (await getSharing(s.boardId)).settings.paused;
+      out.push({ ...meta, role: paused ? 'viewer' : s.invite.role, from });
+    }
+  }
+  return out.sort((a, b) => b.updated.localeCompare(a.updated));
+}
+
 function accessFor(c: Caller, base: string): BoardAccess {
   const isMe = (acct: string | null, local: boolean) => (c.everything ? local : !!c.acct && acct === c.acct) || (c.p.local && local);
-  const accountKeys = [c.p.user ? userKey(c.p.user.id) : null, c.p.anonId ? anonKey(c.p.anonId) : null].filter((k): k is string => !!k);
-
-  const list = async () => {
-    const out: (Awaited<ReturnType<typeof listBoards>>[number] & { role: Role; from?: string | null })[] = [];
-    const all = await listBoards();
-    for (const b of all) if (c.everything || ownsKey(c.p, await getOwner(b.id))) out.push({ ...b, role: 'owner' });
-    if (!c.everything && accountKeys.length) {
-      const byId = new Map(all.map((b) => [b.id, b]));
-      for (const s of await sharedWith(accountKeys, c.p.user?.id ?? null)) {
-        const meta = byId.get(s.boardId);
-        if (!meta || out.some((o) => o.id === s.boardId)) continue;
-        const owner = await getOwner(s.boardId);
-        const from = owner?.startsWith('user:') ? getUser(owner.slice(5))?.name ?? null : s.invite.from ?? null;
-        out.push({ ...meta, role: s.invite.role, from });
-      }
-    }
-    return out.sort((a, b) => b.updated.localeCompare(a.updated));
-  };
+  const list = () => aiBoards(c.p, c.key?.grant?.boardId, c.everything);
 
   const screens = async () => {
     const mine = await screensOf(isMe);
@@ -112,7 +114,7 @@ function accessFor(c: Caller, base: string): BoardAccess {
   return {
     list,
     screens,
-    defaultHelp: 'Defaults to the board the user has open right now, else the most recently edited one.',
+    defaultHelp: c.key?.grant ? 'Uses the board authorized for this connection.' : 'Defaults to the board the user has open right now, else the most recently edited one.',
     open: async (ref) => read((await find(ref)).id),
     edit: async (ref, fn, opts) => {
       const meta = await find(ref);
@@ -123,6 +125,7 @@ function accessFor(c: Caller, base: string): BoardAccess {
       return editBoard(meta.id, (b) => fn(b, anchor));
     },
     create: async (name) => {
+      if (c.key?.grant) throw new Error('This connection is limited to its chosen board.');
       const b = await createBoard(name);
       if (c.acct) await setOwner(b.id, c.acct);
       return b;
@@ -176,13 +179,15 @@ export async function handleMcp(req: IncomingMessage, res: ServerResponse, url: 
   const method = req.method ?? 'GET';
   const parts = url.pathname.split('/').filter(Boolean); // ["mcp", key?]
   const bearer = /^Bearer\s+(\S+)$/i.exec(String(req.headers.authorization ?? ''))?.[1] ?? null;
-  const secret = parts[1] ?? bearer;
+  const oauth = url.pathname === '/mcp/connect';
+  const resource = `${mcpBase(req)}/mcp/connect`;
+  const secret = oauth ? bearer : parts[1] ?? bearer;
 
   let caller: Caller | null = null;
   if (secret) {
     const k = findKey(secret);
-    if (k) caller = callerFromKey(k);
-  } else if (isLocalRequest(req) && !isCrossSite(req)) {
+    if (k && (oauth ? k.grant?.resource === resource : !k.grant)) caller = callerFromKey(k);
+  } else if (!oauth && isLocalRequest(req) && !isCrossSite(req)) {
     caller = { key: null, everything: true, p: { user: null, anonId: null, local: true }, acct: null };
   }
   const cors: Record<string, string> = caller?.key ? CORS : {};
@@ -192,7 +197,7 @@ export async function handleMcp(req: IncomingMessage, res: ServerResponse, url: 
     return reply(res, 401, {
       jsonrpc: '2.0', id: null,
       error: { code: -32001, message: 'Brainboard needs an access key. Make one in the app: menu → Connect AI.' },
-    }, { ...CORS, 'www-authenticate': 'Bearer realm="brainboard"' });
+    }, { ...CORS, 'www-authenticate': oauth ? `Bearer resource_metadata="${mcpBase(req)}/.well-known/oauth-protected-resource/mcp/connect", scope="board"` : 'Bearer realm="brainboard"' });
   }
   if (method !== 'POST') {
     // Stateless server: no standalone event stream, no sessions to end.

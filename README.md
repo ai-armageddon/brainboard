@@ -143,14 +143,13 @@ brainboard ships an MCP server, so ChatGPT, Claude, Codex, Cursor and other agen
 
 ### Chat apps: ChatGPT, Claude, Codex (Connect AI)
 
-Open the menu and choose **Connect AI…**, name the connection and copy the link it makes (`https://brainboard.ink/mcp/bb_…`). The app shows the steps for each one:
+Click **Ask AI** on the board, choose **ChatGPT** or **Claude**, and select a board. Continue to the provider to install Brainboard. For a custom installation, the button copies the public connector address (`https://brainboard.ink/mcp/connect`). Use OAuth with automatic client registration. On the Brainboard consent screen, choose **Connect board**. You can use your existing browser identity or sign in to find your account’s boards.
 
-- **ChatGPT:** Settings → Apps → Advanced settings → Developer mode, then create an app with the link as its MCP server URL and no authentication. Needs a paid plan.
-- **Claude** (web and desktop): Settings → Connectors → Add custom connector, and paste the link.
-- **Codex:** add `[mcp_servers.brainboard]` with `url = "<link>"` to `~/.codex/config.toml`.
-- **Anything else** that speaks MCP over HTTP: use the link, or `POST /mcp` with `Authorization: Bearer bb_…`.
+Open a chat, enable Brainboard, and ask “Turn my notes into a flowchart.” Each connection can access one board with your current permissions. You can change its board from **Connect AI** or revoke access under **Manage connections**. Brainboard can copy a prompt for you to paste and send in your AI chat.
 
-A link acts as you: the browser that made it, or your account once you sign in. It can open your boards and the ones shared with you, with the same role, and nothing else. Only a hash of it is stored, and deleting it in Connect AI cuts that app off at once. Over a link the agent also gets **`current_context`**: which board you have open, the area on your screen and what's in it, what you've selected or are typing in, which view you're in, and who else is there. So *"turn these into a flowchart"* works. Things it adds without a position land where you're looking.
+Cloud chats need a public HTTPS deployment with `BRAINBOARD_PUBLIC_URL` set. After obtaining an official provider directory listing, set `VITE_CHATGPT_PLUGIN_URL` or `VITE_CLAUDE_CONNECTOR_URL` to its installation page at build time to skip manual connector setup. The public endpoint advertises OAuth discovery and supports dynamic client registration, authorization code with PKCE, and rotating refresh tokens.
+
+For Codex or another MCP client, expand **Manual setup** to make a personal access link. These links retain their original account-wide access. Codex can register a link with `codex mcp add brainboard --url "<link>"`.
 
 ### On this computer (stdio)
 

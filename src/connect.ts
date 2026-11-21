@@ -1,20 +1,33 @@
 // Connect AI: personal links that let ChatGPT, Claude, Codex and other MCP apps read your boards, add to them and
 // see what you're looking at. Each link acts as you (this browser, or your account once signed in); delete it to
 // cut that app off.
-import { account } from './net';
+import { account, api, events, session } from './net';
+import { ensureBoard } from './boards';
+import { openAuth } from './account';
 import { closePopovers, toast } from './ui';
 import { icon } from './icons';
 
 const $ = (id: string) => document.getElementById(id)!;
 const esc = (s: string) => s.replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`);
 
-interface Key { id: string; name: string; hint: string; created: string; used: string | null }
+interface Key { id: string; name: string; hint: string; created: string; used: string | null; boardId?: string; expired?: boolean }
 
+type Provider = 'ChatGPT' | 'Claude';
+interface BoardChoice { id: string; name: string; role: 'owner' | 'editor' | 'viewer' }
+let boards: BoardChoice[] = [];
+let selected = '';
+let provider: Provider = 'ChatGPT';
+let approval = '';
+let loadError = '';
+let loading = true;
 let keys: Key[] = [];
+const destinations = {
+  ChatGPT: { setup: 'https://chatgpt.com/plugins', chat: 'https://chatgpt.com/', listing: import.meta.env.VITE_CHATGPT_PLUGIN_URL as string | undefined },
+  Claude: { setup: 'https://claude.ai/customize/connectors', chat: 'https://claude.ai/new', listing: import.meta.env.VITE_CLAUDE_CONNECTOR_URL as string | undefined },
+};
 let base = location.origin;
 /** the link just made: shown once, since only a hash is kept */
 let fresh: { url: string; name: string } | null = null;
-let app: 'chatgpt' | 'claude' | 'codex' | 'other' = 'chatgpt';
 let confirmDel: string | null = null;
 
 async function call<T>(method: string, url: string, body?: unknown): Promise<T> {
@@ -36,106 +49,193 @@ function ago(iso: string) {
   return `${Math.floor(s / 86400)}d ago`;
 }
 
-const reachable = () => !/^https?:\/\/(localhost|127\.0\.0\.1|\[::1\])(:|\/|$)/.test(base);
+const reachable = () => base.startsWith('https://') && !/^https?:\/\/(localhost|127\.0\.0\.1|\[::1\])(:|\/|$)/.test(base);
 
-function steps(url: string) {
-  const code = (raw: string) => `<pre class="ai-code"><code>${esc(raw)}</code><button class="cbtn" data-copy="${esc(raw)}" aria-label="Copy">${icon('copy', 16)}</button></pre>`;
-  const tabs = ([['chatgpt', 'ChatGPT'], ['claude', 'Claude'], ['codex', 'Codex'], ['other', 'Other apps']] as const)
-    .map(([k, l]) => `<button class="seg ${app === k ? 'on' : ''}" data-app="${k}" aria-pressed="${app === k}">${l}</button>`).join('');
-  const body = {
-    chatgpt: `<ol>
-        <li>In ChatGPT open <b>Settings → Apps</b> (called Apps &amp; Connectors on some accounts). Under <b>Advanced settings</b>, turn on <b>Developer mode</b> if you see it.</li>
-        <li>Choose <b>Create</b> (or <b>Add → Create MCP app</b>). Name it Brainboard, paste the link as the <b>MCP server URL</b> and pick <b>No authentication</b>.</li>
-        <li>In a chat, turn Brainboard on from the <b>+</b> menu and ask away: <i>“turn this into a flowchart on my board”</i>.</li>
-      </ol>
-      <p class="muted small">Needs a paid ChatGPT plan. Workspace accounts may need an admin to allow custom apps.</p>`,
-    claude: `<ol>
-        <li>In Claude (web or desktop) open <b>Settings → Connectors → Add custom connector</b>.</li>
-        <li>Name it Brainboard and paste the link as the URL. No other settings needed.</li>
-        <li>Turn it on for a chat from the tools menu and ask: <i>“what am I looking at on my board?”</i></li>
-      </ol>
-      <p class="muted small">Claude Code: </p>${code(`claude mcp add --transport http brainboard ${url}`)}`,
-    codex: `<p class="small">Add this to <code>~/.codex/config.toml</code>, then restart Codex:</p>
-      ${code(`[mcp_servers.brainboard]\nurl = "${url}"`)}`,
-    other: `<p class="small">Any app that supports MCP over HTTP (“Streamable HTTP”) can use the link as its server URL. Apps that ask for a header instead can use the base address with the key as a bearer token:</p>
-      ${code(`${base}/mcp\nAuthorization: Bearer ${url.slice(url.lastIndexOf('/') + 1)}`)}`,
-  }[app];
-  return `<div class="seg-row ai-tabs">${tabs}</div><div class="ai-steps">${body}</div>`;
-}
-
-function render() {
-  const el = $('connect').querySelector('.connect-body')!;
-  const where = account.user
-    ? `Links act as your account, <b>${esc(account.user.name)}</b>: they can open your boards and the ones shared with you, nothing else.`
-    : 'Links act as this browser: they can open the boards you made here and the ones shared with you, nothing else. Sign in and they move to your account.';
-  el.innerHTML = `
-    <p class="small ai-lede">Let ChatGPT, Claude, Codex or any MCP app read your boards, add notes, shapes and flowcharts, and see what you’re looking at and what you’ve selected. Edits show up live.</p>
-    ${reachable() ? '' : '<p class="small ai-warn">You’re on this computer’s copy of Brainboard, so these links only work from here (Codex, Claude Code). ChatGPT and claude.ai need the links from brainboard.ink.</p>'}
-    ${fresh ? `
+function manualSetup() {
+  const where = 'Personal links grant access to every board available to your Brainboard account or browser.';
+  return `<details class="ai-manual" ${fresh ? 'open' : ''}><summary>Manual setup for Codex and other apps</summary>
+${fresh ? `
       <section class="ai-fresh">
         <h3>${esc(fresh.name)}: your link</h3>
-        <p class="small muted">Copy it now: it won’t be shown again. Anyone with it can edit your boards, so keep it private.</p>
+        <p class="small muted">Keep this private link. Anyone with it can use your board permissions.</p>
         <div class="ai-url"><input class="mono" readonly value="${esc(fresh.url)}" aria-label="Connection link" /><button class="primary" data-copy="${esc(fresh.url)}">${icon('copy', 16)} Copy</button></div>
-        ${steps(fresh.url)}
+        <p class="small">For Codex, copy this terminal command.</p>
+        <pre class="ai-code"><code>codex mcp add brainboard --url ${esc(fresh.url)}</code><button class="cbtn" data-copy="codex mcp add brainboard --url ${esc(fresh.url)}" aria-label="Copy Codex command">${icon('copy',16)}</button></pre>
         <button class="link-btn" data-act="done">Done</button>
       </section>` : `
       <section>
         <h3>New connection</h3>
         <form class="ai-new">
-          <input class="home-search" name="name" maxlength="40" placeholder="Name it, e.g. ChatGPT" aria-label="Connection name" />
+          <input class="home-search" name="name" maxlength="40" placeholder="Name it, e.g. Codex" aria-label="Connection name" />
           <button class="primary" type="submit">Create link</button>
         </form>
         <p class="small muted">${where}</p>
-      </section>`}
-    <section>
-      <h3>Connections <span class="count">${keys.length}</span></h3>
-      <div class="members">${keys.length ? keys.map((k) => `
-        <div class="member ai-key" data-id="${esc(k.id)}">
-          <span class="ai-ic">${icon('passkey', 17)}</span>
-          <div class="member-main"><div>${esc(k.name)}</div><div class="sub muted">${esc(k.hint)}… · made ${ago(k.created)} · ${k.used ? `used ${ago(k.used)}` : 'not used yet'}</div></div>
-          <button class="link-btn danger" data-act="del">${confirmDel === k.id ? 'Click again to delete' : 'Delete'}</button>
-        </div>`).join('') : '<p class="small muted">None yet.</p>'}
-      </div>
-    </section>`;
-  el.querySelector<HTMLInputElement>('.ai-new input')?.focus();
+      </section>`}</details>`;
 }
 
+function boardOptions(id: string) {
+  return boards.map(b => `<option value="${esc(b.id)}" ${id === b.id ? 'selected' : ''}>${esc(b.name)}${b.role === 'viewer' ? ' (view only)' : ''}</option>`).join('');
+}
+
+function picker() {
+  return boards.length
+    ? `<label class="field">Board<select data-board aria-label="Board">${boardOptions(selected)}</select></label>`
+    : '<button type="button" class="link-btn" data-act="new-board">Create a board</button>';
+}
+
+function render() {
+  const el = $('connect').querySelector('.connect-body')!;
+  $('connect-title').textContent = approval ? 'Authorize Brainboard' : 'Connect AI';
+  if (loading || loadError) {
+    el.innerHTML = loading ? '<p role="status">Loading connections…</p>' :
+      `<p role="alert">${esc(loadError)}</p><button class="link-btn" data-act="retry">Try again</button>`;
+    return;
+  }
+  if (approval) {
+    const board = boards.find(b => b.id === selected);
+    el.innerHTML = `<h3>Connect ${provider} to a board</h3>
+      ${picker()}<p class="small">${board ? `${provider} will be able to ${board.role === 'viewer' ? 'read' : 'read and edit'} this board when you use the connector.` : 'Choose a board to continue.'}</p>
+      ${account.user ? `<p class="small muted">Signed in as ${esc(account.user.name)}</p>` : '<button class="link-btn" data-act="signin">Sign in to find my boards</button>'}
+      <div class="ai-actions"><button class="primary" data-act="allow" ${board ? '' : 'disabled'}>Connect board</button>
+      <button class="link-btn" data-act="deny">Cancel</button></div>`;
+    return;
+  }
+  const grants = keys.filter(k => k.boardId && !k.expired && k.name === provider);
+  const grant = grants.find(k => k.boardId === selected) ?? grants[grants.length - 1];
+  const linked = grant && grant.boardId === selected;
+  const dest = destinations[provider];
+  const endpoint = base + '/mcp/connect';
+  el.innerHTML = `<div class="ai-tabs" role="group" aria-label="AI provider">${(['ChatGPT', 'Claude'] as const).map(p =>
+    `<button class="seg ${p === provider ? 'on' : ''}" data-provider="${p}" aria-pressed="${p === provider}">${p}</button>`).join('')}</div>
+    ${picker()}
+    ${linked ? `<label class="field">Prompt for ${provider}<textarea class="ai-prompt" rows="3" maxlength="8000" placeholder="Turn the notes on this board into a flowchart."></textarea></label>
+      <a class="primary ai-open" data-launch href="${dest.chat}" target="_blank" rel="noopener noreferrer">Open ${provider}</a>
+      <p class="small muted">Your prompt is copied when you open the chat. Select Brainboard, paste it and send.</p>` :
+    grant ? `<button class="primary" data-act="switch" data-key="${esc(grant.id)}" ${selected ? '' : 'disabled'}>Use this board with ${provider}</button>` :
+    !reachable() ? '<p class="ai-warn">ChatGPT and Claude need a publicly reachable HTTPS board. Use the hosted Brainboard for these chats, or connect a local app below.</p>' :
+    dest.listing ? `<a class="primary ai-open" data-setup href="${esc(dest.listing)}" target="_blank" rel="noopener noreferrer">Connect with ${provider}</a>` :
+    `<a class="primary ai-open" data-setup href="${dest.setup}" target="_blank" rel="noopener noreferrer">Continue in ${provider}</a>
+      <p class="small">Add Brainboard once in ${provider}, then approve your board. We’ll copy the connector address when you continue.</p>
+      <details><summary>First-time setup</summary>
+      <p class="small">${provider === 'ChatGPT' ? 'In Plugins, choose Add custom MCP server. Paste the address, name it Brainboard and select OAuth with automatic registration.' : 'Add a custom web connector named Brainboard. Paste the address, then choose Sign in now and Register automatically.'}</p>
+      <div class="ai-url"><input readonly aria-label="Public connector address" value="${esc(endpoint)}"><button class="link-btn" data-copy="${esc(endpoint)}">Copy address</button></div></details>`}
+    <details ${confirmDel ? 'open' : ''}><summary>Manage connections (${keys.length})</summary><div class="members">${keys.map(k =>
+      `<div class="member ai-key" data-id="${esc(k.id)}"><div class="member-main"><b>${esc(k.name)}</b><span class="sub muted">${k.boardId ? esc(boards.find(b=>b.id===k.boardId)?.name ?? 'Board unavailable') : 'All accessible boards'} · ${k.expired ? 'expired' : k.used ? 'used '+ago(k.used) : 'unused'}</span></div>
+      <button class="link-btn danger" data-act="del">${confirmDel === k.id ? 'Confirm disconnect' : 'Disconnect'}</button></div>`).join('') || '<p class="small muted">No connections yet.</p>'}</div></details>
+    ${manualSetup()}`;
+}
+
+let generation = 0;
 async function load() {
+  const version = ++generation;
   try {
-    const r = await call<{ base: string; keys: Key[] }>('GET', '/api/mcp-keys');
+    const [r, consent] = await Promise.all([
+      call<{ base: string; keys: Key[]; boards: BoardChoice[] }>('GET', '/api/mcp-keys'),
+      approval ? call<{ provider: Provider }>('GET', '/api/ai-consent/' + encodeURIComponent(approval)) : null,
+    ]);
+    if (version !== generation) return;
     keys = r.keys;
+    boards = r.boards;
     base = r.base;
-  } catch { /* keep what we have */ }
+    if (consent) provider = consent.provider;
+    let preferred = selected || session.boardId;
+    if (approval && !selected) try { preferred = localStorage.getItem('bb-ai-board-' + provider); } catch { /* optional */ }
+    selected = boards.find(b => b.id === preferred)?.id ?? boards[0]?.id ?? '';
+    loadError = '';
+  } catch (err) { if (version !== generation) return; loadError = (err as Error).message; }
+  loading = false;
   render();
 }
 
-export function openConnect() {
+export function openConnect(request = '') {
+  approval = request;
+  try { provider = localStorage.getItem('bb-ai-provider') === 'Claude' ? 'Claude' : 'ChatGPT'; } catch { /* optional */ }
+  selected = session.boardId ?? '';
+  loading = true;
+  loadError = '';
   closePopovers();
   fresh = null;
   confirmDel = null;
   $('connect').hidden = false;
+  $('connect').querySelector<HTMLButtonElement>('.close')?.focus();
   render();
   void load();
 }
 
 function closeConnect() {
+  if (approval) {
+    void decide(false).catch(() => location.replace('/'));
+    return;
+  }
+  ++generation;
   $('connect').hidden = true;
   fresh = null;
 }
 
+async function decide(allow: boolean) {
+  const result = await call<{ redirect: string }>('POST', '/api/ai-consent/' + encodeURIComponent(approval), { allow, boardId: selected });
+  location.replace(result.redirect);
+}
+
 export function initConnect() {
   const el = $('connect');
+  $('ask-ai').addEventListener('click', () => openConnect());
+  el.addEventListener('change', (e) => {
+    const select = e.target;
+    if (select instanceof HTMLSelectElement && select.matches('[data-board]')) { selected = select.value; render(); }
+  });
+  el.addEventListener('keydown', e => { e.stopPropagation(); if (e.key === 'Escape') closeConnect(); });
+  events.addEventListener('account', () => { if (!el.hidden) void load(); });
+  window.addEventListener('focus', () => {
+    if (!el.hidden && !approval && !fresh && !el.querySelector('.ai-prompt, details[open]')) void load();
+  });
   el.addEventListener('click', async (e) => {
     const t = e.target as Element;
     if (t === el || t.closest('.close')) return closeConnect();
-    const cp = t.closest<HTMLElement>('[data-copy]');
-    if (cp) {
-      try { await navigator.clipboard.writeText(cp.dataset.copy!); toast('Copied'); } catch { toast(cp.dataset.copy!); }
+    const prov = t.closest<HTMLElement>('[data-provider]')?.dataset.provider;
+    if (prov === 'ChatGPT' || prov === 'Claude') {
+      provider = prov;
+      try { localStorage.setItem('bb-ai-provider', provider); } catch { /* optional */ }
+      confirmDel = null;
+      return render();
+    }
+    if (t.closest('[data-setup]')) {
+      try { localStorage.setItem('bb-ai-board-' + provider, selected); } catch { /* optional */ }
+      if (!destinations[provider].listing) {
+        try { await navigator.clipboard.writeText(base + '/mcp/connect'); toast('Connector address copied'); }
+        catch { toast('Use Copy address before adding Brainboard.'); }
+      }
       return;
     }
-    const tab = t.closest<HTMLElement>('[data-app]');
-    if (tab) { app = tab.dataset.app as typeof app; return render(); }
+    if (t.closest('[data-launch]')) {
+      const prompt = el.querySelector<HTMLTextAreaElement>('.ai-prompt')?.value.trim();
+      if (prompt) {
+        try { await navigator.clipboard.writeText(prompt); toast('Prompt copied'); }
+        catch { toast('Copy your prompt here, then paste it into the chat.'); }
+      }
+      return;
+    }
+    const cp = t.closest<HTMLElement>('[data-copy]');
+    if (cp) {
+      try { await navigator.clipboard.writeText(cp.dataset.copy!); toast('Copied'); } catch { toast('Select the address and copy it manually.'); }
+      return;
+    }
     const act = t.closest<HTMLElement>('[data-act]')?.dataset.act;
+    if (act === 'retry') return void load();
+    if (act === 'signin') return openAuth('signin');
+    if (act === 'allow' || act === 'deny' || act === 'new-board' || act === 'switch') {
+      const btn = t.closest('button')!;
+      btn.disabled = true;
+      try {
+        if (act === 'allow' || act === 'deny') return await decide(act === 'allow');
+        if (act === 'new-board') {
+          selected = session.draft && !approval ? (await ensureBoard()) ?? '' : (await api.createBoard('Untitled board')).id;
+        }
+        else await call('PATCH', '/api/mcp-keys/' + encodeURIComponent(btn.dataset.key!), { boardId: selected });
+        await load();
+      } catch (err) { btn.disabled = false; toast((err as Error).message); }
+      return;
+    }
     if (act === 'done') { fresh = null; return render(); }
     if (act === 'del') {
       const id = t.closest<HTMLElement>('[data-id]')!.dataset.id!;
@@ -159,8 +259,6 @@ export function initConnect() {
       const r = await call<{ key: Key; url: string }>('POST', '/api/mcp-keys', { name });
       keys = [...keys, r.key];
       fresh = { url: r.url, name: r.key.name };
-      const n = r.key.name.toLowerCase();
-      app = n.includes('claude') ? 'claude' : n.includes('codex') ? 'codex' : n.includes('gpt') ? 'chatgpt' : app;
       render();
     } catch (err) {
       toast((err as Error).message);

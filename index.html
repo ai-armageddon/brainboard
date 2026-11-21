@@ -127,6 +127,7 @@
       <div id="voice" class="voice"></div>
       <button id="present-btn" class="cbtn" data-tip="Present · everyone follows you" aria-label="Present"></button>
       <button id="save-btn" class="save-btn" data-tip="Save to an account · ⌘S" aria-label="Save" hidden>Save</button>
+      <button id="ask-ai" class="link-btn" aria-haspopup="dialog">Ask AI</button>
       <button id="share-btn" class="share-btn owner-only" aria-label="Share">Share</button>
     </div>
     <div id="follow-banner" class="panel" hidden></div>
@@ -171,7 +172,7 @@
     </div>
 
     <div id="connect" hidden>
-      <div class="panel sheet connect-sheet" role="dialog" aria-labelledby="connect-title">
+      <div class="panel sheet connect-sheet" role="dialog" aria-modal="true" aria-labelledby="connect-title">
         <div class="sheet-head">
           <h2><span class="logo"></span><span id="connect-title">Connect AI</span></h2>
           <button class="close" aria-label="Close">Esc</button>

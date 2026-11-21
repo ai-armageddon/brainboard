@@ -16,6 +16,8 @@ export interface AccessKey {
   name: string;
   /** first characters, so people can tell keys apart */
   hint: string;
+  /** OAuth grants are restricted to one board and one MCP resource. */
+  grant?: { boardId: string; clientId: string; resource: string; expires: number; refreshHash: string; refreshUntil: number };
   created: string;
   used: string | null;
 }
@@ -42,14 +44,14 @@ function persist() {
 export const KEY_RE = /^bb_[A-Za-z0-9_-]{32,64}$/;
 const mine = (k: AccessKey, owner: string | null, local: boolean) => (owner ? k.owner === owner : local && k.local && !k.owner);
 
-export const publicKey = (k: AccessKey) => ({ id: k.id, name: k.name, hint: k.hint, created: k.created, used: k.used });
+export const publicKey = (k: AccessKey) => ({ id: k.id, name: k.name, hint: k.hint, created: k.created, used: k.used, boardId: k.grant?.boardId, expired: k.grant ? k.grant.refreshUntil <= Date.now() : undefined });
 
 export function listKeys(owner: string | null, local: boolean) {
   return keys.filter((k) => mine(k, owner, local));
 }
 
 /** Returns the secret once; it can't be shown again. */
-export async function createKey(owner: string | null, local: boolean, name: string): Promise<{ key: AccessKey; secret: string }> {
+export async function createKey(owner: string | null, local: boolean, name: string, grant?: AccessKey['grant']): Promise<{ key: AccessKey; secret: string }> {
   if (listKeys(owner, local).length >= 20) throw new Error('You already have 20 keys. Delete one first.');
   const secret = `bb_${crypto.randomBytes(24).toString('base64url')}`;
   const key: AccessKey = {
@@ -60,7 +62,7 @@ export async function createKey(owner: string | null, local: boolean, name: stri
     name: String(name ?? '').replace(/\s+/g, ' ').trim().slice(0, 40) || 'AI connection',
     hint: secret.slice(0, 7),
     created: new Date().toISOString(),
-    used: null,
+    used: null, grant,
   };
   keys.push(key);
   await persist();
@@ -80,7 +82,7 @@ export function findKey(secret: string): AccessKey | null {
   const h = Buffer.from(sha(secret));
   return keys.find((k) => {
     const x = Buffer.from(k.hash);
-    return x.length === h.length && crypto.timingSafeEqual(x, h);
+    return (!k.grant || k.grant.expires > Date.now()) && x.length === h.length && crypto.timingSafeEqual(x, h);
   }) ?? null;
 }
 
@@ -95,4 +97,33 @@ export async function transferKeys(from: string, to: string) {
   let n = 0;
   for (const k of keys) if (k.owner === from) { k.owner = to; n++; }
   if (n) await persist();
+}
+
+export async function issueBoardGrant(owner: string, local: boolean, provider: string, clientId: string, resource: string, boardId: string) {
+  const refresh = crypto.randomBytes(32).toString('base64url');
+  const { secret } = await createKey(owner, local, provider, { boardId, clientId, resource, expires: Date.now() + 3600_000,
+    refreshHash: sha(refresh), refreshUntil: Date.now() + 30 * 86400_000 });
+  return { token_type: 'Bearer', access_token: secret, refresh_token: refresh, expires_in: 3600, scope: 'board' };
+}
+
+export async function refreshBoardGrant(clientId: string, resource: string, refresh: string) {
+  const hash = sha(refresh);
+  const key = keys.find(k => k.grant?.refreshHash === hash);
+  const grant = key?.grant;
+  if (!key || !grant || grant.clientId !== clientId || grant.resource !== resource || grant.refreshUntil <= Date.now()) return null;
+  const next = crypto.randomBytes(32).toString('base64url');
+  const access = `bb_${crypto.randomBytes(24).toString('base64url')}`;
+  key.hash = sha(access);
+  grant.refreshHash = sha(next);
+  grant.expires = Date.now() + 3600_000;
+  await persist();
+  return { token_type: 'Bearer', access_token: access, refresh_token: next, expires_in: 3600, scope: 'board' };
+}
+
+export async function chooseGrantBoard(owner: string | null, local: boolean, id: string, boardId: string) {
+  const key = listKeys(owner, local).find(k => k.id === id);
+  if (!key?.grant) return false;
+  key.grant.boardId = boardId;
+  await persist();
+  return true;
 }
