@@ -32,6 +32,8 @@ npm run dev
 
 Open http://localhost:5317. A short tour walks you through the basics the first time, and you can replay it from the menu with **Quick tour**.
 
+Opening the address on its own always starts a blank board. It's saved, and gets its own link, the moment you add something, rename it, share it or start a call, so a visit never creates or shows a board. Your boards are in the menu at the top left, and a board's link opens it directly.
+
 | Command | What it does |
 |---|---|
 | `npm run dev` | Development server with live reload, on this computer only |

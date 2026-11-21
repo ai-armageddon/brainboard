@@ -1,7 +1,7 @@
 // Which board is open, and where each board's camera was left (per viewer).
 import { S } from './state';
 import { applyCamera } from './render';
-import { events, joinBoard, leaveBoard, session } from './net';
+import { adoptDraft, api, events, joinBoard, leaveBoard, session, startDraft } from './net';
 import { zoomToFit } from './actions';
 import type { Camera } from './types';
 
@@ -31,17 +31,51 @@ const setHash = (id: string) => history.replaceState(null, '', `${location.pathn
 export function showBoardInUrl() {
   if (session.boardId && location.hash.slice(1) !== session.boardId) setHash(session.boardId);
 }
-events.addEventListener('local-change', showBoardInUrl);
+events.addEventListener('local-change', () => { if (session.draft) void ensureBoard(); else showBoardInUrl(); });
+
+let creating: Promise<string | null> | null = null;
 
 /**
- * Open a board. `quiet` is for the board picked automatically on landing:
- * the URL stays clean until the user changes something.
+ * Make sure there is a real board to work with. A blank draft becomes one on its first edit (or when
+ * someone renames, shares, presents or talks on it). Resolves once connected, or after a few seconds.
  */
-export function openBoard(id: string, { quiet = false } = {}) {
+export function ensureBoard(): Promise<string | null> {
+  if (session.boardId) return Promise.resolve(session.boardId);
+  if (!session.draft) return Promise.resolve(null);
+  creating ??= (async () => {
+    try {
+      const b = await api.createBoard(session.boardName || 'Untitled board');
+      const welcomed = new Promise<void>((r) => {
+        events.addEventListener('welcome', () => r(), { once: true });
+        setTimeout(r, 4000);
+      });
+      adoptDraft(b.id);
+      setHash(b.id);
+      try { localStorage.setItem('bb-last-board', b.id); } catch { /* ignore */ }
+      await welcomed;
+      return b.id;
+    } catch {
+      creating = null;
+      return null;
+    }
+  })();
+  return creating;
+}
+
+/** Land on a blank, unsaved board (nothing is created until it's used). */
+export function openDraft() {
+  if (session.draft) return;
+  leaveBoard();
+  creating = null;
+  setHash('');
+  startDraft();
+}
+
+/** Open a board you own or were invited to. */
+export function openBoard(id: string) {
   if (id === session.boardId) return;
   leaveBoard();
-  if (!quiet) setHash(id);
-  else if (location.hash && location.hash.slice(1) !== id) setHash('');
+  setHash(id);
   if (!session.invite) try { localStorage.setItem('bb-last-board', id); } catch { /* ignore */ }
   joinBoard(id);
 }

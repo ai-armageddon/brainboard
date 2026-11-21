@@ -11,7 +11,7 @@ import { applyCamera, render } from './render';
 import { buildUI, showOverlay, updateToolUI } from './ui';
 import { initInput } from './input';
 import { api, events, loadSession, session } from './net';
-import { openBoard, restoreCamera } from './boards';
+import { openBoard, openDraft, restoreCamera } from './boards';
 import { initCollab } from './collab';
 import { blobGet, kvGet, kvSet } from './db';
 import type { Item } from './types';
@@ -96,15 +96,12 @@ async function main() {
     showOverlay('offline');
     return;
   }
-  if (!boards.length) {
-    await migrateFromBrowser();
-    boards = await api.boards();
-    if (!boards.length) boards = [await api.createBoard('My board')];
-  }
-  let last: string | null = null;
-  try { last = localStorage.getItem('bb-last-board'); } catch { /* ignore */ }
-  const id = boards.find((b) => b.id === hashId)?.id ?? boards.find((b) => b.id === last)?.id ?? boards[0].id;
-  openBoard(id, { quiet: id !== hashId });
+  if (!boards.length && await migrateFromBrowser()) boards = await api.boards();
+  // A link to one of your boards opens it. Anything else starts blank: your boards are in the menu,
+  // and a visit alone never shows (or creates) a board.
+  const id = boards.find((b) => b.id === hashId)?.id;
+  if (id) openBoard(id);
+  else openDraft();
 
   window.addEventListener('hashchange', () => {
     const next = location.hash.slice(1);

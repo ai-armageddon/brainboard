@@ -6,6 +6,7 @@ import type { PeerInfo, RtcSignal } from './protocol';
 import { icon } from './icons';
 import { toast } from './ui';
 import { ensureScreenName } from './account';
+import { ensureBoard } from './boards';
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
 
@@ -158,7 +159,7 @@ async function onSignal(from: string, data: RtcSignal) {
 // ---------------------------------------------------------------- join / leave / mute
 
 export async function joinVoice() {
-  if (inVoice || !session.boardId) return;
+  if (inVoice || !(await ensureBoard())) return;
   if (!(await ensureScreenName('talk'))) return;
   if (!navigator.mediaDevices?.getUserMedia) return toast('Voice needs a secure (https) connection');
   try {
