@@ -1,4 +1,5 @@
 import { icon } from './icons';
+import { clearFontPreview, previewFont } from './font-preview';
 import { S, canRedo, canUndo, checkpoint, getItem, redo, requestRender, savePrefs, undo } from './state';
 import { hooks, selBounds, viewport } from './render';
 import { COLORS, FONTS, SHAPES, type FontKey, type ColorKey, type Item, type ShapeKind, type Tool } from './types';
@@ -130,12 +131,14 @@ function updateTextTools(sel: Item[]) {
 function updateCtxBar() {
   const sel = S.items.filter((i) => S.selected.has(i.id));
   if (!sel.length || !selBounds) {
+    clearFontPreview();
     ctx.classList.remove('show', 'glide');
     ctxSig = '';
     return;
   }
   const sig = sel.map((i) => `${i.id}:${'color' in i ? i.color : ''}:${i.type === 'shape' ? i.shape : ''}`).join('|');
   if (sig !== ctxSig) {
+    clearFontPreview();
     ctxSig = sig;
     sizingText = false;
     buildCtx(sel);
@@ -172,7 +175,8 @@ function positionCtxBar(glide: boolean) {
   let top = T - h - 18;
   if (top < 64) top = B + 18;
   top = clamp(top, 64, Math.max(64, innerHeight - h - 84));
-  ctx.classList.toggle('fonts-above', top + h + 210 > innerHeight && top > innerHeight / 2);
+  const roomBelow = innerHeight - top - h;
+  ctx.classList.toggle('fonts-above', roomBelow < 210 ? top > roomBelow : top < T && top >= 210);
   ctx.style.transform = `translate(${Math.round(left)}px,${Math.round(top)}px)`;
 }
 
@@ -236,10 +240,24 @@ export function buildUI() {
 
   document.addEventListener('selectionchange', () => {
     if (S.editing && ctx.classList.contains('show')) {
+      clearFontPreview();
       const it = getItem(S.editing);
       if (it && ctx.querySelector('.font-picker')) updateTextTools([it]);
     }
   });
+  const fontOption = (target: EventTarget | null) =>
+    target instanceof Element ? target.closest<HTMLElement>('.font-picker[open] [data-font]') : null;
+  const previewOption = (e: Event) => {
+    const key = fontOption(e.target)?.dataset.font;
+    if (key && Object.hasOwn(FONTS, key)) previewFont(key as FontKey);
+  };
+  ctx.addEventListener('pointerover', (e) => { if (e.pointerType !== 'touch') previewOption(e); });
+  ctx.addEventListener('pointerout', (e) => { if (!fontOption(e.relatedTarget)) clearFontPreview(); });
+  ctx.addEventListener('focusin', previewOption);
+  ctx.addEventListener('toggle', (e) => {
+    if (e.target instanceof HTMLDetailsElement && !e.target.open) clearFontPreview();
+  }, true);
+  window.addEventListener('blur', clearFontPreview);
   ctx.addEventListener('pointerdown', (e) => {
     e.preventDefault(); // keep text focus while styling
     if ((e.target as Element).closest('[data-act="font-down"], [data-act="font-up"]')) beginTextSizing();
@@ -249,12 +267,14 @@ export function buildUI() {
     if (e.pointerType !== 'touch') finishTextSizing();
   });
   ctx.addEventListener('focusout', (e) => {
+    if (!fontOption(e.relatedTarget)) clearFontPreview();
     if (!ctx.contains(e.relatedTarget as Node | null)) finishTextSizing();
   });
   ctx.addEventListener('click', (e) => {
     const b = (e.target as Element).closest<HTMLElement>('button');
     if (!b) return;
     if (b.dataset.font && Object.hasOwn(FONTS, b.dataset.font)) {
+      clearFontPreview();
       formatSelection('font', b.dataset.font as FontKey);
       ctx.querySelector<HTMLDetailsElement>('.font-picker')!.open = false;
       return;

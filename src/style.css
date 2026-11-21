@@ -825,6 +825,9 @@ body:not(.ready) .panel { opacity: 0; }
   border-radius: var(--r);
 }
 .font-picker { position: relative; }
+.font-preview-source { opacity: 0; }
+.item .txt.font-preview, .edge-label .txt.font-preview { position: absolute; pointer-events: none; }
+.font-preview-all, .font-preview-all *, .font-preview-run { font-family: var(--preview-font) !important; }
 @media (max-width: 760px) { .font-picker { position: static; } }
 .font-picker summary {
   display: flex; align-items: center; justify-content: space-between; gap: 3px;
