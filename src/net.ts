@@ -131,14 +131,21 @@ export const api = {
   me: (board: string) => j<{ role: Role; saved?: boolean; name?: string | null; from?: string | null; board?: string | null }>('GET', `/api/me?board=${encodeURIComponent(board)}`),
   session: () => j<{ user: Account | null; local: boolean; hosted: boolean; publicUrl: string | null; passkeys: boolean; ice: RTCIceServer[] }>('GET', '/api/session'),
   auth: <T = { user: Account; claimed: number }>(path: string, body?: unknown, method = 'POST') => j<T>(method, `/api/auth/${path}`, body ?? {}),
-  async uploadImage(blob: Blob, id?: string): Promise<string> {
-    const res = await fetch(`/api/images${id ? `?id=${encodeURIComponent(id)}` : ''}`, {
-      method: 'POST',
-      headers: { 'content-type': blob.type || 'application/octet-stream', ...(session.invite ? { 'x-invite': session.invite } : {}) },
-      body: blob,
+  /** Upload an image; `onProgress` hears the share sent so far (0–1). XHR, because fetch can't report upload progress. */
+  uploadImage(blob: Blob, id?: string, onProgress?: (fraction: number) => void): Promise<string> {
+    return new Promise((resolve, reject) => {
+      const xhr = new XMLHttpRequest();
+      xhr.open('POST', `/api/images${id ? `?id=${encodeURIComponent(id)}` : ''}`);
+      xhr.setRequestHeader('content-type', blob.type || 'application/octet-stream');
+      if (session.invite) xhr.setRequestHeader('x-invite', session.invite);
+      if (onProgress) xhr.upload.onprogress = (e) => { if (e.lengthComputable) onProgress(e.loaded / e.total); };
+      xhr.onload = () => {
+        if (xhr.status < 200 || xhr.status >= 300) return reject(new Error(`Upload failed (${xhr.status})`));
+        try { resolve((JSON.parse(xhr.responseText) as { id: string }).id); } catch (err) { reject(err); }
+      };
+      xhr.onerror = () => reject(new Error('Upload failed'));
+      xhr.send(blob);
     });
-    if (!res.ok) throw new Error(`Upload failed (${res.status})`);
-    return ((await res.json()) as { id: string }).id;
   },
 };
 export interface Invite {

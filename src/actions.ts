@@ -1,7 +1,8 @@
 import { S, changed, checkpoint, getItem, requestRender, scheduleSave } from './state';
 import type { Box, Camera, ColorKey, EdgeItem, Item, NodeItem, ShapeKind, TextualItem, Tool } from './types';
 import { applyCamera, render, textElOf, viewport } from './render';
-import { api, canEdit } from './net';
+import { api, canEdit, session } from './net';
+import { showUploading } from './uploading';
 import { FONTS, type FontKey, type TextRun } from './types';
 import { appendStyle, drawText, editorFont, forgetDrawnText, readEditor, sameStyle, type TextStyle } from './format';
 import { clamp, intersects, unionBox } from './geometry';
@@ -365,31 +366,38 @@ export async function addImages(files: File[], at: { x: number; y: number }) {
   const imgs = files.filter((f) => f.type.startsWith('image/'));
   if (!imgs.length) return;
   const k = 1 / S.cam.z;
-  const created: NodeItem[] = [];
-  let off = 0;
-  for (const f of imgs) {
+  const board = session.boardId;
+  // Show each picture straight away, where it will land, while it uploads.
+  const pending = await Promise.all(imgs.map(async (f, i) => {
     const url = URL.createObjectURL(f);
     const dims = await loadImage(url);
-    URL.revokeObjectURL(url);
-    let blob: string;
-    try {
-      blob = await api.uploadImage(f);
-    } catch {
-      toast('Could not upload that image');
-      continue;
-    }
     const s = Math.min(1, 520 / Math.max(dims.w, dims.h));
     const w = dims.w * s * k, h = dims.h * s * k;
-    created.push({ id: uid(), type: 'image', blob, x: at.x - w / 2 + off, y: at.y - h / 2 + off, w, h });
-    off += 24 * k;
-  }
-  if (!created.length) return;
+    const box = { x: at.x - w / 2 + i * 24 * k, y: at.y - h / 2 + i * 24 * k, w, h };
+    return { f, box, ghost: showUploading(url, box) };
+  }));
+  const results = await Promise.all(pending.map(async ({ f, box, ghost }) => {
+    try {
+      const blob = await api.uploadImage(f, undefined, (p) => ghost.progress(p));
+      return { item: { id: uid(), type: 'image', blob, ...box } as NodeItem, ghost };
+    } catch {
+      ghost.fail();
+      return null;
+    }
+  }));
+  const ok = results.filter((r) => r !== null);
+  if (ok.length < results.length) toast(results.length > 1 ? 'Some images could not be uploaded' : 'Could not upload that image');
+  // Switched to another board while uploading: don't drop the images onto that one.
+  if (board && session.boardId !== board) { ok.forEach((r) => r.ghost.fail()); return; }
+  if (!ok.length) return;
+  const created = ok.map((r) => r.item);
   stopEditing();
   checkpoint();
   S.items.push(...created);
   if (S.tool !== 'select') setTool('select');
   S.selected = new Set(created.map((c) => c.id));
   changed();
+  for (const r of ok) r.ghost.done(r.item.id);
 }
 
 // ---------------------------------------------------------------- camera

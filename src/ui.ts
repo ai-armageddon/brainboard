@@ -14,6 +14,7 @@ import { boardCallBadge, openHome } from './home';
 import { paintLogos } from './brand';
 import { userMovedCamera } from './collab';
 import { keyLabel, localizeKeys } from './keys';
+import { uploadsPending } from './uploading';
 import { isVimMode, setVimMode } from './vim';
 import { startTour } from './tour';
 import { openAuth, signOut } from './account';
@@ -398,7 +399,7 @@ export function buildUI() {
 
   hooks.afterRender = () => {
     updateCtxBar();
-    hint.classList.toggle('show', S.items.length === 0);
+    hint.classList.toggle('show', S.items.length === 0 && !uploadsPending());
     ($('undo-btn') as HTMLButtonElement).disabled = !canUndo();
     ($('redo-btn') as HTMLButtonElement).disabled = !canRedo();
   };
