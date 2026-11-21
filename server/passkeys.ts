@@ -69,7 +69,7 @@ export async function registrationOptions(req: IncomingMessage, opts: { name?: s
 }
 
 /** Finish creating a passkey. Returns the (possibly new) account. */
-export async function registrationVerify(req: IncomingMessage, flowId: unknown, response: RegistrationResponseJSON): Promise<User> {
+export async function registrationVerify(req: IncomingMessage, flowId: unknown, response: RegistrationResponseJSON, picture?: string): Promise<User> {
   const rp = relyingParty(req);
   const flow = take(flowId);
   if (!rp || !flow || flow.kind === 'login') throw new Error('That took too long. Please try again.');
@@ -82,7 +82,7 @@ export async function registrationVerify(req: IncomingMessage, flowId: unknown, 
   const passkey: Passkey = {
     id: c.id, publicKey: toB64(c.publicKey), counter: c.counter, transports: c.transports, created: new Date().toISOString(),
   };
-  if (flow.kind === 'signup') return createUser({ id: flow.userId, name: flow.name, passkey });
+  if (flow.kind === 'signup') return createUser({ id: flow.userId, name: flow.name, passkey, picture });
   const u = await updateUser(flow.userId, (x) => { x.passkeys.push(passkey); });
   if (!u) throw new Error('Account not found.');
   return u;

@@ -1,13 +1,14 @@
 // Server connection: REST helpers + the live socket (item sync, presence, collaboration).
 import { S, getItem, noteLocalChange, pruneSelection, requestRender, resetHistory, setCollector, setSyncScheduler } from './state';
 import type { Item } from './types';
-import type { BoardSettings, BoardView, ClientMsg, Ink, Op, PeerInfo, Presence, Role, RtcSignal, ServerMsg } from './protocol';
+import type { BoardSettings, BoardView, ClientMsg, Ink, LivePerson, Op, PeerInfo, Presence, Role, RtcSignal, ServerMsg } from './protocol';
+import { validPicture } from './profile-picture';
 import { DEFAULT_SETTINGS } from './protocol';
 import { applyOps, diffItems } from './ops';
 
 // ---------------------------------------------------------------- identity & session
 
-export interface LivePerson { name: string; color: string }
+export type { LivePerson };
 export interface BoardMeta { id: string; name: string; rev: number; updated: string; itemCount: number; live?: number; people?: LivePerson[] }
 /** A board someone else owns that was shared with you (a link you opened, or an invite to your account). */
 export interface SharedBoard {
@@ -17,12 +18,14 @@ export interface SharedBoard {
 
 const PEER_COLORS = ['#f2555a', '#f5871f', '#e0b400', '#2fb36d', '#14a3c7', '#4f6bff', '#9b5cf0', '#e0559c'];
 
-function loadProfile() {
+function loadProfile(): { name: string; color: string; picture: string } {
   try {
     const p = JSON.parse(localStorage.getItem('bb-profile') ?? 'null');
-    if (p?.name && p?.color) return p as { name: string; color: string };
+    if (typeof p?.name === 'string' && typeof p.color === 'string' && /^#[0-9a-f]{6}$/i.test(p.color)) {
+      return { name: p.name, color: p.color, picture: validPicture(p.picture) ? p.picture : '' };
+    }
   } catch { /* ignore */ }
-  return { name: '', color: PEER_COLORS[Math.floor(Math.random() * PEER_COLORS.length)] };
+  return { name: '', picture: '', color: PEER_COLORS[Math.floor(Math.random() * PEER_COLORS.length)] };
 }
 
 export const session = {
@@ -43,7 +46,7 @@ export const session = {
   profile: loadProfile(),
 };
 
-export interface Account { id: string; name: string; email: string | null; passkeys: number; hasPassword: boolean }
+export interface Account { picture?: string; id: string; name: string; email: string | null; passkeys: number; hasPassword: boolean }
 
 /** Who this browser is signed in as (null = anonymous), and what the server supports. */
 export const account = {
@@ -60,23 +63,31 @@ export const account = {
 export const canEdit = () => session.role !== 'viewer';
 export const isOwner = () => session.role === 'owner';
 
-export function saveProfile(name: string, color: string) {
-  session.profile = { name: name.trim().slice(0, 40), color };
-  try { localStorage.setItem('bb-profile', JSON.stringify(session.profile)); } catch { /* ignore */ }
-  sendMsg({ t: 'profile', name: session.profile.name || defaultName(), color });
+function announceProfile() {
+  const { name, color, picture } = session.profile;
+  sendMsg({ t: 'profile', name: name || defaultName(), color, picture });
+}
+
+export function saveProfile(name: string, color: string, picture = session.profile.picture) {
+  session.profile = { name: name.trim().slice(0, 40), color, picture };
+  // Account pictures come from the session. Keep the guest's own choice for after sign-out.
+  const guestPicture = account.user ? loadProfile().picture : picture;
+  try { localStorage.setItem('bb-profile', JSON.stringify({ ...session.profile, picture: guestPicture })); } catch { /* ignore */ }
+  announceProfile();
+  emit('profile');
 }
 const defaultName = () => account.user?.name ?? (session.invite ? 'Guest' : 'Owner');
 
 export async function loadSession() {
   const s = await api.session();
   Object.assign(account, s);
-  if (s.user && s.user.name !== session.profile.name) saveProfile(s.user.name, session.profile.color);
+  if (s.user) saveProfile(s.user.name, session.profile.color, s.user.picture ?? '');
   emit('account');
 }
 
-export function setAccount(user: Account | null) {
+export function setAccount(user: Account | null, color = session.profile.color) {
   account.user = user;
-  if (user) saveProfile(user.name, session.profile.color);
+  if (user) saveProfile(user.name, color, user.picture ?? '');
   emit('account');
 }
 
@@ -135,7 +146,7 @@ export interface Invite {
   email?: string;
   forAccount?: boolean;
   /** connected through this link right now */
-  online?: { id: string; name: string; color: string }[];
+  online?: (LivePerson & { id: string })[];
 }
 
 export const imageUrl = (id: string) =>
@@ -279,6 +290,7 @@ function handle(m: ServerMsg) {
       pruneSelection();
       const first = firstWelcome;
       firstWelcome = false;
+      if (session.profile.picture) announceProfile();
       emit('welcome', first);
       emit('status');
       emit('peers');

@@ -1,4 +1,5 @@
 // HTTP API (mounted in the Vite dev server and in server/main.ts). Live editing goes over /ws.
+import { acceptsPicture } from './profile-picture.ts';
 import os from 'node:os';
 import { promises as fs } from 'node:fs';
 import type { IncomingMessage, ServerResponse } from 'node:http';
@@ -295,6 +296,12 @@ async function signIn(res: ServerResponse, p: Principal, user: User) {
   return { user: publicUser(user), claimed };
 }
 
+function profilePicture(value: unknown) {
+  if (value === undefined) return undefined;
+  if (!acceptsPicture(value)) throw new AuthError(400, 'Invalid profile picture.');
+  return value;
+}
+
 async function handleAuth(req: IncomingMessage, res: ServerResponse, parts: string[], method: string, p: Principal) {
   const route = `${method} ${parts.join('/')}`;
   const ip = clientIp(req);
@@ -304,14 +311,14 @@ async function handleAuth(req: IncomingMessage, res: ServerResponse, parts: stri
     }
     switch (route) {
       case 'POST signup': {
-        const b = await readJson<{ name?: string; email?: string; password?: string }>(req);
+        const b = await readJson<{ name?: string; email?: string; password?: string; picture?: string }>(req);
         const name = cleanName(b.name), email = cleanEmail(b.email), password = String(b.password ?? '');
         if (!name) throw new AuthError(400, 'Choose a screen name.');
         if (!validEmail(email)) throw new AuthError(400, 'That email doesn’t look right.');
         if (password.length < 8) throw new AuthError(400, 'Use at least 8 characters for your password.');
         if (password.length > 200) throw new AuthError(400, 'That password is too long.');
         if (userByEmail(email)) throw new AuthError(409, 'There’s already an account with this email. Sign in instead.');
-        const user = await createUser({ name, email, password });
+        const user = await createUser({ name, email, password, picture: profilePicture(b.picture) });
         return send(res, 201, await signIn(res, p, user));
       }
       case 'POST login': {
@@ -329,8 +336,8 @@ async function handleAuth(req: IncomingMessage, res: ServerResponse, parts: stri
         return send(res, 200, await registrationOptions(req, { name, user: p.user }));
       }
       case 'POST passkey/register/verify': {
-        const b = await readJson<{ flow?: string; response?: never }>(req);
-        const user = await registrationVerify(req, b.flow, b.response!);
+        const b = await readJson<{ flow?: string; response?: never; picture?: string }>(req);
+        const user = await registrationVerify(req, b.flow, b.response!, profilePicture(b.picture));
         if (p.user?.id === user.id) return send(res, 200, { user: publicUser(user), claimed: 0 });
         return send(res, 201, await signIn(res, p, user));
       }
@@ -347,10 +354,14 @@ async function handleAuth(req: IncomingMessage, res: ServerResponse, parts: stri
         return send(res, 200, { ok: true });
       case 'PATCH me': {
         if (!p.user) throw new AuthError(401, 'Sign in first.');
-        const b = await readJson<{ name?: string }>(req);
+        const b = await readJson<{ name?: string; picture?: string }>(req);
         const name = cleanName(b.name);
         if (!name) throw new AuthError(400, 'Choose a screen name.');
-        const u = await updateUser(p.user.id, (x) => { x.name = name; });
+        const picture = profilePicture(b.picture);
+        const u = await updateUser(p.user.id, (x) => {
+          x.name = name;
+          if (picture !== undefined) x.picture = picture || undefined;
+        });
         return send(res, 200, { user: publicUser(u!) });
       }
     }

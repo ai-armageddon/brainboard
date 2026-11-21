@@ -1,4 +1,5 @@
 // Collaboration UI: people, live cursors, follow & present, sharing and roles.
+import { avatarFace, bindPicturePicker, picturePicker } from './avatar';
 import { S, requestRender } from './state';
 import { hooks, nodeElOf, viewport } from './render';
 import { icon } from './icons';
@@ -18,8 +19,6 @@ import type { PeerInfo, Role } from './protocol';
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
 const esc = (s: string) => s.replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`);
-const initials = (name: string) =>
-  name.trim().split(/\s+/).slice(0, 2).map((w) => w[0]?.toUpperCase() ?? '').join('') || '?';
 const ROLE_LABEL: Record<Role, string> = { owner: 'Owner', editor: 'Can edit', viewer: 'Can view' };
 
 // ---------------------------------------------------------------- local prefs
@@ -131,8 +130,14 @@ function decoratePeers() {
 
 // ---------------------------------------------------------------- avatars & banner
 
+function myAvatar(): PeerInfo {
+  const { name, color, picture } = session.profile;
+  return session.you ?? { id: 'me', name: name || 'You', color, picture, role: session.role };
+}
+
 function avatar(p: PeerInfo, extra = '') {
-  return `<button class="avatar ${extra}" data-peer="${p.id}" style="--c:${p.color}" aria-label="${esc(p.name)}" data-tip="${esc(p.name)} · ${ROLE_LABEL[p.role]}">${esc(initials(p.name))}</button>`;
+  const tip = extra === 'me' ? 'Edit your profile' : `${esc(p.name)} · ${ROLE_LABEL[p.role]}`;
+  return `<button class="avatar ${extra}" data-peer="${p.id}" style="--c:${p.color}" aria-label="${extra === 'me' ? tip : esc(p.name)}" data-tip="${tip}">${avatarFace(p.name, p.picture)}</button>`;
 }
 
 function renderAvatars() {
@@ -141,7 +146,7 @@ function renderAvatars() {
   const shown = others.slice(0, 5);
   let html = shown.map((p) => avatar(p, `${p.id === following ? 'followed' : ''} ${p.id === session.presenter ? 'presenting' : ''}`)).join('');
   if (others.length > shown.length) html += `<span class="avatar more">+${others.length - shown.length}</span>`;
-  if (session.you) html += avatar({ ...session.you, name: session.you.name }, 'me');
+  if (session.you || session.draft) html += avatar(myAvatar(), 'me');
   box.innerHTML = html;
   $('collab').classList.toggle('solo', others.length === 0);
   const pres = $('present-btn');
@@ -174,14 +179,15 @@ function renderBanner() {
 
 function openPeerPop(anchor: HTMLElement, id: string) {
   const pop = $('peer-pop');
-  const me = session.you?.id === id;
-  const p = me ? session.you! : session.peers.get(id);
+  const me = myAvatar().id === id;
+  const p = me ? myAvatar() : session.peers.get(id);
   if (!p) return;
   if (me) {
     pop.innerHTML = `
       <form class="me-form">
         <div class="pop-title">You</div>
-        <label class="field"><span>Name</span><input name="name" maxlength="40" value="${esc(session.profile.name || p.name)}" /></label>
+        <label class="field"><span>Name</span><input name="name" maxlength="40" value="${esc(session.profile.name || session.you?.name || '')}" placeholder="Your name" /></label>
+        ${picturePicker(session.profile.picture)}
         <div class="colors">${['#f2555a', '#f5871f', '#e0b400', '#2fb36d', '#14a3c7', '#4f6bff', '#9b5cf0', '#e0559c'].map((c) => `<label class="color-pick"><input type="radio" name="color" value="${c}" ${c === p.color ? 'checked' : ''}/><i style="background:${c}"></i></label>`).join('')}</div>
         <label class="toggle"><input type="checkbox" name="cursors" ${showCursors ? 'checked' : ''}/><span>Show other people’s cursors</span></label>
         <button class="primary" type="submit">Save</button>
@@ -195,6 +201,7 @@ function openPeerPop(anchor: HTMLElement, id: string) {
              <button class="pop-btn" data-acc="save">${icon('save', 18)}Save to an account</button>`}
       </div>`}`;
     const form = pop.querySelector('form')!;
+    const selectedPicture = bindPicturePicker(form, session.profile.picture, p.name, p.color);
     pop.querySelector('.pop-account')?.addEventListener('click', (e) => {
       const act = (e.target as Element).closest<HTMLElement>('[data-acc]')?.dataset.acc;
       if (!act) return;
@@ -203,22 +210,35 @@ function openPeerPop(anchor: HTMLElement, id: string) {
       if (act === 'signout') void signOut();
       if (act === 'save') openAuth('save');
     });
-    form.addEventListener('submit', (e) => {
+    form.addEventListener('submit', async (e) => {
       e.preventDefault();
+      const submit = form.querySelector<HTMLButtonElement>('button[type=submit]')!;
+      if (submit.disabled) return;
       const fd = new FormData(form);
       const newName = String(fd.get('name') ?? '').trim();
-      saveProfile(newName, String(fd.get('color') ?? p.color));
-      if (account.user && newName && newName !== account.user.name) {
-        void api.auth<{ user: NonNullable<typeof account.user> }>('me', { name: newName }, 'PATCH').then((r) => setAccount(r.user)).catch(() => toast('Couldn’t rename your account'));
+      const color = String(fd.get('color') ?? p.color);
+      const picture = selectedPicture();
+      if (account.user && ((newName && newName !== account.user.name) || picture !== (account.user.picture ?? ''))) {
+        submit.disabled = true;
+        try {
+          const res = await api.auth<{ user: NonNullable<typeof account.user> }>('me', { name: newName || account.user.name, picture }, 'PATCH');
+          setAccount(res.user, color);
+        } catch {
+          submit.disabled = false;
+          toast('Couldn’t save your profile. Try again.');
+          return;
+        }
+      } else {
+        saveProfile(newName, color, picture);
       }
       showCursors = fd.get('cursors') === 'on';
       try { localStorage.setItem('bb-show-cursors', showCursors ? '1' : '0'); } catch { /* ignore */ }
       placeCursors();
-      pop.hidden = true;
+      if (pop.contains(form)) pop.hidden = true;
     });
   } else {
     pop.innerHTML = `
-      <div class="pop-person"><span class="avatar" style="--c:${p.color}">${esc(initials(p.name))}</span><div><b>${esc(p.name)}</b><div class="muted">${ROLE_LABEL[p.role]}${session.presenter === p.id ? ' · presenting' : ''}</div></div></div>
+      <div class="pop-person"><span class="avatar" style="--c:${p.color}">${avatarFace(p.name, p.picture)}</span><div><b>${esc(p.name)}</b><div class="muted">${ROLE_LABEL[p.role]}${session.presenter === p.id ? ' · presenting' : ''}</div></div></div>
       <button class="pop-btn" data-act="follow">${icon('eye', 18)}${following === p.id ? 'Stop following' : 'Follow their view'}</button>
       ${canModerate() && p.voice && !p.muted ? `<button class="pop-btn" data-act="mute">${icon('micOff', 18)}Mute</button>` : ''}
       ${isOwner() && p.role !== 'owner' ? `<button class="pop-btn danger" data-act="kick">${icon('close', 18)}<span>Remove from board</span></button>` : ''}`;
@@ -239,8 +259,11 @@ function openPeerPop(anchor: HTMLElement, id: string) {
   }
   pop.hidden = false;
   const r = anchor.getBoundingClientRect();
-  pop.style.top = `${r.bottom + 10}px`;
-  pop.style.right = `${Math.max(12, innerWidth - r.right)}px`;
+  const above = r.top > innerHeight / 2;
+  pop.style.top = above ? 'auto' : `${r.bottom + 10}px`;
+  pop.style.bottom = above ? `${innerHeight - r.top + 10}px` : 'auto';
+  pop.style.maxHeight = `${Math.max(80, (above ? r.top : innerHeight - r.bottom) - 20)}px`;
+  pop.style.right = `${Math.max(12, Math.min(innerWidth - r.right, innerWidth - pop.offsetWidth - 12))}px`;
   (pop.querySelector('input[name="name"]') as HTMLInputElement | null)?.focus();
 }
 
@@ -365,12 +388,12 @@ function renderMembers(invites: Invite[]) {
   const you = session.you;
   box.innerHTML = `
     ${you ? `<div class="member">
-      <span class="avatar" style="--c:${you.color}">${esc(initials(you.name))}</span>
+      <span class="avatar" style="--c:${you.color}">${avatarFace(you.name, you.picture)}</span>
       <div class="member-main"><b>${esc(you.name)} <span class="muted">(you)</span></b><span class="muted sub">Owner</span></div>
       <button class="link-btn" data-me>${session.profile.name ? 'Edit' : 'Set your name'}</button>
     </div>` : ''}
     ${elsewhere.map((p) => `<div class="member">
-      <span class="avatar" style="--c:${p.color}">${esc(initials(p.name))}</span>
+      <span class="avatar" style="--c:${p.color}">${avatarFace(p.name, p.picture)}</span>
       <div class="member-main"><b>${esc(p.name)}</b><span class="muted sub"><i class="live-dot"></i>Here now · ${p.role === 'owner' ? 'you, on another device' : ROLE_LABEL[p.role]}</span></div>
     </div>`).join('')}
     ${invites.map((inv) => {
@@ -380,7 +403,7 @@ function renderMembers(invites: Invite[]) {
         ? `<i class="live-dot"></i>Here now${online.length > 1 ? ` · ${online.length} people on this link` : ''}`
         : inv.seen ? `Last here ${ago(inv.seen.at)}` : 'Hasn’t joined yet';
       return `<div class="member" data-token="${esc(inv.token)}">
-        <span class="avatar ${online.length ? '' : 'away'}" style="--c:${online[0]?.color ?? 'var(--fg-3)'}">${esc(initials(name))}</span>
+        <span class="avatar ${online.length ? '' : 'away'}" style="--c:${online[0]?.color ?? 'var(--fg-3)'}">${avatarFace(name, online[0]?.picture)}</span>
         <div class="member-main"><b>${esc(name)}${online.length > 1 ? ` <span class="muted">+${online.length - 1}</span>` : ''}</b><span class="muted sub">${status}</span></div>
         ${roleSelect(inv.role)}
         <button class="cbtn" data-act="copy" data-tip="Copy their link" aria-label="Copy their link">${icon('copy', 17)}</button>
@@ -563,6 +586,7 @@ export function initCollab() {
     clearTimeout(membersTimer);
     membersTimer = window.setTimeout(() => void refreshMembers(), 250);
   });
+  events.addEventListener('profile', renderAvatars);
   events.addEventListener('join', (e) => toast(`${(e as CustomEvent<PeerInfo>).detail.name} joined`));
   events.addEventListener('presence', (e) => {
     const id = (e as CustomEvent<string>).detail;

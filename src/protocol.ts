@@ -37,10 +37,10 @@ export interface Presence {
   editing?: string | null;
 }
 
-export interface PeerInfo {
+export interface LivePerson { name: string; color: string; picture?: string }
+
+export interface PeerInfo extends LivePerson {
   id: string;
-  name: string;
-  color: string;
   role: Role;
   p?: Presence;
   /** in the voice chat */
@@ -69,7 +69,7 @@ export const DEFAULT_SETTINGS: BoardSettings = { paused: false, viewerCursors: t
 export type ClientMsg =
   | { t: 'ops'; ops: Op[]; seq: number }
   | { t: 'presence'; p: Presence }
-  | { t: 'profile'; name: string; color: string }
+  | { t: 'profile'; name: string; color: string; picture?: string }
   | { t: 'present'; on: boolean }
   | { t: 'settings'; s: Partial<BoardSettings> }
   | { t: 'kick'; id: string }

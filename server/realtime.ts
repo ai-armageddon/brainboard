@@ -1,6 +1,7 @@
 // Live rooms over WebSocket: item-level sync, presence, presenting, and per-board settings.
 // The in-memory room is authoritative while people are connected; it is written to disk shortly
 // after each change. Writes from other processes (the MCP server) are merged in via a file watcher.
+import { acceptsPicture } from './profile-picture.ts';
 import { WebSocketServer, type WebSocket } from 'ws';
 import { watch, type FSWatcher } from 'node:fs';
 import type { IncomingMessage, Server } from 'node:http';
@@ -12,7 +13,7 @@ import { inviteToken, isCrossSite, ownerKeyOf, owns, principal } from './auth.ts
 type Identity = { owner: true; token: null } | { owner: false; token: string; key: string | null };
 import { getSharing, inviteRole, noteInviteUse, revokeInvite, setSettings } from './sharing.ts';
 import { applyOps, diffItems, validOp } from '../src/ops.ts';
-import { MAX_VIEWS, cleanView, type BoardSettings, type ClientMsg, type Op, type PeerInfo, type Presence, type Role, type ServerMsg } from '../src/protocol.ts';
+import { MAX_VIEWS, cleanView, type BoardSettings, type ClientMsg, type LivePerson, type Op, type PeerInfo, type Presence, type Role, type ServerMsg } from '../src/protocol.ts';
 import { COLORS, type Item } from '../src/types.ts';
 
 interface Client {
@@ -20,6 +21,7 @@ interface Client {
   id: string;
   name: string;
   color: string;
+  picture?: string;
   baseRole: Role;
   identity: Identity;
   p: Presence;
@@ -161,7 +163,7 @@ const mutedNow = (room: Room, c: Client) => c.selfMuted || !canSpeak(room, c);
 const moderates = (room: Room, c: Client) => c.baseRole === 'owner' || room.presenter === c.id;
 
 const info = (room: Room, c: Client, withPresence = true): PeerInfo => ({
-  id: c.id, name: c.name, color: c.color, role: roleOf(room, c),
+  id: c.id, name: c.name, color: c.color, picture: c.picture, role: roleOf(room, c),
   ...(c.voice ? { voice: true, muted: mutedNow(room, c) } : {}),
   ...(withPresence ? { p: c.p } : {}),
 });
@@ -215,11 +217,11 @@ export async function refreshAccess(boardId: string) {
 }
 
 /** Who is connected through each invite link right now (owner-only: feeds the Share dialog). */
-export async function onlineByInvite(boardId: string): Promise<Record<string, { id: string; name: string; color: string }[]>> {
+export async function onlineByInvite(boardId: string): Promise<Record<string, (LivePerson & { id: string })[]>> {
   const room = await rooms.get(boardId);
-  const out: Record<string, { id: string; name: string; color: string }[]> = {};
+  const out: Record<string, (LivePerson & { id: string })[]> = {};
   for (const c of room?.clients ?? []) {
-    if (c.identity.token) (out[c.identity.token] ??= []).push({ id: c.id, name: c.name, color: c.color });
+    if (c.identity.token) (out[c.identity.token] ??= []).push({ id: c.id, name: c.name, color: c.color, picture: c.picture });
   }
   return out;
 }
@@ -231,12 +233,12 @@ export async function liveBoard(id: string): Promise<Board | null> {
   return room ? room.board : null;
 }
 
-/** Who is on each open board right now (names and colours only), for the boards home screen. */
-export async function livePeople(): Promise<Record<string, { name: string; color: string }[]>> {
-  const out: Record<string, { name: string; color: string }[]> = {};
+/** Who is on each open board right now (names, colours and profile pictures), for the boards home screen. */
+export async function livePeople(): Promise<Record<string, LivePerson[]>> {
+  const out: Record<string, LivePerson[]> = {};
   for (const [id, p] of rooms) {
     const r = await p;
-    if (r && r.clients.size) out[id] = [...r.clients].map((c) => ({ name: c.name, color: c.color }));
+    if (r && r.clients.size) out[id] = [...r.clients].map((c) => ({ name: c.name, color: c.color, picture: c.picture }));
   }
   return out;
 }
@@ -280,6 +282,7 @@ async function handle(room: Room, c: Client, raw: string) {
       const was = c.name;
       c.name = cleanName(m.name) || c.name;
       c.color = cleanColor(m.color) ?? c.color;
+      if (acceptsPicture(m.picture)) c.picture = m.picture || undefined;
       if (c.identity.token && c.name !== was) void noteInviteUse(room.id, c.identity.token, c.name);
       broadcast(room, { t: 'peer', peer: info(room, c, false) });
       return;

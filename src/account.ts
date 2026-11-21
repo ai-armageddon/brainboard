@@ -148,7 +148,7 @@ export function openAuth(mode: Mode = 'signin') {
       if (signup) {
         const { flow, options } = await api.auth<{ flow: string; options: never }>('passkey/register/options', { name: nm });
         const response = await startRegistration({ optionsJSON: options });
-        done(await api.auth('passkey/register/verify', { flow, response }), 'Welcome');
+        done(await api.auth('passkey/register/verify', { flow, response, picture: session.profile.picture }), 'Welcome');
       } else {
         const { flow, options } = await api.auth<{ flow: string; options: never }>('passkey/login/options');
         const response = await startAuthentication({ optionsJSON: options });
@@ -175,7 +175,7 @@ export function openAuth(mode: Mode = 'signin') {
     if (!password) { field('password')!.focus(); return fail('Enter a password.'); }
     busy(true);
     try {
-      if (signup) done(await api.auth('signup', { name: nm, email, password }), 'Welcome');
+      if (signup) done(await api.auth('signup', { name: nm, email, password, picture: session.profile.picture }), 'Welcome');
       else done(await api.auth('login', { email, password }), 'Signed in');
     } catch (e2) {
       fail((e2 as Error).message);
