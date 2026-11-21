@@ -380,7 +380,27 @@ function applyRole(prev?: Role) {
 
 // ---------------------------------------------------------------- wiring
 
+/**
+ * The follow banner, catch-up pill and toasts sit top-centre, between the board menu (left) and the collab bar (right).
+ * When those corners grow wide enough to collide (many avatars, voice, a long board name), drop below them.
+ */
+function dodgeCorners() {
+  const corners = [$('topbar'), $('collab')].map((el) => el.getBoundingClientRect()).filter((r) => r.width);
+  for (const el of [$('follow-banner'), $('catch-up'), $('toast')]) {
+    el.style.top = '';
+    if (el.hidden) continue;
+    // Measure the resting position (offset* ignore the entry animation's transform); both are centred.
+    const left = (innerWidth - el.offsetWidth) / 2, right = left + el.offsetWidth;
+    const top = el.offsetTop, bottom = top + el.offsetHeight;
+    const hit = corners.filter((c) => left < c.right && right > c.left && top < c.bottom && bottom > c.top);
+    if (hit.length) el.style.top = `${Math.round(Math.max(...hit.map((c) => c.bottom))) + 8}px`;
+  }
+}
+
 export function initCollab() {
+  const ro = new ResizeObserver(dodgeCorners);
+  for (const id of ['topbar', 'collab', 'follow-banner', 'catch-up', 'toast']) ro.observe($(id));
+  window.addEventListener('resize', dodgeCorners);
   paintLogos($('share'));
   $('present-btn').insertAdjacentHTML('afterbegin', icon('present', 18));
   $('share-btn').insertAdjacentHTML('afterbegin', icon('users', 17));
