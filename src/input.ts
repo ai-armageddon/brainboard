@@ -1,4 +1,4 @@
-import { S, changed, checkpoint, getItem, redo, requestRender, undo } from './state';
+import { S, changed, checkpoint, getItem, isBrushTool, redo, requestRender, undo } from './state';
 import type { Box, Item, NodeItem, StrokeItem, Tool } from './types';
 import { applyCamera, live, marquee, nodeElOf, viewport } from './render';
 import {
@@ -8,7 +8,7 @@ import {
   zoomToFit, setZoom, type Side,
 } from './actions';
 import { clamp, contains, distToSeg, edgeGeom, strokePath, unionBox } from './geometry';
-import { closePopovers, openImagePicker, setPenSize, toggleShortcuts } from './ui';
+import { closePopovers, openImagePicker, setBrushSize, toggleShortcuts } from './ui';
 import { canEdit } from './net';
 import { userMovedCamera } from './collab';
 import { vimKey } from './vim';
@@ -17,6 +17,7 @@ import { inkEnd, inkMove, inkStart } from './ink';
 import { IS_MAC } from './keys';
 
 type Drag =
+  | { kind: 'brush-size'; tool: 'pen' | 'eraser'; pointerId: number; startX: number; startSize: number }
   | { kind: 'pan'; lx: number; ly: number }
   | { kind: 'move'; sx: number; sy: number; started: boolean; orig: Map<string, { x: number; y: number }>; clickId: string; wasSelected: boolean; shift: boolean }
   | { kind: 'marquee'; sx: number; sy: number; base: Set<string> }
@@ -27,6 +28,13 @@ type Drag =
   | { kind: 'connect'; from: string; side: Side | null; sx: number; sy: number; moved: boolean; target: string | null };
 
 let drag: Drag | null = null;
+const brushCursor = document.getElementById('brush-cursor')!;
+
+function positionBrushCursor(e: PointerEvent) {
+  brushCursor.hidden = false;
+  brushCursor.style.left = `${e.clientX}px`;
+  brushCursor.style.top = `${e.clientY}px`;
+}
 
 /** Hold this and drag to pan: ⌘ on Mac (Ctrl-click is right-click there), Ctrl elsewhere. */
 const PAN_KEY = IS_MAC ? 'Meta' : 'Control';
@@ -51,6 +59,7 @@ function setBusy(on: boolean) {
 // ------------------------------------------------------------------ pointer down
 
 function onDown(e: PointerEvent) {
+  if (drag?.kind === 'brush-size' || (isBrushTool(S.tool) && !e.isPrimary)) return;
   const t = e.target as Element;
   if (t.closest('.txt.editing')) return;
   closePopovers();
@@ -67,6 +76,15 @@ function onDown(e: PointerEvent) {
   if (e.button !== 0) return;
   const ro = !canEdit();
 
+  if (isBrushTool(S.tool)) {
+    if (ro) return;
+    positionBrushCursor(e);
+    if (e.shiftKey) {
+      e.preventDefault();
+      begin({ kind: 'brush-size', tool: S.tool, pointerId: e.pointerId, startX: e.clientX, startSize: S[S.tool].size }, e);
+      return;
+    }
+  }
   const handle = t.closest<HTMLElement>('.handle');
   if (handle && !ro) { beginResize(handle.dataset.corner!, e); return; }
 
@@ -141,6 +159,8 @@ function beginResize(corner: string, e: PointerEvent) {
 // ------------------------------------------------------------------ pointer move
 
 function onMove(e: PointerEvent) {
+  if (drag?.kind === 'brush-size' && drag.pointerId !== e.pointerId) return;
+  if (isBrushTool(S.tool) && e.isPrimary) positionBrushCursor(e);
   pointer.x = e.clientX;
   pointer.y = e.clientY;
   if (!drag) return;
@@ -148,6 +168,9 @@ function onMove(e: PointerEvent) {
   const p = screenToWorld(e.clientX, e.clientY);
 
   switch (drag.kind) {
+    case 'brush-size':
+      if (S.tool === drag.tool) setBrushSize(drag.startSize + (e.clientX - drag.startX) / 4);
+      return;
     case 'pan':
       S.cam.x += e.clientX - drag.lx;
       S.cam.y += e.clientY - drag.ly;
@@ -293,6 +316,8 @@ function doResize(d: Extract<Drag, { kind: 'resize' }>, p: { x: number; y: numbe
 
 function onUp(e: PointerEvent) {
   const d = drag;
+  if (d?.kind === 'brush-size' && d.pointerId !== e.pointerId) return;
+  if (e.pointerType === 'touch' || e.type === 'pointercancel') brushCursor.hidden = true;
   if (!d) return;
   drag = null;
   setBusy(false);
@@ -392,14 +417,14 @@ function finishStroke({ pts, id, size, color }: Extract<Drag, { kind: 'draw' }>)
 function eraseAlong(d: Extract<Drag, { kind: 'erase' }>, p: { x: number; y: number }) {
   const z = S.cam.z;
   const dist = Math.hypot(p.x - d.last.x, p.y - d.last.y);
-  const steps = Math.max(1, Math.ceil((dist * z) / 4));
+  const steps = Math.max(1, Math.ceil((dist * z) / Math.min(4, S.eraser.size / 2)));
   const hits = new Set<string>();
   for (let s = 0; s <= steps; s++) {
     const qx = d.last.x + ((p.x - d.last.x) * s) / steps;
     const qy = d.last.y + ((p.y - d.last.y) * s) / steps;
     for (const it of S.items) {
       if (it.type !== 'stroke' || hits.has(it.id)) continue;
-      const r = it.size / 2 + 8 / z;
+      const r = it.size / 2 + S.eraser.size / (2 * z);
       if (qx < it.x - r || qx > it.x + it.w + r || qy < it.y - r || qy > it.y + it.h + r) continue;
       const pt = it.points;
       for (let i = 0; i + 3 < pt.length; i += 2) {
@@ -491,6 +516,11 @@ function onKeyDown(e: KeyboardEvent) {
   }
   switch (e.key) {
     case '+': case '=': case '-':
+      if (isBrushTool(S.tool) && !ro) {
+        e.preventDefault();
+        setBrushSize(S[S.tool].size + (e.key === '-' ? -1 : 1));
+        return;
+      }
       if (bumpFont(e.key === '-' ? 'smaller' : 'larger')) e.preventDefault();
       return;
     case 'Escape':
@@ -524,7 +554,7 @@ function onKeyDown(e: KeyboardEvent) {
     }
     case ']': case '[':
       e.preventDefault();
-      if (S.tool === 'pen') setPenSize(S.pen.size + (e.key === ']' ? 1 : -1));
+      if (isBrushTool(S.tool)) setBrushSize(S[S.tool].size + (e.key === ']' ? 1 : -1));
       else reorder(e.key === ']');
       return;
     case '?': toggleShortcuts(); return;
@@ -619,13 +649,14 @@ function onPaste(e: ClipboardEvent) {
 export function initInput() {
   viewport.addEventListener('pointerdown', onDown);
   viewport.addEventListener('pointermove', onMove);
+  viewport.addEventListener('pointerleave', () => { brushCursor.hidden = true; });
   window.addEventListener('pointermove', (e) => { pointer.x = e.clientX; pointer.y = e.clientY; }, { passive: true });
   viewport.addEventListener('pointerup', onUp);
   viewport.addEventListener('pointercancel', onUp);
   viewport.addEventListener('lostpointercapture', (e) => { if (drag) onUp(e); });
 
   viewport.addEventListener('dblclick', (e) => {
-    if (!canEdit()) return;
+    if (!canEdit() || (e.shiftKey && isBrushTool(S.tool))) return;
     // Pointer capture from the first click can retarget dblclick to the viewport, so hit-test the point too.
     const t = (document.elementFromPoint(e.clientX, e.clientY) ?? e.target) as Element;
     if (t.closest('.txt.editing') || t.closest('.handle, .port')) return;

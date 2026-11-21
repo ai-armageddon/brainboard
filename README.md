@@ -61,7 +61,7 @@ Shortcuts are written for Mac. On Windows and Linux, `⌘` is `Ctrl` and `⌥` (
 | **Zoom** | Pinch or `⌘` + scroll · `⇧1` fits everything · `⌘0` resets to 100% |
 | **Images** | `⌘V` to paste, drag files in, or press `I` |
 | **Write** | Double-click anywhere for text · `N` for a sticky note · `Enter` edits the selection |
-| **Draw** | `P` pen · `E` eraser |
+| **Draw** | `P` pen · `E` eraser · click or press `+` / `−` for 1 px steps, or hold `Shift` and drag left or right on the canvas to resize |
 | **Flow charts** | `O` bubble · `R` box · `D` decision · `C` connector |
 | | Drag a shape's dot onto another shape to connect them, or onto empty space to grow a new bubble. `Tab` adds a connected bubble to the right, even while you type. |
 | **Organise** | `⌘D` duplicate · `]` / `[` bring to front or send to back · `⌫` delete |

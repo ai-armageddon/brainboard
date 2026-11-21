@@ -8,8 +8,11 @@ export const S = {
   editing: null as string | null,
   space: false,
   pen: { color: 'ink' as ColorKey, size: 3 },
+  eraser: { size: 16 },
   last: { note: 'yellow', shape: 'ink', text: 'ink', edge: 'gray' } as Record<'note' | 'shape' | 'text' | 'edge', ColorKey>,
 };
+
+export const isBrushTool = (tool: Tool): tool is 'pen' | 'eraser' => tool === 'pen' || tool === 'eraser';
 
 export const getItem = (id: string | null | undefined) => (id ? S.items.find((i) => i.id === id) : undefined);
 
@@ -139,7 +142,8 @@ const prefKey = 'bb-prefs';
 export function loadPrefs() {
   try {
     const p = JSON.parse(localStorage.getItem(prefKey) ?? '{}');
-    if (p.pen) S.pen = p.pen;
+    if (p.pen) S.pen = { ...S.pen, ...p.pen };
+    if (Number.isFinite(p.eraser?.size)) S.eraser.size = Math.max(1, Math.round(p.eraser.size));
     if (p.last) S.last = { ...S.last, ...p.last };
   } catch { /* ignore */ }
 }
@@ -147,6 +151,6 @@ let prefTimer = 0;
 export function savePrefs() {
   clearTimeout(prefTimer);
   prefTimer = window.setTimeout(() => {
-    try { localStorage.setItem(prefKey, JSON.stringify({ pen: S.pen, last: S.last })); } catch { /* ignore */ }
+    try { localStorage.setItem(prefKey, JSON.stringify({ pen: S.pen, eraser: S.eraser, last: S.last })); } catch { /* ignore */ }
   }, 300);
 }

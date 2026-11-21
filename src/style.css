@@ -145,9 +145,19 @@ kbd {
 #viewport[data-tool="text"] { cursor: text; }
 #viewport:is([data-tool="note"], [data-tool="ellipse"], [data-tool="rect"], [data-tool="diamond"]) { cursor: crosshair; }
 #viewport[data-tool="connect"] { cursor: alias; }
-#viewport[data-tool="eraser"] {
-  cursor: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='20' height='20'%3E%3Ccircle cx='10' cy='10' r='8' fill='white' fill-opacity='.6' stroke='%23555' stroke-width='1.5'/%3E%3C/svg%3E") 10 10, auto;
+#viewport[data-tool="eraser"] { cursor: crosshair; }
+#brush-cursor {
+  display: none;
+  width: var(--diameter);
+  height: var(--diameter);
+  position: absolute;
+  z-index: 6;
+  transform: translate(-50%, -50%);
+  border-radius: 50%;
+  box-shadow: 0 0 0 1px #3339, inset 0 0 0 1px #fffc;
+  pointer-events: none;
 }
+#viewport:is([data-tool="pen"], [data-tool="eraser"]):not(.space, .panmod, .panning) #brush-cursor:not([hidden]) { display: block; }
 #viewport.dropping::after {
   content: "Drop to add";
   position: absolute;
@@ -930,6 +940,8 @@ body.busy #ctxbar { opacity: 0; pointer-events: none; transition: none; }
   #penbar > .swatches { flex-basis: 100%; justify-content: center; }
   #penbar > .swatches + .sep { display: none; }
 }
+#penbar[data-tool="eraser"] { width: max-content; }
+#penbar[data-tool="eraser"] :is(#pen-colors, #pen-colors + .sep) { display: none; }
 #penbar[hidden] { display: none; }
 #penbar .sw::after { background: var(--s); box-shadow: none; }
 .size {

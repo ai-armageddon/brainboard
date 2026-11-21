@@ -1,6 +1,6 @@
 import { icon } from './icons';
 import { clearFontPreview, previewFont } from './font-preview';
-import { S, canRedo, canUndo, checkpoint, getItem, redo, requestRender, savePrefs, undo } from './state';
+import { S, canRedo, canUndo, checkpoint, getItem, isBrushTool, redo, requestRender, savePrefs, undo } from './state';
 import { hooks, selBounds, viewport } from './render';
 import { COLORS, FONTS, SHAPES, type FontKey, type ColorKey, type Item, type ShapeKind, type Tool } from './types';
 import {
@@ -48,21 +48,37 @@ export function updateToolUI() {
   document.querySelectorAll<HTMLElement>('#toolbar [data-tool]').forEach((b) => {
     b.classList.toggle('active', b.dataset.tool === S.tool);
   });
-  penbar.hidden = S.tool !== 'pen';
-  if (!penbar.hidden) updatePenSize();
+  penbar.hidden = !isBrushTool(S.tool);
+  if (!isBrushTool(S.tool)) return;
+  const tool = S.tool;
+  penbar.dataset.tool = tool;
+  for (const b of penbar.querySelectorAll<HTMLButtonElement>('[data-step]')) {
+    const action = b.dataset.step === '1' ? 'Increase' : 'Decrease';
+    b.setAttribute('aria-label', `${action} ${tool} size`);
+    b.title = `${action} ${tool} size · ${b.dataset.step === '1' ? '+' : '−'}`;
+  }
+  $('pen-size').setAttribute('aria-label', `${tool === 'pen' ? 'Pen' : 'Eraser'} size`);
+  updateBrushSize();
 }
 
-export function setPenSize(size: number) {
-  S.pen.size = Math.max(1, Math.round(size));
-  updatePenSize();
+export function setBrushSize(size: number) {
+  if (!isBrushTool(S.tool)) return;
+  const brush = S[S.tool];
+  const next = Math.max(1, Math.round(size));
+  if (brush.size === next) return;
+  brush.size = next;
+  updateBrushSize();
   savePrefs();
 }
 
-function updatePenSize() {
-  $('pen-size').textContent = `${S.pen.size} px`;
-  penbar.querySelector<HTMLButtonElement>('[data-step="-1"]')!.disabled = S.pen.size <= 1;
+function updateBrushSize() {
+  if (!isBrushTool(S.tool)) return;
+  const size = S[S.tool].size;
+  $('pen-size').textContent = `${size} px`;
+  $('brush-cursor').style.setProperty('--diameter', `${size}px`);
+  penbar.querySelector<HTMLButtonElement>('[data-step="-1"]')!.disabled = size <= 1;
   for (const b of penbar.querySelectorAll<HTMLElement>('[data-size]')) {
-    const on = Number(b.dataset.size) === S.pen.size;
+    const on = Number(b.dataset.size) === size;
     b.classList.toggle('on', on);
     b.setAttribute('aria-pressed', String(on));
   }
@@ -224,12 +240,13 @@ export function buildUI() {
   const showPenColors = () => { penColors.innerHTML = COLORS.map((c) => swatch(c, c === S.pen.color)).join(''); };
   showPenColors();
   $('pen-presets').innerHTML = [2, 4, 8, 16].map((s) =>
-    `<button class="size" data-size="${s}" aria-label="Pen size ${s}" title="${s} px"><i style="width:${s}px;height:${s}px"></i></button>`).join('');
+    `<button class="size" data-size="${s}" aria-label="Set size to ${s} pixels" title="${s} px"><i style="width:${s}px;height:${s}px"></i></button>`).join('');
   penbar.addEventListener('click', (e) => {
     const b = (e.target as Element).closest<HTMLElement>('button');
     if (!b) return;
-    if (b.dataset.size) setPenSize(Number(b.dataset.size));
-    else if (b.dataset.step) setPenSize(S.pen.size + Number(b.dataset.step));
+    if (!isBrushTool(S.tool)) return;
+    if (b.dataset.size) setBrushSize(Number(b.dataset.size));
+    else if (b.dataset.step) setBrushSize(S[S.tool].size + Number(b.dataset.step));
     else if (b.dataset.color) {
       S.pen.color = b.dataset.color as ColorKey;
       showPenColors();
