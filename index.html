@@ -127,7 +127,6 @@
       <div id="voice" class="voice"></div>
       <button id="present-btn" class="cbtn" data-tip="Present · everyone follows you" aria-label="Present"></button>
       <button id="save-btn" class="save-btn" data-tip="Save to an account · ⌘S" aria-label="Save" hidden>Save</button>
-      <button id="ask-ai" class="link-btn" aria-haspopup="dialog">Ask AI</button>
       <button id="share-btn" class="share-btn owner-only" aria-label="Share">Share</button>
     </div>
     <div id="follow-banner" class="panel" hidden></div>
@@ -147,7 +146,6 @@
       <button data-action="fit">Zoom to fit <kbd>⇧1</kbd></button>
       <button data-action="export">Export… <kbd>⇧⌘E</kbd></button>
       <button data-action="import" class="owner-only">Import board…</button>
-      <button data-action="connect">Connect AI… <span class="muted">ChatGPT, Claude</span></button>
       <button data-action="theme">Theme <span id="theme-label" class="muted">Auto</span></button>
       <button data-action="vim">Vim keys <span id="vim-label" class="muted">Off</span></button>
       <button data-action="shortcuts">Keyboard shortcuts <kbd>?</kbd></button>
@@ -168,16 +166,6 @@
           <button class="close" aria-label="Close">Esc</button>
         </div>
         <div class="home-body"></div>
-      </div>
-    </div>
-
-    <div id="connect" hidden>
-      <div class="panel sheet connect-sheet" role="dialog" aria-modal="true" aria-labelledby="connect-title">
-        <div class="sheet-head">
-          <h2><span class="logo"></span><span id="connect-title">Connect AI</span></h2>
-          <button class="close" aria-label="Close">Esc</button>
-        </div>
-        <div class="connect-body share-body"></div>
       </div>
     </div>
 

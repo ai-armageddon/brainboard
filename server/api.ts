@@ -22,9 +22,6 @@ import {
 } from './accounts.ts';
 import { authenticationOptions, authenticationVerify, registrationOptions, registrationVerify, relyingParty } from './passkeys.ts';
 import { HOSTED, ICE_SERVERS, PUBLIC_URL } from './config.ts';
-import { aiBoards, handleMcp, isMcpPath, mcpBase } from './remote-mcp.ts';
-import { connectorConsent, serveConnectorAuth } from './connector-auth.ts';
-import { chooseGrantBoard, createKey, deleteKey, listKeys, publicKey, transferKeys } from './keys.ts';
 
 const MAX_BODY = 30 * 1024 * 1024;
 
@@ -87,15 +84,6 @@ export async function handleApi(req: IncomingMessage, res: ServerResponse): Prom
     }
   }
 
-  // AI chat apps (ChatGPT, Claude, Codex…) connect here with a personal access key
-  if (serveConnectorAuth(req, res, url.pathname)) return true;
-  if (url.pathname === '/' && url.searchParams.has('ai_approval')) {
-    res.setHeader('Content-Security-Policy', "frame-ancestors 'none'");
-    res.setHeader('Referrer-Policy', 'no-referrer');
-    res.setHeader('Cache-Control', 'no-store');
-  }
-  if (isMcpPath(url.pathname)) return await handleMcp(req, res, url), true;
-
   if (!url.pathname.startsWith('/api/')) return false;
   const parts = url.pathname.split('/').filter(Boolean).slice(1); // drop "api"
 
@@ -115,39 +103,6 @@ export async function handleApi(req: IncomingMessage, res: ServerResponse): Prom
       }), true;
     }
     if (parts[0] === 'auth') return await handleAuth(req, res, parts.slice(1), method, p), true;
-
-    // ---- personal access keys for AI chat apps (see server/remote-mcp.ts). Each acts as this browser/account.
-    if (parts[0] === 'ai-consent' && parts[1] && (method === 'GET' || method === 'POST')) {
-      const decision = method === 'POST' ? await readJson<{ boardId?: string; allow?: boolean }>(req) : undefined;
-      try { return send(res, 200, await connectorConsent(req, p, parts[1], decision)), true; }
-      catch (err) { return send(res, 400, { error: (err as Error).message }), true; }
-    }
-    if (parts[0] === 'mcp-keys') {
-      const acct = ownerKeyOf(p);
-      if (!acct && !p.local) return send(res, 403, { error: 'forbidden' }), true;
-      if (!parts[1] && method === 'GET') {
-        const boards = (await aiBoards(p)).map(({ id, name, role }) => ({ id, name, role }));
-        return send(res, 200, { base: mcpBase(req), keys: listKeys(acct, p.local).map(publicKey), boards }), true;
-      }
-      if (!parts[1] && method === 'POST') {
-        const body = await readJson<{ name?: string }>(req);
-        try {
-          const { key, secret } = await createKey(acct, p.local, String(body.name ?? ''));
-          return send(res, 201, { key: publicKey(key), secret, url: `${mcpBase(req)}/mcp/${secret}` }), true;
-        } catch (err) {
-          return send(res, 400, { error: (err as Error).message }), true;
-        }
-      }
-      if (parts[1] && method === 'PATCH') {
-        const { boardId } = await readJson<{ boardId?: string }>(req);
-        if (!boardId || !(await aiBoards(p, boardId)).length) return send(res, 403, { error: 'Choose a board you can access.' }), true;
-        const changed = await chooseGrantBoard(acct, p.local, parts[1], boardId);
-        return send(res, changed ? 200 : 404, { ok: changed }), true;
-      }
-      if (parts[1] && method === 'DELETE') {
-        return send(res, (await deleteKey(acct, p.local, parts[1])) ? 200 : 404, { ok: true }), true;
-      }
-    }
 
     // ---- boards shared with me: ones I joined with a link, or addressed to my account. Only ever my own.
     if (parts[0] === 'shared' && method === 'GET') {
@@ -338,7 +293,6 @@ async function signIn(res: ServerResponse, p: Principal, user: User) {
   sessionCookie(res, await createSession(user.id));
   const claimed = p.anonId ? await transferOwnership(anonKey(p.anonId), userKey(user.id)) : 0;
   if (p.anonId) await transferMemberships(anonKey(p.anonId), userKey(user.id));
-  if (p.anonId) await transferKeys(anonKey(p.anonId), userKey(user.id));
   return { user: publicUser(user), claimed };
 }
 

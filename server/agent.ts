@@ -235,11 +235,7 @@ export interface Added { ref?: string; id: string; type: string; summary: string
 
 const GAP = 100;
 
-/**
- * `anchor`: where new, unconnected items should start (e.g. inside the area the user is looking at).
- * Without it they go beside existing content.
- */
-export function addItems(board: Board, specs: AddSpec[], direction: 'right' | 'down' = 'right', anchor?: { x: number; y: number }): Added[] {
+export function addItems(board: Board, specs: AddSpec[], direction: 'right' | 'down' = 'right'): Added[] {
   const refs = new Map<string, string>();
   const created: { node: NodeItem; spec: AddSpec; explicit: boolean }[] = [];
   const edgeSpecs: AddSpec[] = [];
@@ -323,15 +319,15 @@ export function addItems(board: Board, specs: AddSpec[], direction: 'right' | 'd
   const placeRoot = (n: NodeItem) => {
     if (direction === 'right') {
       const below = newPlaced.length ? Math.max(...newPlaced.map((p) => p.y + p.h)) + GAP : null;
-      n.x = anchor ? anchor.x : content ? content.x + content.w + GAP * 2 : 0;
+      n.x = content ? content.x + content.w + GAP * 2 : 0;
       if (newPlaced.length) n.x = Math.min(...newPlaced.map((p) => p.x));
-      n.y = below ?? (anchor ? anchor.y : content ? content.y : 0);
+      n.y = below ?? (content ? content.y : 0);
       settle(n, 0, n.h / 2 + GAP / 2);
     } else {
       const right = newPlaced.length ? Math.max(...newPlaced.map((p) => p.x + p.w)) + GAP : null;
-      n.y = anchor ? anchor.y : content ? content.y + content.h + GAP * 2 : 0;
+      n.y = content ? content.y + content.h + GAP * 2 : 0;
       if (newPlaced.length) n.y = Math.min(...newPlaced.map((p) => p.y));
-      n.x = right ?? (anchor ? anchor.x : content ? content.x : 0);
+      n.x = right ?? (content ? content.x : 0);
       settle(n, n.w / 2 + GAP / 2, 0);
     }
   };

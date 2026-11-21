@@ -11,7 +11,6 @@ import { clamp } from './geometry';
 import { account, api, events, saveProfile, session, type BoardMeta } from './net';
 import { ensureBoard, openBoard, openDraft, saveCamera, showBoardInUrl } from './boards';
 import { openHome } from './home';
-import { openConnect } from './connect';
 import { paintLogos } from './brand';
 import { userMovedCamera } from './collab';
 import { keyLabel, localizeKeys } from './keys';
@@ -365,7 +364,6 @@ export function buildUI() {
       case 'clear': clearBoard(); break;
       case 'new-board': void newBoard(); break;
       case 'home': openHome(); break;
-      case 'connect': openConnect(); break;
       case 'rename': startRename(); break;
       case 'delete-board': void deleteCurrentBoard(); break;
     }
