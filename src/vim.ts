@@ -1,7 +1,7 @@
 // Vim-style keys for the board: a `:` command line, `/` search, and normal-mode motions.
 //
 // Always on (none of these clash with the regular shortcuts):
-//   :  /  u  ⌃R  x  yy  w  b  gg  G  a  zz  zi  zo  gt  gT  m{a-z}  '{a-z}
+//   :  /  u  ⌃R  x  yy  w  b  gg  G  a  zz  zi  zo  gt  gT  gv  m{a-z}  '{a-z}
 // Vim mode (`:set vim`, or the menu) adds the keys that would otherwise pick a tool:
 //   h j k l  H J K L  i  o O  p P  n N  dd  cc  s  e
 import { replaceItemText } from './text-runs';
@@ -16,6 +16,7 @@ import { api, canEdit, isOwner, session } from './net';
 import { closePopovers, getTheme, applyTheme, newBoard, openImagePicker, toggleShortcuts, type Theme } from './ui';
 import { follow, userMovedCamera } from './collab';
 import { openBoard } from './boards';
+import { openViews } from './views';
 import { saveCommand } from './account';
 import { openExport } from './export';
 import { pointerWorld, putClip, yank, clipBounds } from './input';
@@ -462,6 +463,7 @@ const COMMANDS: Cmd[] = [
   { names: ['bnext', 'bn', 'tabnext', 'tabn'], desc: 'Next board', run: () => cycleBoard(1) },
   { names: ['bprevious', 'bp', 'bprev', 'bN', 'tabprevious', 'tabp'], desc: 'Previous board', run: () => cycleBoard(-1) },
   { names: ['ls', 'boards', 'buffers', 'files'], desc: 'List boards', run: () => { if (ownerOnly()) $('menu-btn').click(); } },
+  { names: ['views'], desc: 'Open saved views', run: openViews },
   { names: ['new', 'enew', 'tabnew', 'tabe'], usage: '[name]', desc: 'Create a board', run: async (a) => {
     if (!ownerOnly()) return;
     if (!a) { void newBoard(); return; }
@@ -750,6 +752,7 @@ const SEQS: Record<string, Fn> = {
   gg: () => edge(false),
   gt: () => void cycleBoard(1),
   gT: () => void cycleBoard(-1),
+  gv: openViews,
   yy: () => { const n = yankSelection(); if (n) message(`${n} item${n === 1 ? '' : 's'} yanked`); },
   zz: () => { if (selBounds && userMovedCamera()) centerOn(selBounds); },
   zi: () => { if (userMovedCamera()) zoomBy(1.25); },

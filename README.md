@@ -90,7 +90,7 @@ Click **Share** to create an invite link for each person. Each link either **can
 
 - **Presence.** Everyone's cursor, selection and "typing" marker appear in their colour. Click an avatar to follow that person's view.
 - **Present.** Everyone follows your view while you walk through the board. You can lock the view so nobody wanders off.
-- **Views.** Save spots on a big board as named views from the views menu next to the board name, then hop between them with the arrows or `{` `}`. Views are saved with the board, so everyone sees the same ones. When you aren't following anyone, faces next to the view name show who's working in other views, with a pulse for whoever is active right now. The menu shows who is in each view, and clicking a face takes you to them.
+- **Views.** Save an area from the views menu next to the board name. Brainboard suggests a name from the visible content. You can edit it when saving or choose **Rename** later. Hop between views with the arrows or `{` `}`. Views are saved with the board, so everyone sees the same ones. When you aren't following anyone, faces next to the view name show who's working in other views, with a pulse for whoever is active right now. The menu shows who is in each view, and clicking a face takes you to them.
 - **Voice chat.** Click the headphones to join. Audio goes directly between browsers. The **▾** next to the mic switches microphone or speaker mid-call, with a level meter to check which mic hears you. Your choice is remembered, and if that mic is unplugged you fall back to the system default. Avatars light up and cursors show sound bars while someone talks. The board owner and the presenter can mute anyone, mute everyone, or turn on **Stage mode** in Share so only they can talk. Mutes apply on every listener's side, not just the muted person's. Peer-to-peer audio suits small groups of up to about 8 people.
 - **Cinematic follow.** Followers get a calm camera by default. Instead of mirroring every twitch, it frames what the presenter is working on: the note they're typing in, what they just selected, or the item their cursor rests on. It holds still while that's already in view, eases over when it isn't, and flies across the board for long jumps. Switch to **Exact** in the follow banner to mirror their screen instead.
 - **Session controls.** *Pause editing* makes everyone else view-only. *Show viewers' cursors* can be turned off for big audiences. Each person has a **Remove** button.
@@ -114,6 +114,7 @@ These work all the time, because they don't clash with the regular shortcuts:
 | `zz` · `zi` `zo` | Centre the selection, zoom in or out |
 | `ma` · `'a` · `''` | Mark this view as `a`, jump back to it, return to where you were |
 | `gt` · `gT` | Next or previous board |
+| `gv` · `:views` | Open saved views |
 
 Turn on **vim mode** with `:set vim` or **Vim keys** in the menu. It adds the keys that normally pick a tool, so the tools move to commands such as `:pen`, `:note` and `:bubble`.
 

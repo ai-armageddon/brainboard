@@ -3,7 +3,8 @@
 // who's working in other views, so you can see where the action is and hop over.
 import { S } from './state';
 import { animateCam, uid } from './actions';
-import { hooks } from './render';
+import { hooks, textElOf } from './render';
+import { intersects } from './geometry';
 import { canEdit, changeView, events, session } from './net';
 import { ensureBoard } from './boards';
 import { follow, followingId, isFollowLocked } from './collab';
@@ -94,13 +95,57 @@ export function stepView(delta: 1 | -1) {
 
 // ---------------------------------------------------------------- editing
 
+function suggestedViewName(area: Rect): string {
+  const kinds = new Set<string>();
+  let title = '', best = 0, top = Infinity, left = Infinity;
+  for (const it of S.items) {
+    if (it.type !== 'edge' && !intersects(it, area)) continue;
+    if (it.type === 'image') { kinds.add('Images'); continue; }
+    if (it.type === 'stroke') { kinds.add('Sketches'); continue; }
+    if (it.type === 'note') kinds.add('Notes');
+    if (it.type === 'shape') kinds.add('Diagram');
+    const line = (it.type === 'edge' ? it.label : it.text).trim().split(/\r?\n/, 1)[0];
+    if (!line) continue;
+    const box = textElOf(it.id)?.getBoundingClientRect();
+    if (!box || !box.width || !box.height) continue;
+    const w = Math.min(innerWidth, box.right) - Math.max(0, box.left);
+    const h = Math.min(innerHeight, box.bottom) - Math.max(0, box.top);
+    if (w <= 0 || h <= 0) continue;
+    // Prefer prominent, fully visible text, breaking ties in reading order.
+    const score = it.fs * (w / box.width) * (h / box.height);
+    if (score > best || (score === best && (box.top < top || (box.top === top && box.left < left)))) {
+      title = line.replace(/\s+/g, ' ');
+      best = score;
+      top = box.top;
+      left = box.left;
+    }
+  }
+  return title || [...kinds].join(' & ');
+}
+
+function uniqueViewName(base: string) {
+  const used = new Set(session.views.map((v) => v.name.toLowerCase()));
+  if (!base) {
+    let n = session.views.length + 1;
+    while (used.has(`view ${n}`)) n++;
+    return `View ${n}`;
+  }
+  for (let n = 1; ; n++) {
+    const suffix = n === 1 ? '' : ` (${n})`;
+    const limit = 60 - suffix.length;
+    const short = base.length <= limit ? base : base.slice(0, limit - 1).replace(/[\uD800-\uDBFF]$/, '').trimEnd() + '…';
+    const name = short + suffix;
+    if (!used.has(name.toLowerCase())) return name;
+  }
+}
+
 async function addView() {
   if (!canEdit()) return;
-  if (!(await ensureBoard())) return;
-  const used = new Set(session.views.map((v) => v.name));
-  let n = session.views.length + 1;
-  while (used.has(`View ${n}`)) n++;
-  const v: BoardView = { id: uid(), name: `View ${n}`, ...round(myRect()) };
+  const area = round(myRect());
+  const suggestion = suggestedViewName(area);
+  const boardId = await ensureBoard();
+  if (!boardId || boardId !== session.boardId || !canEdit()) return;
+  const v: BoardView = { id: uid(), name: uniqueViewName(suggestion), ...area };
   changeView({ put: v });
   renamingId = v.id;
   render();
@@ -191,6 +236,9 @@ function renderPop() {
       </span>` : ''}
     </div>`;
   }).join('');
+  const active = document.activeElement;
+  const action = active instanceof HTMLButtonElement && pop.contains(active) ? active.dataset.act : null;
+  const rowId = active?.closest<HTMLElement>('[data-view]')?.dataset.view;
   pop.innerHTML = `
     <div class="vpop-head"><span class="pop-title">Views</span>${edit ? `<button class="vpop-add" data-act="add">${icon('plus', 15)}Add this view</button>` : ''}</div>
     ${session.views.length ? `<div class="vrows">${rows}</div>` : `<p class="vpop-empty">${edit ? 'Save spots on this board as views, so everyone can jump straight to them.' : 'No views on this board yet.'}</p>`}
@@ -214,6 +262,9 @@ function renderPop() {
       if (e.key === 'Escape') done(false);
     });
     input.addEventListener('blur', () => { if (renamingId) done(true); });
+  } else if (action) {
+    const row = rowId ? `[data-view="${CSS.escape(rowId)}"] ` : '';
+    pop.querySelector<HTMLElement>(`${row}[data-act="${action}"]`)?.focus({ preventScroll: true });
   }
 }
 
@@ -229,9 +280,15 @@ const renderSoon = () => { raf ||= requestAnimationFrame(render); };
 function togglePop(force?: boolean) {
   const pop = $('views-pop');
   const open = force ?? pop.hidden;
+  if (!open) pop.querySelector<HTMLInputElement>('.vrow-input')?.blur();
   pop.hidden = !open;
   if (!open) { renamingId = ''; showPreview(null); }
   render();
+}
+
+export function openViews() {
+  togglePop(true);
+  $('views-pop').focus();
 }
 
 export function initViews() {
@@ -242,6 +299,8 @@ export function initViews() {
   pop.id = 'views-pop';
   pop.className = 'panel';
   pop.setAttribute('role', 'menu');
+  pop.setAttribute('aria-label', 'Views');
+  pop.tabIndex = -1;
   pop.hidden = true;
   document.body.append(pop);
 
@@ -270,6 +329,9 @@ export function initViews() {
     showPreview(session.views.find((v) => v.id === id) ?? null);
   });
   pop.addEventListener('pointerleave', () => showPreview(null));
+  pop.addEventListener('keydown', (e) => {
+    if (['Tab', 'Enter', ' '].includes(e.key)) e.stopPropagation();
+  });
   document.addEventListener('pointerdown', (e) => {
     if (pop.hidden) return;
     const t = e.target as Element;
