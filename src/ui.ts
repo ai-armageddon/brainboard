@@ -286,7 +286,7 @@ export function buildUI() {
       case 'font-down':
       case 'font-up':
         beginTextSizing();
-        return bumpFont(b.dataset.act === 'font-up' ? 1.2 : 1 / 1.2);
+        return bumpFont(b.dataset.act === 'font-up' ? 'larger' : 'smaller');
       case 'edit': return startEditing([...S.selected][0]);
       case 'duplicate': checkpoint(); return duplicateSelection(16 / S.cam.z);
       case 'front': return reorder(true);

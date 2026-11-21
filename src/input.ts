@@ -2,7 +2,7 @@ import { S, changed, checkpoint, getItem, redo, requestRender, undo } from './st
 import type { Box, Item, NodeItem, StrokeItem, Tool } from './types';
 import { applyCamera, live, marquee, nodeElOf, viewport } from './render';
 import {
-  addImages, canEditText, createNode, createSibling, formatSelection, defaultSize, deleteSelection, duplicateSelection,
+  addImages, bumpFont, canEditText, createNode, createSibling, formatSelection, defaultSize, deleteSelection, duplicateSelection,
   importBoard, isNode, isTextual, liveText, makeEdge, nudge, pasteItems, reorder, screenToWorld, selectAll,
   selectionItems, setTool, siblingOf, startEditing, stopCamAnim, stopEditing, uid, zoomAt, zoomBy,
   zoomToFit, setZoom, type Side,
@@ -490,6 +490,9 @@ function onKeyDown(e: KeyboardEvent) {
     return;
   }
   switch (e.key) {
+    case '+': case '=': case '-':
+      if (bumpFont(e.key === '-' ? 'smaller' : 'larger')) e.preventDefault();
+      return;
     case 'Escape':
       closePopovers();
       if (S.tool !== 'select') setTool('select');

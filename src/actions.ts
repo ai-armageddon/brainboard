@@ -178,13 +178,15 @@ export function formatSelection(key: Format, font: FontKey = 'geist') {
   changed();
 }
 
-export function bumpFont(f: number) {
-  if (!canEdit()) return;
-  const its = S.items.filter((i) => S.selected.has(i.id) && 'fs' in i) as (Item & { fs: number })[];
-  if (!its.length) return;
+export function bumpFont(direction: 'larger' | 'smaller') {
+  if (!canEdit() || !S.selected.size) return false;
+  const items = S.items.filter((it) => S.selected.has(it.id)).filter(canEditText);
+  if (!items.length) return false;
+  const factor = direction === 'larger' ? 1.2 : 1 / 1.2;
   checkpoint();
-  for (const it of its) it.fs = clamp(it.fs * f, 2, 4000);
+  for (const it of items) it.fs = clamp(it.fs * factor, 2, 4000);
   changed();
+  return true;
 }
 
 // ---------------------------------------------------------------- creating things
