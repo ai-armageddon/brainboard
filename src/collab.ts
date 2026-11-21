@@ -10,6 +10,7 @@ import {
 import { addPasskey, ensureScreenName, openAuth, signOut } from './account';
 import { directorRunning, getFollowMode, observe, setFollowMode, startDirector, stopDirector, type FollowMode } from './director';
 import { animateCam, setTool, stopEditing } from './actions';
+import { catchUpOps, catchUpPresence, catchUpReset, initCatchUp, updateCatchUp } from './catchup';
 import { toast } from './ui';
 import type { PeerInfo, Role } from './protocol';
 
@@ -43,6 +44,7 @@ export function follow(id: string | null, auto = false) {
   else if (p?.p?.view) followView(p);
   renderBanner();
   renderAvatars();
+  updateCatchUp();
 }
 
 /** The user moved the camera themselves: stop following unless the presenter locked it. */
@@ -422,6 +424,7 @@ export function initCollab() {
     const { x, y, z } = S.cam;
     setPresence({ view: { x: -x / z, y: -y / z, w: innerWidth / z, h: innerHeight / z } });
     placeCursors();
+    updateCatchUp();
   };
   const prevRender = hooks.afterRender;
   hooks.afterRender = () => {
@@ -430,10 +433,13 @@ export function initCollab() {
     decoratePeers();
   };
 
+  initCatchUp({ following: () => following, locked: followLocked, rejoin: (id) => follow(id, true) });
+
   // incoming
   events.addEventListener('welcome', () => {
     applyRole();
     renderAvatars();
+    catchUpReset();
     if (session.presenter && session.presenter !== session.you?.id) follow(session.presenter, true);
     else renderBanner();
   });
@@ -458,16 +464,18 @@ export function initCollab() {
       if (directorRunning()) observe(p);
       else followView(p);
     }
+    catchUpPresence(p);
   });
   events.addEventListener('presenter', () => {
+    catchUpReset();
     const pid = session.presenter;
     if (pid && pid !== session.you?.id) follow(pid, true);
     else if (followAuto) follow(null);
     else renderBanner();
     renderAvatars();
   });
-  events.addEventListener('settings', () => { applyRole(); renderBanner(); });
+  events.addEventListener('settings', () => { applyRole(); renderBanner(); updateCatchUp(); });
   events.addEventListener('role', (e) => applyRole((e as CustomEvent<Role>).detail));
-  events.addEventListener('remote-ops', () => requestRender());
+  events.addEventListener('remote-ops', (e) => { requestRender(); catchUpOps((e as CustomEvent<string>).detail); });
   setInterval(placeCursors, 2000);
 }

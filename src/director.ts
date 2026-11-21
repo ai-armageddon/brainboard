@@ -54,7 +54,8 @@ export function observe(p: PeerInfo) {
   wake();
 }
 
-function boxOfIds(ids: string[]): Box | null {
+/** The bounds of these items (an edge counts as the two things it joins). */
+export function boxOfIds(ids: string[]): Box | null {
   const boxes: Box[] = [];
   for (const id of ids) {
     const it = getItem(id);
