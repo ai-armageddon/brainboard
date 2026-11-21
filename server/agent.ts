@@ -1,7 +1,7 @@
 // Agent-friendly operations on a board: readable outlines, batch creation with auto-layout, edits.
 import { replaceItemText } from '../src/text-runs.ts';
 import type { Box, ColorKey, EdgeItem, Item, NodeItem, ShapeKind, TextualItem } from '../src/types.ts';
-import { COLORS } from '../src/types.ts';
+import { COLORS, CORNERS, type CornerKey } from '../src/types.ts';
 import { intersects, resizeStroke, unionBox } from '../src/geometry.ts';
 import { newId, type Board } from './store.ts';
 
@@ -402,6 +402,7 @@ export interface UpdateSpec {
   color?: string;
   shape?: string;
   x?: number; y?: number; w?: number; h?: number;
+  corners?: CornerKey;
   dx?: number; dy?: number;
 }
 
@@ -418,6 +419,7 @@ export function updateItems(board: Board, updates: UpdateSpec[]): string[] {
         if (it.type !== 'shape') throw new Error(`"${u.id}" is a ${kindName(it)}, not a flow-chart shape`);
       }
       if (u.text !== undefined && !isTextual(it) && it.type !== 'edge') throw new Error(`"${u.id}" is a ${kindName(it)} and has no text`);
+      if (u.corners && it.type !== 'image') throw new Error(`"${u.id}" is a ${kindName(it)}; only images have rounded corners`);
     } catch (err) {
       errors.push((err as Error).message);
     }
@@ -451,6 +453,10 @@ export function updateItems(board: Board, updates: UpdateSpec[]): string[] {
       }
     }
     if (u.color && 'color' in it) { it.color = normColor(u.color, it.color); changes.push('color'); }
+    if (u.corners && it.type === 'image') {
+      if (CORNERS[u.corners]) it.round = CORNERS[u.corners]; else delete it.round;
+      changes.push('corners');
+    }
     done.push(`[${it.id}] ${kindName(it)}: ${changes.length ? changes.join(', ') : 'no changes'}`);
   }
   return done;

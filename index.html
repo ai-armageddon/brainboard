@@ -235,6 +235,9 @@
         <button type="button" data-erase-mode="partial" aria-pressed="true" title="Erase just the ink under the brush">Partial</button>
         <button type="button" data-erase-mode="whole" aria-pressed="false" title="Remove the entire pen stroke you touch">Whole stroke</button>
       </div>
+      <div class="pen-modes">
+        <button type="button" id="beauty-btn" data-icon="sparkle" aria-pressed="true" title="Steadier, pen-like ink. Lines, circles and boxes snap clean. Hold still at the end of a stroke to snap any shape.">Beautify</button>
+      </div>
       <div class="brush-controls">
         <div id="pen-colors" class="swatches"></div>
         <span class="sep"></span>
@@ -303,13 +306,22 @@
               <dt>Write anywhere</dt><dd>Double-click</dd>
               <dt>Edit selected</dt><dd><kbd>Enter</kbd></dd>
               <dt>Selected text size</dt><dd><kbd>−</kbd> <kbd>+</kbd> or <kbd>=</kbd></dd>
-              <dt>Bold / Underline</dt><dd><kbd>⌘/Ctrl B</kbd> <kbd>⌘/Ctrl U</kbd></dd>
+              <dt>Bold / Underline</dt><dd><kbd>⌘B</kbd> <kbd>⌘U</kbd></dd>
               <dt>Finish editing</dt><dd><kbd>Esc</kbd></dd>
               <dt>Add connected bubble</dt><dd><kbd>Tab</kbd> (<kbd>⇧Tab</kbd> below)</dd>
               <dt>Duplicate</dt><dd><kbd>⌘D</kbd> or <kbd>⌥</kbd>-drag</dd>
               <dt>Copy / Paste</dt><dd><kbd>⌘C</kbd> <kbd>⌘V</kbd></dd>
               <dt>Front / Back</dt><dd><kbd>]</kbd> <kbd>[</kbd></dd>
               <dt>Delete</dt><dd><kbd>⌫</kbd></dd>
+            </dl>
+          </section>
+          <section>
+            <h3>Arrange <span class="muted">· 2 or more selected</span></h3>
+            <dl>
+              <dt>Align left / center / right</dt><dd><kbd>⌥A</kbd> <kbd>⌥H</kbd> <kbd>⌥D</kbd></dd>
+              <dt>Align top / middle / bottom</dt><dd><kbd>⌥W</kbd> <kbd>⌥V</kbd> <kbd>⌥S</kbd></dd>
+              <dt>Space evenly across / down</dt><dd><kbd>⌥⇧H</kbd> <kbd>⌥⇧V</kbd></dd>
+              <dt>Tidy up into rows</dt><dd><kbd>⌥⇧T</kbd></dd>
             </dl>
           </section>
           <section class="vim-keys">

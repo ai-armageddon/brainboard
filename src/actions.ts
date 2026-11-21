@@ -129,6 +129,18 @@ export function setColor(c: ColorKey) {
   changed();
 }
 
+export function setCorners(round: number) {
+  if (!canEdit()) return;
+  const its = S.items.filter((i) => S.selected.has(i.id) && i.type === 'image');
+  if (!its.length) return;
+  checkpoint();
+  for (const it of its) {
+    if (it.type !== 'image') continue;
+    if (round) it.round = round; else delete it.round;
+  }
+  changed();
+}
+
 export function setShape(kind: ShapeKind) {
   if (!canEdit()) return;
   const its = S.items.filter((i) => S.selected.has(i.id) && i.type === 'shape');

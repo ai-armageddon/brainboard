@@ -62,10 +62,12 @@ Shortcuts are written for Mac. On Windows and Linux, `⌘` is `Ctrl` and `⌥` (
 | **Images** | `⌘V` to paste, drag files in, or press `I` |
 | **Write** | Double-click anywhere for text · `N` for a sticky note · `Enter` edits the selection |
 | **Draw** | `P` pen · `E` eraser · click or press `+` / `−` for 1 px steps, hold `Shift` and scroll up to grow or down to shrink, or `Shift`-drag left or right on the canvas |
+| **Beautify** | On by default, in the pen bar. Steadies your hand and tapers ink like a real pen. Lines, circles, ellipses, triangles and boxes snap clean; hold still at the end of a stroke to snap any shape. `⌘Z` after a snap brings back what you drew |
 | **Erase** | **Partial** removes ink under the brush. **Whole stroke** removes each pen stroke you touch. Undo restores one eraser gesture. |
 | **Flow charts** | `O` bubble · `R` box · `D` decision · `C` connector |
 | | Drag a shape's dot onto another shape to connect them, or onto empty space to grow a new bubble. `Tab` adds a connected bubble to the right, even while you type. |
 | **Organise** | `⌘D` duplicate · `]` / `[` bring to front or send to back · `⌫` delete |
+| **Arrange** | Select 2 or more and open the align menu in the selection bar: align edges or centers, space evenly across or down, or **Tidy up** into neat rows. `⌥A` `⌥H` `⌥D` left / center / right · `⌥W` `⌥V` `⌥S` top / middle / bottom · `⌥⇧H` `⌥⇧V` space evenly · `⌥⇧T` tidy up |
 | **Boards** | `⌥B` all boards · open the menu at the top left · `⌥N` new board · double-click the board name to rename it |
 | **Views** | `{` `}` previous / next view · `⌥1`–`⌥9` jump to a view |
 | **Export** | `⇧⌘E`, or **Export…** in the menu: PNG (1–3×, transparent if you like), PDF, SVG, a Markdown outline of the text and flow, or a brainboard file you can import again. Pick the whole board or just the selection, and a light or dark theme. **Save as…** lets you choose the folder and file name in Chrome, Edge and Opera. Other browsers save to Downloads |

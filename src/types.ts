@@ -34,7 +34,11 @@ export type FontKey = keyof typeof FONTS;
 export interface NoteItem extends Base, FormattedText { type: 'note'; text: string; color: ColorKey; fs: number }
 export interface TextItem extends Base, FormattedText { type: 'text'; text: string; color: ColorKey; fs: number }
 export interface ShapeItem extends Base, FormattedText { type: 'shape'; shape: ShapeKind; text: string; color: ColorKey; fs: number }
-export interface ImageItem extends Base { type: 'image'; blob: string }
+/** `round` is the corner radius as a share of the shorter side: 0 square, 0.5 fully rounded. */
+export interface ImageItem extends Base { type: 'image'; blob: string; round?: number }
+export const CORNERS = { square: 0, soft: 0.06, round: 0.16, full: 0.5 } as const;
+export type CornerKey = keyof typeof CORNERS;
+export const cornerRadius = (it: ImageItem) => Math.max(0, Math.min(0.5, it.round ?? 0)) * Math.min(it.w, it.h);
 /** Local x/y pairs. Drawn ink has a centerline; clipped ink has closed outline rings (including holes). */
 export interface StrokeItem extends Base { type: 'stroke'; points: number[]; color: ColorKey; size: number; outline?: number[][] }
 

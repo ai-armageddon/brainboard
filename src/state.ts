@@ -7,7 +7,7 @@ export const S = {
   tool: 'select' as Tool,
   editing: null as string | null,
   space: false,
-  pen: { color: 'ink' as ColorKey, size: 3 },
+  pen: { color: 'ink' as ColorKey, size: 3, beauty: true },
   eraser: { size: 16, mode: 'partial' as 'partial' | 'whole' },
   last: { note: 'yellow', shape: 'ink', text: 'ink', edge: 'gray' } as Record<'note' | 'shape' | 'text' | 'edge', ColorKey>,
 };
