@@ -13,7 +13,7 @@ type Identity = { owner: true; token: null } | { owner: false; token: string };
 import { getSharing, inviteRole, noteInviteUse, revokeInvite, setSettings } from './sharing.ts';
 import { applyOps, diffItems, validOp } from '../src/ops.ts';
 import type { BoardSettings, ClientMsg, Op, PeerInfo, Presence, Role, ServerMsg } from '../src/protocol.ts';
-import type { Item } from '../src/types.ts';
+import { COLORS, type Item } from '../src/types.ts';
 
 interface Client {
   ws: WebSocket;
@@ -313,6 +313,17 @@ async function handle(room: Room, c: Client, raw: string) {
         send(o, { t: 'muted', by: c.name });
         broadcast(room, { t: 'peer', peer: info(room, o, false) });
       }
+      return;
+    }
+    case 'ink': {
+      // Live pen strokes: pass them on to everyone else as-is, never store them.
+      if (roleOf(room, c) === 'viewer') return;
+      const k = m.ink;
+      if (!k || typeof k.id !== 'string' || k.id.length > 64 || !COLORS.includes(k.color)) return;
+      if (typeof k.size !== 'number' || !Number.isFinite(k.size) || k.size <= 0) return;
+      if (!Array.isArray(k.add) || k.add.length > 8000 || k.add.length % 2 || !k.add.every((v) => typeof v === 'number' && Number.isFinite(v))) return;
+      const end = k.end === 'done' || k.end === 'cancel' ? { end: k.end } : {};
+      broadcast(room, { t: 'ink', from: c.id, ink: { id: k.id, color: k.color, size: k.size, add: k.add, ...end } }, c);
       return;
     }
     case 'kick': {
