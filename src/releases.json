@@ -7,6 +7,47 @@
       "Pasted images appear while they upload. Select an image to change its corners from square to fully rounded.",
       "On a phone, use one finger to draw and two to pan or zoom. The compact toolbar keeps all drawing tools within reach.",
       "Invite previews show the board name. Voice chat shows how many people are in a call before you join."
+    ],
+    "tour": [
+      {
+        "scene": "snap",
+        "title": "Draw a cleaner shape",
+        "body": "Turn on Beautify in the pen toolbar. Draw a rough circle and hold still before lifting the pen to snap it into shape.",
+        "target": "#beauty-btn",
+        "fallback": "[data-tool=\"pen\"]"
+      },
+      {
+        "scene": "align",
+        "title": "Line things up",
+        "body": "Select several items, open Align and space, then choose Tidy up to arrange them in rows with even gaps.",
+        "target": ".arrange-picker summary",
+        "fallback": "[data-tool=\"select\"]"
+      },
+      {
+        "scene": "image",
+        "title": "Paste and round an image",
+        "body": "A pasted picture appears as it uploads. Select it and choose Rounded corners in its toolbar.",
+        "target": "[data-corners=\"round\"]",
+        "fallback": "#img-btn"
+      },
+      {
+        "scene": "pinch",
+        "title": "Move with two fingers",
+        "body": "Spread two fingers to zoom. Move both fingers in the same direction to pan, then lift them and draw again with one finger."
+      },
+      {
+        "scene": "invite",
+        "title": "Recognize an invite",
+        "body": "Name the board before sharing it. Its title appears in the link preview when you paste an invite into a chat.",
+        "target": "#share-btn",
+        "fallback": "#menu-btn"
+      },
+      {
+        "scene": "voice",
+        "title": "See who is in voice",
+        "body": "The call count tells you how many people are already talking. You can also see active calls in All boards.",
+        "target": "#voice"
+      }
     ]
   },
   {

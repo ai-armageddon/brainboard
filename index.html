@@ -112,6 +112,7 @@
           <span class="touch-only">double-tap to write</span>
           <span class="touch-only">two fingers to move and zoom</span>
         </div>
+        <small class="production-credit">A Jérémy Boulerice production</small>
       </div>
     </div>
 
@@ -177,13 +178,18 @@
       <button data-action="vim">Vim keys <span id="vim-label" class="muted">Off</span></button>
       <button data-action="shortcuts">Keyboard shortcuts <kbd>?</kbd></button>
       <button data-action="tour">Quick tour</button>
+      <button data-action="release-tour">Tour what’s new</button>
       <button data-action="account" class="account-row"><span id="account-label">Sign in or create account</span></button>
       <hr />
       <div class="owner-only">
         <button data-action="clear" class="danger">Clear board</button>
         <button data-action="delete-board" class="danger">Delete board</button>
       </div>
-      <div class="menu-foot"><span class="wordmark">brain<span>board</span></span><button type="button" data-release-notes aria-haspopup="dialog" aria-controls="release-notes">What’s new <span data-version></span></button></div>
+      <footer class="menu-foot">
+        <span class="wordmark">brain<span>board</span></span>
+        <button type="button" data-release-notes aria-haspopup="dialog" aria-controls="release-notes">What’s new <span data-version></span></button>
+        <small class="production-credit">A Jérémy Boulerice production</small>
+      </footer>
     </div>
 
     <div id="home" hidden>
@@ -278,7 +284,10 @@
         <form method="dialog"><button class="close" aria-label="Close release notes">Close</button></form>
       </div>
       <div data-release-details><h3></h3></div>
-      <a href="/changelog/" target="_blank" rel="noopener noreferrer">Full changelog ↗</a>
+      <div class="release-actions">
+        <button id="release-tour" class="tour-next" type="button">Tour what’s new</button>
+        <a href="/changelog/" target="_blank" rel="noopener noreferrer">Full changelog ↗</a>
+      </div>
     </dialog>
 
     <div id="shortcuts" hidden>

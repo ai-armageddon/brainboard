@@ -618,6 +618,8 @@ body.busy .port { opacity: 0 !important; pointer-events: none !important; }
 }
 .hint-title { font-family: var(--font-display); font-size: 38px; font-weight: 600; letter-spacing: -0.05em; color: var(--fg); margin-bottom: 8px; }
 .hint-sub { font-size: 15px; color: var(--fg-3); line-height: 1.5; }
+.production-credit { font-size: 12px; line-height: 1.5; color: var(--fg-2); }
+#hint .production-credit { margin-top: 18px; }
 .hint-chips { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; margin-top: 22px; }
 .hint-chips span {
   font-size: 12.5px;
@@ -1204,7 +1206,8 @@ button.primary {
 }
 button.primary:hover { opacity: 0.86; }
 
-.menu-foot { display: flex; justify-content: space-between; align-items: center; padding: 8px 10px 4px; margin-top: 4px; border-top: 1px solid var(--line); font-size: 12px; }
+.menu-foot { display: grid; grid-template-columns: 1fr auto; align-items: center; row-gap: 2px; padding: 8px 10px 4px; margin-top: 4px; border-top: 1px solid var(--line); font-size: 12px; }
+.menu-foot .production-credit { grid-column: 1 / -1; }
 #menu .menu-foot button, .version-badge {
   background: transparent; color: var(--fg-2); border: 0; border-radius: var(--r-sm);
   padding: 5px 7px; height: auto; font: 500 12px var(--font); cursor: pointer;
@@ -1694,12 +1697,59 @@ body.viewer #modeline { bottom: calc(16px + var(--sa-b)); }
 #tour {
   position: fixed;
   z-index: 45;
-  width: min(300px, calc(100vw - 28px));
+  width: min(336px, calc(100vw - 28px));
   padding: 14px 16px 12px;
   background: var(--panel-solid);
   border-color: var(--line-strong);
 }
-#tour.in { animation: pop 0.18s ease-out; }
+@media (max-height: 420px) { #tour { max-height: calc(100dvh - 28px); overflow: auto; } }
+.release-actions { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px; }
+.tour-scene {
+  margin: 8px 0 12px; overflow: hidden; border: 1px solid var(--line); border-radius: var(--r);
+  background: radial-gradient(circle, var(--dot) 1px, transparent 1px) center / 12px 12px var(--bg);
+}
+.tour-scene svg { display: block; }
+.tour-scene > svg { width: 100%; height: 92px; }
+.tour-scene text { fill: var(--fg); font: 550 12px var(--font); }
+.tour-scene .demo-muted { fill: var(--fg-2); font: 11px var(--font); }
+.demo-note { fill: var(--f-yellow); stroke: var(--s-yellow); }
+.demo-card { fill: var(--panel-solid); stroke: var(--line-strong); }
+.demo-line, .demo-guide, .demo-wave { fill: none; stroke: var(--s-blue); stroke-width: 3; stroke-linecap: round; }
+.demo-guide { stroke-width: 1; stroke-dasharray: 3 4; }
+.demo-finger { fill: var(--f-blue); stroke: var(--s-blue); stroke-width: 2; }
+.demo-upload rect { fill: var(--fg); }
+.demo-upload text { fill: var(--bg); font-size: 10px; }
+.demo-rough, .demo-upload { opacity: 0; }
+.demo-type { width: 150px; overflow: hidden; }
+@media (prefers-reduced-motion: no-preference) {
+  .demo-type { animation: tour-type 3.8s steps(20, end) both; }
+  .demo-appear, .demo-clean { animation: tour-appear 3.2s ease-out both; }
+  .demo-rough { stroke-dasharray: 1; animation: tour-sketch 3.2s ease-out both; }
+  .demo-align-a { --dx: 6px; --dy: -13px; }
+  .demo-align-b { --dx: -7px; --dy: 15px; }
+  .demo-align-c { --dx: -4px; --dy: -5px; }
+  .demo-align-a, .demo-align-b, .demo-align-c { animation: tour-align 2.8s ease-in-out both; }
+  .demo-round { animation: tour-round 3.5s ease-in-out both; }
+  .demo-upload { animation: tour-upload 2.5s ease-in-out both; }
+  .demo-zoom, .demo-wave { transform-box: fill-box; transform-origin: center; }
+  .demo-zoom { animation: tour-zoom 3.5s ease-in-out both; }
+  .demo-finger-a { --dx: -25px; --dy: 8px; }
+  .demo-finger-b { --dx: 25px; --dy: -8px; }
+  .demo-finger { animation: tour-spread 3.5s ease-in-out both; }
+  .demo-wave { animation: tour-voice .8s ease-in-out 4 alternate; }
+  #tour.paused .tour-scene * { animation-play-state: paused; }
+  #tour.still .tour-scene * { animation: none; }
+}
+@keyframes tour-type { 0%, 15% { width: 0; } 85%, 100% { width: 150px; } }
+@keyframes tour-appear { 0%, 58% { opacity: 0; } 80%, 100% { opacity: 1; } }
+@keyframes tour-sketch { 0% { stroke-dashoffset: 1; opacity: 1; } 55%, 65% { stroke-dashoffset: 0; opacity: 1; } 85%, 100% { stroke-dashoffset: 0; opacity: 0; } }
+@keyframes tour-align { 0%, 38% { transform: translate(var(--dx), var(--dy)); } 80%, 100% { transform: none; } }
+@keyframes tour-round { 0%, 62% { rx: 0; } 100% { rx: 16px; } }
+@keyframes tour-upload { 0%, 55% { opacity: 1; } 90%, 100% { opacity: 0; } }
+@keyframes tour-zoom { 0%, 20% { transform: scale(.8); } 85%, 100% { transform: scale(1.4); } }
+@keyframes tour-spread { 0%, 20% { transform: none; } 85%, 100% { transform: translate(var(--dx), var(--dy)); } }
+@keyframes tour-voice { to { transform: scaleY(.42); } }
+
 #tour::after {
   content: "";
   position: absolute;
@@ -1719,9 +1769,9 @@ body.viewer #modeline { bottom: calc(16px + var(--sa-b)); }
 #tour p { margin: 0; font-size: 13.5px; line-height: 1.5; color: var(--fg-2); }
 #tour p kbd { font-size: 11px; }
 .tour-foot { display: flex; align-items: center; gap: 6px; margin-top: 14px; }
-.tour-dots { display: flex; gap: 4px; flex: 1; }
-.tour-dots i { width: 5px; height: 5px; border-radius: 50%; background: var(--line-strong); transition: background 0.2s, width 0.2s; }
-.tour-dots i.on { width: 14px; border-radius: 3px; background: var(--fg); }
+.tour-foot .tour-play { margin-right: auto; color: var(--fg); }
+.tour-foot .tour-next { margin-left: auto; }
+.tour-foot .tour-back:disabled { opacity: .4; cursor: default; }
 .tour-skip, .tour-back {
   border: 0;
   background: transparent;

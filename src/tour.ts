@@ -1,71 +1,125 @@
-// A small first-run tour: a card that steps through the main ideas and rings the relevant control.
-import { account, canEdit, isOwner, session } from './net';
+import { canEdit, isOwner, session } from './net';
 import { keyLabel } from './keys';
+import { releases } from './releases';
+import { tourScene } from './tour-scenes';
 
 interface Step {
-  target?: string; // CSS selector to ring; none = card floats above the toolbar
   title: string;
   body: string;
+  scene?: string;
+  target?: string;
+  fallback?: string;
 }
-
+type Track = 'basics' | 'latest';
 const SEEN = 'bb-tour-done';
+const STEP_MS = 8500;
+const reduceMotion = matchMedia('(prefers-reduced-motion: reduce)');
 
-function steps(): Step[] {
-  const owner = isOwner() && !session.invite;
-  const edit = canEdit();
+function basics(): Step[] {
+  const touch = matchMedia('(pointer: coarse)').matches;
   const list: Step[] = [];
-  if (edit) {
+  if (canEdit()) {
     list.push(
-      { target: '#toolbar', title: 'Pick a tool', body: 'Notes, text, a pen and shapes for flow charts. Hover a tool to see its one-key shortcut.' },
-      { title: 'Paste and write anywhere', body: '<kbd>⌘V</kbd> drops in an image or text. Double-click empty space to start typing.' },
-      { target: '#toolbar [data-tool="ellipse"]', title: 'Map a flow', body: 'Press <kbd>O</kbd> for a bubble, then <kbd>Tab</kbd> to grow a connected one. Drag a shape’s dot onto another to link them.' },
+      { target: '[data-tool="text"]', scene: 'write', title: 'Start with a thought', body: touch ? 'Double-tap a blank spot to write. Use the sticky note tool when you want a colored card.' : 'Double-click a blank spot to write. Press <kbd>Esc</kbd> to finish, then drag the text into place.' },
+      { target: '[data-tool="ellipse"]', scene: 'connect', title: 'Connect two ideas', body: touch ? 'Place two bubbles. Choose the connector tool and drag from one bubble to the other.' : 'Place a bubble, then press <kbd>Tab</kbd> to add a connected one. You can also drag a dot between existing shapes.' },
     );
-  } else {
-    list.push({ title: 'Look around', body: 'Scroll to pan. Pinch or <kbd>⌘</kbd>-scroll to zoom. This board is view-only for you.' });
   }
-  if (owner) {
-    list.push(
-      { target: '#menu-btn', title: 'Your boards', body: 'Switch, rename and export boards here. Everything saves as you go.' },
-      { target: '#share-btn', title: 'Invite people', body: 'Share a link that can edit or only view. Everyone’s cursor shows up live. All you need is a screen name.' },
-    );
-    if (!account.user) list.push({ target: '#save-btn', title: 'Keep your work', body: 'Boards live in this browser until you save them to a free account. With a passkey it takes one tap. <kbd>⌘S</kbd> works too.' });
-  } else {
-    list.push({ target: '#viewnav', title: 'Follow along', body: 'When others are here, choose Follow next to Views and pick a name to follow their camera.' });
-  }
-  list.push({ title: 'Keyboard first', body: 'Press <kbd>?</kbd> for every shortcut, or <kbd>:</kbd> for vim-style commands.' });
+  list.push(
+    { target: '[data-tool="hand"]', scene: 'pinch', title: 'Move around the board', body: touch ? 'Slide two fingers to pan. Spread them to zoom in, even while the pen is selected.' : 'Scroll to pan. Pinch to zoom, or hold <kbd>⌘</kbd> while scrolling. The hand tool lets you drag the canvas.' },
+    { target: '#viewnav', scene: 'views', title: 'Find your way back', body: canEdit() ? 'Open Views and choose Add this view to bookmark the area on screen. Its name comes from the content and you can rename it.' : 'Choose a saved view to jump there. When others are here, choose Follow and pick their name to follow their camera.' },
+  );
+  if (isOwner() && !session.invite) list.push({ target: '#share-btn', scene: 'invite', title: 'Invite someone in', body: 'Open Share and choose whether the invite lets someone edit or view. They can join with just a screen name.' });
   return list;
 }
 
 let card: HTMLDivElement | null = null;
 let ring: HTMLDivElement | null = null;
 let list: Step[] = [];
+let track: Track = 'basics';
 let idx = 0;
+let playing = false;
+let timer = 0, remaining = STEP_MS, startedAt = 0;
+let returnFocus: HTMLElement | null = null;
 
 export function tourSeen() {
   try { return localStorage.getItem(SEEN) === '1'; } catch { return true; }
 }
 
-export function startTour() {
+export function startFirstTour() {
+  if (!card && !tourSeen() && !document.querySelector('dialog[open]') &&
+      !document.activeElement?.closest('input, textarea, [contenteditable="true"]')) startTour();
+}
+
+export function startTour(which: Track = 'basics') {
   endTour(false);
-  list = steps();
+  track = which;
+  const latest = releases[0];
+  list = which === 'latest' ? latest.tour ?? latest.changes.map((body) => ({ title: latest.title, body })) : basics();
   idx = 0;
+  playing = which === 'latest' && !reduceMotion.matches;
+  returnFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
   card = document.createElement('div');
   card.id = 'tour';
   card.className = 'panel';
   card.setAttribute('role', 'dialog');
-  card.setAttribute('aria-live', 'polite');
+  card.setAttribute('aria-labelledby', 'tour-title');
+  card.innerHTML = `
+    <div class="tour-top"><span class="tour-count"></span><button class="tour-skip" data-tour="skip">Skip</button></div>
+    <div class="tour-slide" aria-live="polite" aria-atomic="true"></div>
+    <div class="tour-foot">
+      <button class="tour-back tour-play" data-tour="play"></button>
+      <button class="tour-back" data-tour="back">Back</button>
+      <button class="tour-next" data-tour="next">Next</button>
+    </div>`;
   ring = document.createElement('div');
   ring.id = 'tour-ring';
   document.body.append(ring, card);
+  card.addEventListener('keydown', (e) => e.stopPropagation());
   card.addEventListener('click', (e) => {
     const act = (e.target as Element).closest<HTMLElement>('[data-tour]')?.dataset.tour;
     if (act === 'next') go(1);
     else if (act === 'back') go(-1);
     else if (act === 'skip') endTour(true);
+    else if (act === 'play') {
+      if (idx === list.length - 1 && remaining === 0) { idx = 0; playing = true; show(); }
+      else setPlaying(!playing);
+    }
   });
   window.addEventListener('keydown', onKey, true);
   window.addEventListener('resize', place);
+  document.addEventListener('visibilitychange', pauseWhenHidden);
   show();
+  card.querySelector<HTMLElement>('.tour-next')!.focus({ preventScroll: true });
+}
+
+function schedule() {
+  clearTimeout(timer);
+  if (!playing) return;
+  startedAt = performance.now();
+  timer = window.setTimeout(() => {
+    if (idx < list.length - 1) go(1);
+    else { playing = false; remaining = 0; updatePlayback(); }
+  }, remaining);
+}
+
+function setPlaying(on: boolean) {
+  if (playing) remaining = Math.max(0, remaining - (performance.now() - startedAt));
+  playing = on;
+  updatePlayback();
+  schedule();
+}
+
+function pauseWhenHidden() {
+  if (document.hidden && playing) setPlaying(false);
+}
+
+function updatePlayback() {
+  if (!card) return;
+  const play = card.querySelector<HTMLButtonElement>('[data-tour="play"]')!;
+  play.hidden = track !== 'latest';
+  play.textContent = playing ? 'Pause' : idx === list.length - 1 && remaining === 0 ? 'Replay' : 'Play';
+  card.classList.toggle('paused', track === 'latest' && !playing);
+  if (playing) card.classList.remove('still');
 }
 
 function go(d: number) {
@@ -77,46 +131,36 @@ function go(d: number) {
 }
 
 function onKey(e: KeyboardEvent) {
-  if (!card || (e.target as Element)?.closest?.('input, textarea, [contenteditable="true"], [contenteditable="plaintext-only"]')) return;
-  const map: Record<string, () => void> = {
-    Escape: () => endTour(true),
-    ArrowRight: () => go(1),
-    Enter: () => go(1),
-    ArrowLeft: () => go(-1),
-  };
-  const fn = map[e.key];
-  if (!fn) return;
-  e.preventDefault();
-  e.stopPropagation();
-  fn();
+  if (!card || (e.target as Element)?.closest?.('dialog[open], input, textarea, [contenteditable="true"], [contenteditable="plaintext-only"]')) return;
+  if (e.key === 'Escape' || e.key === 'ArrowRight' || e.key === 'ArrowLeft') {
+    e.preventDefault();
+    e.stopPropagation();
+    if (e.key === 'Escape') endTour(true);
+    else go(e.key === 'ArrowRight' ? 1 : -1);
+  }
 }
 
 function show() {
   if (!card) return;
   const s = list[idx];
   const last = idx === list.length - 1;
-  card.innerHTML = `
-    <div class="tour-top"><span class="tour-count">${idx + 1}/${list.length}</span><button class="tour-skip" data-tour="skip">${last ? 'Close' : 'Skip'}</button></div>
-    <h4>${s.title}</h4>
-    <p>${keyLabel(s.body)}</p>
-    <div class="tour-foot">
-      <div class="tour-dots">${list.map((_, i) => `<i class="${i === idx ? 'on' : ''}"></i>`).join('')}</div>
-      ${idx > 0 ? '<button class="tour-back" data-tour="back">Back</button>' : ''}
-      <button class="tour-next" data-tour="next">${last ? 'Done' : 'Next'}</button>
-    </div>`;
-  card.classList.remove('in');
-  void card.offsetWidth; // restart the entrance animation
-  card.classList.add('in');
+  const label = track === 'latest' ? `New in v${releases[0].version}` : 'Quick tour';
+  card.querySelector('.tour-count')!.textContent = `${label} · ${idx + 1}/${list.length}`;
+  card.querySelector('.tour-slide')!.innerHTML = `${tourScene(s.scene)}<h4 id="tour-title">${s.title}</h4><p>${keyLabel(s.body)}</p>`;
+  card.querySelector<HTMLButtonElement>('[data-tour="back"]')!.disabled = idx === 0;
+  card.querySelector('.tour-next')!.textContent = last ? 'Done' : 'Next';
+  remaining = STEP_MS;
+  card.classList.toggle('still', track === 'latest' && !playing);
+  updatePlayback();
+  schedule();
   place();
-  card.querySelector<HTMLElement>('.tour-next')?.focus({ preventScroll: true });
 }
 
 function place() {
   if (!card || !ring) return;
   const s = list[idx];
-  const t = s.target ? document.querySelector<HTMLElement>(s.target) : null;
-  const tr = t?.getBoundingClientRect();
-  const r = tr && tr.width > 0 && tr.height > 0 ? tr : null; // hidden targets have an empty box
+  const r = [s.target, s.fallback].flatMap((selector) => selector ? [...document.querySelectorAll(selector)] : [])
+    .map((el) => el.getBoundingClientRect()).find((box) => box.width > 0 && box.height > 0);
   const cw = card.offsetWidth, ch = card.offsetHeight, m = 14;
   if (!r) {
     ring.hidden = true;
@@ -141,10 +185,19 @@ function place() {
 }
 
 export function endTour(markSeen: boolean) {
-  if (markSeen) try { localStorage.setItem(SEEN, '1'); } catch { /* ignore */ }
+  if (markSeen && track === 'basics') try { localStorage.setItem(SEEN, '1'); } catch { /* ignore */ }
+  clearTimeout(timer);
+  playing = false;
   window.removeEventListener('keydown', onKey, true);
   window.removeEventListener('resize', place);
+  document.removeEventListener('visibilitychange', pauseWhenHidden);
+  const restore = card?.contains(document.activeElement);
   card?.remove();
   ring?.remove();
   card = ring = null;
+  if (restore) {
+    const target = returnFocus?.getClientRects().length ? returnFocus : document.getElementById('menu-btn');
+    target?.focus({ preventScroll: true });
+  }
+  returnFocus = null;
 }

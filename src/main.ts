@@ -5,7 +5,7 @@ import { paintLogos } from './brand';
 import { initVim } from './vim';
 import { initAccount } from './account';
 import { initVoice } from './voice';
-import { startTour, tourSeen } from './tour';
+import { startFirstTour, tourSeen } from './tour';
 import { loadPrefs, requestRender } from './state';
 import { applyCamera, render } from './render';
 import { buildUI, showOverlay, updateToolUI } from './ui';
@@ -64,7 +64,7 @@ async function main() {
     requestRender();
     if (!tourSeen() && !tourStarted) {
       tourStarted = true;
-      setTimeout(startTour, 900);
+      setTimeout(startFirstTour, 900);
     }
   });
 

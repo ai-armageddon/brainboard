@@ -30,7 +30,7 @@ npm install
 npm run dev
 ```
 
-Open http://localhost:5317. A short tour walks you through the basics the first time, and you can replay it from the menu with **Quick tour**.
+Open http://localhost:5317. A short tour walks you through the basics the first time, and you can replay it from the menu with **Quick tour**. Choose **Tour what’s new** in the menu or release notes for an animated walkthrough of the latest tools. Pause it, step through with the arrow keys, or press Escape to return to the board.
 
 Opening the address on its own always starts a blank board. It's saved, and gets its own link, the moment you add something, rename it, share it or start a call, so a visit never creates or shows a board. A board's link opens it directly. **All boards** (`⌥B`, or the top of the menu) shows what's live right now, what you opened recently, boards shared with you, and every board you own, with search. Boards shared with you are the ones you joined through an invite link, plus invites the owner addressed to your account's email. Sign in and they follow you to your other devices. Nobody sees a board unless they own it or it was shared with them.
 
@@ -204,7 +204,7 @@ Passkeys only work on the real domain (and on `localhost` in development), not o
 
 ### Release notes
 
-Click the version by the zoom controls, or **What’s new** in the board menu, for recent changes. The full changelog opens in a separate tab. The board and the standalone changelog page both read `src/releases.json`, newest release first. When preparing a release, add its notes there and update the package version and lockfile together.
+Click the version by the zoom controls, or **What’s new** in the board menu, for recent changes. The full changelog opens in a separate tab. The board and the standalone changelog page both read `src/releases.json`, newest release first. When preparing a release, add its notes there and update the package version and lockfile together. Its optional `tour` steps supply the captions, preview scenes and controls highlighted by **Tour what’s new**.
 
 ### Link previews
 

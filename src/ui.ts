@@ -421,6 +421,7 @@ export function buildUI() {
       case 'shortcuts': toggleShortcuts(true); break;
       case 'vim': setVimMode(!isVimMode()); break;
       case 'tour': startTour(); break;
+      case 'release-tour': startTour('latest'); break;
       case 'account': if (account.user) void signOut(); else openAuth('signin'); break;
       case 'clear': clearBoard(); break;
       case 'new-board': void newBoard(); break;
