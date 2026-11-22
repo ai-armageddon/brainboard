@@ -206,6 +206,8 @@ Passkeys only work on the real domain (and on `localhost` in development), not o
 
 Click the version by the zoom controls, or **What’s new** in the board menu, for recent changes. The full changelog opens in a separate tab. The board and the standalone changelog page both read `src/releases.json`, newest release first. When preparing a release, add its notes there and update the package version and lockfile together.
 
+The changelog page also lists every change, from `changelog/history.json`. Only that page loads it, so the board stays light. Add a release there with its date and its changes grouped by area, one short sentence each. Releases older than the notes in `src/releases.json` carry their own `title` and `highlights`. The page stays short as the history grows: the newest release opens on its highlights, older ones are a single row until opened, and the area buttons and filter box narrow it to the matching lines. A link ending in `#v0.3.0` opens that release.
+
 ### Link previews
 
 `index.html` carries Open Graph, X (Twitter) and JSON-LD tags, so a pasted brainboard.ink link unfurls with the card at the top of this README in Slack, iMessage, Discord, LinkedIn and X. Invite links unfurl with the board's name instead, and who sent the invite (`server/meta.ts`). They're marked `noindex`, so search engines leave private boards out. Plain board links can't do this: the board id sits after `#`, which browsers never send to the server. The tags point at `https://brainboard.ink`; if you host it on another domain, change the `canonical`, `og:url`, `og:image` and `twitter:image` addresses to yours.

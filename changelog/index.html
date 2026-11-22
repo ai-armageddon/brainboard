@@ -5,23 +5,94 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="color-scheme" content="light dark" />
     <title>Changelog · Brainboard</title>
+    <meta name="description" content="Every Brainboard release and what changed in it." />
     <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
     <style>
-      :root { color-scheme: light dark; font-family: system-ui, sans-serif; }
-      body { margin: 0; background: light-dark(#fafafa, #111); color: light-dark(#191919, #eee); }
-      main { max-width: 44rem; margin: 0 auto; padding: clamp(24px, 6vw, 64px) 22px; }
+      :root {
+        color-scheme: light dark;
+        font-family: system-ui, sans-serif;
+        --bg: light-dark(#fafafa, #111);
+        --fg: light-dark(#191919, #eee);
+        --fg-2: light-dark(#5c5c5c, #a3a3a3);
+        --line: light-dark(#d9d9d9, #333);
+        --hover: light-dark(#efefef, #1c1c1c);
+        --mono: ui-monospace, "SF Mono", Menlo, monospace;
+      }
+      * { box-sizing: border-box; }
+      body { margin: 0; background: var(--bg); color: var(--fg); -webkit-text-size-adjust: 100%; }
+      main { max-width: 44rem; margin: 0 auto; padding: clamp(20px, 6vw, 56px) 20px 64px; }
       header a { display: inline-flex; gap: 8px; align-items: center; color: inherit; font-weight: 650; text-decoration: none; }
       header a:hover { text-decoration: underline; }
-      h1 { margin: 32px 0; font-size: clamp(2.25rem, 7vw, 3.5rem); letter-spacing: -.055em; }
-      article { border-top: 1px solid light-dark(#d4d4d4, #444); padding: 24px 0 16px; }
-      small { font: 500 .85rem ui-monospace, monospace; }
-      h2 { margin: 6px 0 16px; font-size: 1.45rem; letter-spacing: -.03em; }
-      ul { padding-inline-start: 1.2rem; } li { margin-block: .65rem; line-height: 1.55; }
+      h1 { margin: 28px 0 6px; font-size: clamp(2.1rem, 7vw, 3.25rem); letter-spacing: -.055em; }
+      #stats { margin: 0 0 22px; font: 500 .8rem var(--mono); color: var(--fg-2); }
+
+      /* filter */
+      .filter { display: grid; gap: 10px; margin-bottom: 18px; }
+      #search {
+        width: 100%; height: 40px; padding: 0 12px; font: inherit; font-size: 1rem; color: inherit;
+        background: transparent; border: 1px solid var(--line); border-radius: 6px;
+      }
+      #search:focus-visible, .chip:focus-visible, .more:focus-visible, summary:focus-visible { outline: 2px solid var(--fg); outline-offset: 2px; }
+      #areas { display: flex; flex-wrap: wrap; gap: 6px; }
+      .chip {
+        flex: none; height: 30px; padding: 0 11px; font: 500 .82rem system-ui, sans-serif; color: var(--fg-2);
+        background: transparent; border: 1px solid var(--line); border-radius: 999px; cursor: pointer;
+      }
+      .chip:hover { color: var(--fg); background: var(--hover); }
+      .chip[aria-pressed="true"] { color: var(--bg); background: var(--fg); border-color: var(--fg); }
+
+      /* releases: one row each until opened */
+      .release { border-top: 1px solid var(--line); }
+      .release:last-of-type { border-bottom: 1px solid var(--line); }
+      summary { cursor: pointer; list-style: none; }
+      summary::-webkit-details-marker { display: none; }
+      .release > summary { display: grid; grid-template-columns: auto 1fr auto; align-items: baseline; gap: 4px 12px; padding: 14px 4px; }
+      .release > summary:hover { background: var(--hover); }
+      .ver { font: 600 .82rem var(--mono); }
+      .title { font-weight: 600; letter-spacing: -.015em; }
+      .meta { font: 500 .76rem var(--mono); color: var(--fg-2); white-space: nowrap; }
+      .release[open] > summary .title { font-size: 1.2rem; letter-spacing: -.03em; }
+      .body, .release > .groups { padding: 0 4px 18px; }
+      ul { margin: 0; padding-inline-start: 1.15rem; }
+      .highlights li { margin-block: .55rem; line-height: 1.5; }
+
+      /* every change: area on the left, short lines on the right */
+      .all { margin-top: 12px; }
+      .all > summary { display: inline-block; padding: 5px 10px; font: 500 .8rem system-ui, sans-serif; color: var(--fg-2); border: 1px solid var(--line); border-radius: 6px; }
+      .all > summary:hover { color: var(--fg); background: var(--hover); }
+      .all > summary::after { content: " ▾"; }
+      .all[open] > summary::after { content: " ▴"; }
+      .groups { display: grid; grid-template-columns: 6.5rem 1fr; gap: 10px 14px; margin-top: 14px; font-size: .9rem; line-height: 1.45; }
+      .release > .groups { margin-top: 0; }
+      .groups h3 { margin: 0; font: 500 .72rem/1.9 var(--mono); text-transform: uppercase; letter-spacing: .04em; color: var(--fg-2); }
+      .groups ul { list-style: none; padding: 0; }
+      .groups li { margin-block: 0 .3rem; color: var(--fg-2); }
+      .groups li:last-child { margin-bottom: 0; }
+
+      .more { display: block; width: 100%; margin-top: 16px; height: 40px; font: 500 .9rem system-ui, sans-serif; color: inherit; background: transparent; border: 1px solid var(--line); border-radius: 6px; cursor: pointer; }
+      .more:hover { background: var(--hover); }
+      .empty { padding: 28px 4px; color: var(--fg-2); }
+
+      @media (max-width: 520px) {
+        /* One row of areas that scrolls sideways instead of stacking into a wall of buttons. */
+        #areas { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; margin: 0 -20px; padding: 2px 20px; }
+        #areas::-webkit-scrollbar { display: none; }
+        .release > summary { grid-template-columns: auto 1fr; }
+        .title { grid-column: 1 / -1; grid-row: 2; }
+        .meta { justify-self: end; }
+        .groups { grid-template-columns: 1fr; gap: 2px; }
+        .groups ul { margin-bottom: 10px; }
+      }
     </style>
   </head>
   <body>
     <main>
       <header><a href="/"><img src="/favicon.svg" width="24" height="24" alt="" />Brainboard</a><h1>Changelog</h1></header>
+      <p id="stats"></p>
+      <div class="filter">
+        <input id="search" type="search" placeholder="Filter changes" aria-label="Filter changes" autocomplete="off" />
+        <div id="areas" role="group" aria-label="Filter by area"></div>
+      </div>
       <div id="releases"></div>
     </main>
     <script type="module" src="./index.ts"></script>
