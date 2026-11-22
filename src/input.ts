@@ -16,7 +16,7 @@ import { openExport } from './export';
 import { inkEnd, inkMove, inkStart } from './ink';
 import { eraseStroke } from './erase';
 import { IS_MAC, keyLabel } from './keys';
-import { recognize, steady, taper, type ShapeName } from './beautify';
+import { recognize, smoothLine, steady, taper, type ShapeFix, type ShapeName } from './beautify';
 import { arrange, arrangeForKey } from './arrange';
 
 type Drag =
@@ -31,7 +31,7 @@ type Drag =
     /** beauty mode: steadied input, tapered ink, shapes snap */
     beauty: boolean;
     /** set while the user holds still at the end of a stroke and it snapped to a shape */
-    snap: { points: number[]; name: ShapeName } | null;
+    snap: ShapeFix | null;
     /** screen point the hold-still timer measures from */
     anchor: { x: number; y: number };
     hold: number;
@@ -276,7 +276,7 @@ function onMove(e: PointerEvent) {
         if (Math.hypot(q.x - lx, q.y - ly) * z < 1.5) continue;
         pts.push(q.x, q.y);
       }
-      drawLive(pts);
+      drawLive(d.beauty ? smoothLine(pts, d.size, z) : pts);
       inkMove();
       return;
     }
@@ -472,8 +472,8 @@ function armHold(d: DrawDrag) {
   clearTimeout(d.hold);
   d.hold = window.setTimeout(() => {
     if (drag !== d || d.snap) return;
-    const shape = recognize(d.pts, S.cam.z, true);
-    if (!shape) return;
+    const shape = recognize(smoothLine(d.pts, d.size, S.cam.z), S.cam.z, true);
+    if (!shape?.clean) return;
     d.snap = shape;
     drawLive(shape.points);
     live.stroke.style.opacity = '0.75';
@@ -515,12 +515,15 @@ function finishStroke(d: DrawDrag) {
     changed();
     return;
   }
-  const freehand = strokeItem(id, pts, size, color, taper(pts, size, z));
-  const shape = d.snap ?? recognize(pts, z);
+  const smooth = smoothLine(pts, size, z);
+  const shape = d.snap ?? recognize(smooth, z);
+  // A rough shape is tidied in place: still hand-drawn ink, just closer to what it's meant to be.
+  const ink = shape && !shape.clean ? shape.points : smooth;
+  const freehand = strokeItem(id, ink, size, color, taper(ink, size, z));
   checkpoint();
   S.items.push(freehand);
   changed();
-  if (!shape) return;
+  if (!shape?.clean) return;
   // Snapping is its own undo step: ⌘Z brings back the hand-drawn version.
   checkpoint();
   const i = S.items.findIndex((it) => it.id === id);
