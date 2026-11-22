@@ -395,6 +395,27 @@ body.busy .port { opacity: 0 !important; pointer-events: none !important; }
 .handle[data-corner="sw"] { left: calc(-4px * var(--iz)); top: calc(100% + 4px * var(--iz)); cursor: nesw-resize; }
 .handle[data-corner="se"] { left: calc(100% + 4px * var(--iz)); top: calc(100% + 4px * var(--iz)); cursor: nwse-resize; }
 #selbox.no-handles .handle { display: none; }
+.corner-handle {
+  position: absolute; left: 0; top: 0;
+  width: calc(12px * var(--iz)); height: calc(12px * var(--iz)); margin: calc(-6px * var(--iz)) 0 0 calc(-6px * var(--iz));
+  border-radius: 50%; background: var(--panel-solid);
+  border: calc(1.5px * var(--iz)) solid var(--accent);
+  box-shadow: 0 0 0 calc(1px * var(--iz)) rgb(0 0 0 / 0.18);
+  cursor: grab; pointer-events: auto;
+}
+.corner-handle::after { content: ''; position: absolute; inset: calc(-8px * var(--iz)); border-radius: 50%; } /* easier to grab */
+.corner-handle:hover { background: var(--accent); }
+#selbox.rounding .corner-handle { cursor: grabbing; background: var(--accent); }
+.corner-readout {
+  display: none; position: absolute; left: calc(100% + 8px * var(--iz)); top: 50%;
+  transform: translateY(-50%) scale(var(--iz)); transform-origin: left center;
+  padding: 3px 8px; white-space: nowrap; font: 500 12px var(--mono);
+  color: var(--on-accent); background: var(--accent); border-radius: 6px;
+}
+#selbox.rounding .corner-readout { display: block; }
+#selbox.rounding .handle { visibility: hidden; }
+body.busy .item.image { transition: none; }
+#selbox.no-handles .corner-handle, #viewport:not([data-tool="select"]) #selbox .corner-handle, body.viewer #selbox .corner-handle { display: none; }
 #viewport:not([data-tool="select"]) #selbox .handle { display: none; }
 
 #marquee {

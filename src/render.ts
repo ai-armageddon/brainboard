@@ -12,6 +12,7 @@ const itemsLayer = q<HTMLDivElement>('#items');
 const edgesSvg = q<SVGSVGElement>('#edges');
 const labelsLayer = q<HTMLDivElement>('#labels');
 const selbox = q<HTMLDivElement>('#selbox');
+const cornerHandle = q<HTMLDivElement>('#selbox .corner-handle');
 export const live = {
   stroke: q<SVGPathElement>('#live .live-stroke'),
   edge: q<SVGPathElement>('#live .live-edge'),
@@ -224,6 +225,15 @@ function renderSelection(map: Map<string, Item>) {
     selbox.style.height = `${b.h}px`;
     selbox.classList.toggle('multi', nodes.length > 1);
     selbox.classList.toggle('no-handles', S.editing !== null);
+    // One image: a handle inside its top-left corner sets how round the corners are, and the outline follows them.
+    const img = nodes.length === 1 && nodes[0].type === 'image' ? nodes[0] : null;
+    const z = S.cam.z;
+    cornerHandle.hidden = !img || Math.min(img.w, img.h) * z < 48;
+    selbox.style.borderRadius = img?.round ? `${cornerRadius(img) + 4 / z}px` : '';
+    if (img && !cornerHandle.hidden) {
+      const inset = Math.max(cornerRadius(img), 14 / z);
+      cornerHandle.style.transform = `translate(${inset}px,${inset}px)`;
+    }
   } else {
     selbox.style.display = 'none';
     selBounds = mids.length ? unionBox(mids) : null;

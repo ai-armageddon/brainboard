@@ -59,7 +59,7 @@ Shortcuts are written for Mac. On Windows and Linux, `⌘` is `Ctrl` and `⌥` (
 |---|---|
 | **Pan** | Scroll or drag with two fingers, hold `⌘` and drag (`Ctrl` on Windows), hold `Space` and drag, or press `H` |
 | **Zoom** | Pinch or `⌘` + scroll · `⇧1` fits everything · `⌘0` resets to 100% |
-| **Images** | `⌘V` to paste, drag files in, or press `I` |
+| **Images** | `⌘V` to paste, drag files in, or press `I` · round a selected image's corners with the presets in the selection bar, or drag the dot inside its top-left corner |
 | **Write** | Double-click anywhere for text · `N` for a sticky note · `Enter` edits the selection |
 | **Draw** | `P` pen · `E` eraser · click or press `+` / `−` for 1 px steps, hold `Shift` and scroll up to grow or down to shrink, or `Shift`-drag left or right on the canvas |
 | **Beautify** | On by default, in the pen bar. Steadies your hand and tapers ink like a real pen. Lines, circles, ellipses, triangles and boxes snap clean; hold still at the end of a stroke to snap any shape. `⌘Z` after a snap brings back what you drew |

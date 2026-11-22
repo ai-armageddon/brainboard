@@ -1,5 +1,5 @@
 import { S, changed, checkpoint, getItem, isBrushTool, redo, requestRender, undo } from './state';
-import type { Box, Item, NodeItem, StrokeItem, Tool } from './types';
+import { cornerRadius, type Box, type ImageItem, type Item, type NodeItem, type StrokeItem, type Tool } from './types';
 import { applyCamera, live, marquee, nodeElOf, viewport } from './render';
 import {
   addImages, bumpFont, canEditText, createNode, createSibling, formatSelection, defaultSize, deleteSelection, duplicateSelection,
@@ -24,6 +24,7 @@ type Drag =
   | { kind: 'pan'; lx: number; ly: number }
   | { kind: 'move'; sx: number; sy: number; started: boolean; orig: Map<string, { x: number; y: number }>; clickId: string; wasSelected: boolean; shift: boolean }
   | { kind: 'marquee'; sx: number; sy: number; base: Set<string> }
+  | { kind: 'corners'; id: string }
   | { kind: 'resize'; corner: string; start: Box; origs: Map<string, NodeItem> ; lock: boolean }
   | {
     kind: 'draw'; pts: number[]; id: string; size: number; color: StrokeItem['color'];
@@ -94,6 +95,18 @@ function onDown(e: PointerEvent) {
     if (e.shiftKey) {
       e.preventDefault();
       begin({ kind: 'brush-size', tool: S.tool, pointerId: e.pointerId, startX: e.clientX, startSize: S[S.tool].size }, e);
+      return;
+    }
+  }
+  if (t.closest('.corner-handle') && !ro) {
+    const img = S.items.find((i) => S.selected.has(i.id) && i.type === 'image');
+    if (img) {
+      checkpoint();
+      begin({ kind: 'corners', id: img.id }, e);
+      setBusy(true);
+      document.getElementById('selbox')!.classList.add('rounding');
+      const r = cornerRadius(img as ImageItem);
+      document.querySelector<HTMLElement>('#selbox .corner-readout')!.textContent = r ? `Radius ${Math.round(r)}` : 'Square';
       return;
     }
   }
@@ -230,6 +243,21 @@ function onMove(e: PointerEvent) {
       doResize(drag, p, e.shiftKey);
       return;
 
+    case 'corners': {
+      const it = getItem(drag.id);
+      if (it?.type !== 'image') return;
+      // The handle sits where the corner's curve is centred: drag in for rounder, back to the corner for square.
+      const max = Math.min(it.w, it.h) / 2;
+      let r = clamp((p.x - it.x + p.y - it.y) / 2, 0, max);
+      if (r * z < 5) r = 0;
+      else if ((max - r) * z < 5) r = max;
+      if (r) it.round = r / (max * 2); else delete it.round;
+      const readout = document.querySelector<HTMLElement>('#selbox .corner-readout')!;
+      readout.textContent = r === 0 ? 'Square' : r === max ? 'Full' : `Radius ${Math.round(r)}`;
+      changed();
+      return;
+    }
+
     case 'draw': {
       const d = drag;
       const moved = Math.hypot(e.clientX - d.anchor.x, e.clientY - d.anchor.y);
@@ -359,6 +387,9 @@ function onUp(e: PointerEvent) {
       break;
     case 'marquee':
       marquee.style.display = 'none';
+      break;
+    case 'corners':
+      document.getElementById('selbox')!.classList.remove('rounding');
       break;
     case 'draw':
       clearTimeout(d.hold);
