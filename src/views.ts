@@ -179,6 +179,30 @@ function remove(v: BoardView, btn: HTMLElement) {
 
 let renamingId = '';
 let preview: SVGRectElement | null = null;
+let pendingClick: { key: string; timer: number } | null = null;
+
+function cancelViewClick() {
+  if (pendingClick) clearTimeout(pendingClick.timer);
+  pendingClick = null;
+}
+
+function activateViewName(e: MouseEvent, v: BoardView, source: 'nav' | 'row', singleClick: () => void) {
+  // Presence updates can replace the button between clicks. Match the view, not its DOM node.
+  const key = JSON.stringify([session.boardId, source, v.id]);
+  const secondClick = pendingClick?.key === key;
+  cancelViewClick();
+  if (!canEdit() || e.detail === 0) return singleClick();
+  if (secondClick) {
+    renamingId = v.id;
+    togglePop(true);
+    return;
+  }
+  const boardId = session.boardId;
+  pendingClick = { key, timer: window.setTimeout(() => {
+    pendingClick = null;
+    if (session.boardId === boardId && session.views.some((view) => view.id === v.id)) singleClick();
+  }, 450) };
+}
 
 function showPreview(v: BoardView | null) {
   if (!v) { preview?.remove(); preview = null; return; }
@@ -210,7 +234,7 @@ function renderNav() {
   nav.innerHTML =
     (list.length > 1 ? `<button class="cbtn vn-step" data-vn="prev" data-tip="Previous view · {" aria-label="Previous view">${icon('chevronLeft', 16)}</button>` : '') +
     `<button class="vn-current ${$('views-pop').hidden ? '' : 'open'}" data-vn="menu" aria-haspopup="menu" aria-expanded="${!$('views-pop').hidden}" ${awayTip ? `title="${esc(awayTip)}"` : ''}>` +
-      `${list.length ? '' : icon('views', 16)}<span class="vn-name">${esc(here?.name ?? 'Views')}</span>` +
+      `${list.length ? '' : icon('views', 16)}<span class="vn-name"${here && canEdit() ? ' title="Double-click to rename"' : ''}>${esc(here?.name ?? 'Views')}</span>` +
       (away.length ? `<span class="vn-faces">${away.slice(0, 3).map((p) => face(p)).join('')}${away.length > 3 ? `<span class="vn-more">+${away.length - 3}</span>` : ''}</span>` : '') +
       `<span class="vn-chev">${icon('chevron', 14)}</span></button>` +
     (list.length > 1 ? `<button class="cbtn vn-step" data-vn="next" data-tip="Next view · }" aria-label="Next view">${icon('chevronRight', 16)}</button>` : '');
@@ -245,7 +269,8 @@ function renderPop() {
   if (pop.hidden) return;
   renderFollowChoices();
   // Mid-rename: leave the field alone (presence updates arrive many times a second).
-  if (renamingId && pop.querySelector('.vrow-input')) return;
+  if (renamingId && (!canEdit() || !session.views.some((v) => v.id === renamingId))) renamingId = '';
+  if (renamingId && pop.querySelector('.vrow-input')?.closest<HTMLElement>('[data-view]')?.dataset.view === renamingId) return;
   const here = viewAt(myRect());
   const { by, elsewhere } = peopleIn();
   const edit = canEdit();
@@ -256,7 +281,7 @@ function renderPop() {
       <span class="vrow-key">${i < 9 ? i + 1 : ''}</span>
       ${naming
         ? `<input class="vrow-input" value="${esc(v.name)}" maxlength="60" aria-label="View name" />`
-        : `<button class="vrow-go" data-act="go"><b>${esc(v.name)}</b>${here?.id === v.id ? '<em>You’re here</em>' : ''}</button>`}
+        : `<button class="vrow-go" data-act="go"${edit ? ' title="Double-click to rename"' : ''}><b>${esc(v.name)}</b>${here?.id === v.id ? '<em>You’re here</em>' : ''}</button>`}
       <span class="vrow-faces">${people.map((p) => face(p, 'goto')).join('')}</span>
       ${edit && !naming ? `<span class="vrow-acts">
         <button class="cbtn" data-act="rename" data-tip="Rename" aria-label="Rename">${icon('type', 15)}</button>
@@ -282,7 +307,7 @@ function renderPop() {
       const v = session.views.find((o) => o.id === renamingId);
       renamingId = '';
       const name = input.value.replace(/\s+/g, ' ').trim();
-      if (save && v && name && name !== v.name) changeView({ put: { ...v, name } });
+      if (save && canEdit() && v && name && name !== v.name) changeView({ put: { ...v, name } });
       render();
     };
     input.addEventListener('keydown', (e) => {
@@ -307,6 +332,7 @@ function render() {
 const renderSoon = () => { raf ||= requestAnimationFrame(render); };
 
 function togglePop(force?: boolean) {
+  cancelViewClick();
   const pop = $('views-pop');
   const open = force ?? pop.hidden;
   if (!open) pop.querySelector<HTMLInputElement>('.vrow-input')?.blur();
@@ -347,7 +373,10 @@ export function initViews() {
     if (!pop.hidden) (pop.querySelector<HTMLElement>('[data-follow]:enabled') ?? pop).focus();
   });
   nav.addEventListener('click', (e) => {
-    const act = (e.target as Element).closest<HTMLElement>('[data-vn]')?.dataset.vn;
+    const target = e.target as Element;
+    const act = target.closest<HTMLElement>('[data-vn]')?.dataset.vn;
+    const here = target.closest('.vn-name') && viewAt(myRect());
+    if (here) return activateViewName(e, here, 'nav', () => togglePop());
     if (act === 'prev') stepView(-1);
     if (act === 'next') stepView(1);
     if (act === 'menu') togglePop();
@@ -369,7 +398,7 @@ export function initViews() {
     if (act.dataset.act === 'add') { void addView(); return; }
     const v = session.views.find((o) => o.id === act.closest<HTMLElement>('[data-view]')?.dataset.view);
     if (!v) return;
-    if (act.dataset.act === 'go') goToView(v);
+    if (act.dataset.act === 'go') activateViewName(e, v, 'row', () => goToView(v));
     if (act.dataset.act === 'rename') { renamingId = v.id; render(); }
     if (act.dataset.act === 'reframe') reframe(v);
     if (act.dataset.act === 'delete') remove(v, act);
@@ -389,8 +418,9 @@ export function initViews() {
     if (['Tab', 'Enter', ' '].includes(e.key)) e.stopPropagation();
   });
   document.addEventListener('pointerdown', (e) => {
-    if (pop.hidden) return;
     const t = e.target as Element;
+    if (!t.closest('#viewnav .vn-name, #views-pop [data-act="go"]')) cancelViewClick();
+    if (pop.hidden) return;
     if (!pop.contains(t) && !nav.contains(t) && !followButton.contains(t)) togglePop(false);
   });
 
