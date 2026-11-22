@@ -1,0 +1,171 @@
+[
+  {
+    "version": "0.4.0",
+    "date": "2026-11-21",
+    "changes": {
+      "Drawing": [
+        "Beautify mode steadies your hand and tapers ink like a real pen.",
+        "Lines, circles, ellipses, triangles and boxes snap to clean shapes. Hold still to snap any sketch.",
+        "Undo after a snap brings back the stroke you drew."
+      ],
+      "Canvas": [
+        "Align selected items left, center, right, top, middle or bottom.",
+        "Space three or more items evenly, or tidy a selection into neat rows.",
+        "Pasted and dropped images appear at once, with upload progress.",
+        "Round an image's corners with four presets that survive resizing and export."
+      ],
+      "Touch": [
+        "Two fingers pan and zoom with any tool. One finger uses the tool.",
+        "Starting a pinch never leaves a stray stroke, erasure or note.",
+        "On phones, every tool fits on one toolbar row and the bars stack without overlapping.",
+        "Bars keep clear of the notch and home indicator. The menu scrolls on short screens."
+      ],
+      "Sharing": [
+        "Invite link previews show the board's name and who sent it."
+      ],
+      "Voice": [
+        "See how many people are in a call before you join or open a board.",
+        "Join muted, see who is speaking, and keep mic and hang-up controls in the toolbar.",
+        "Sound cues for joining, leaving and muting."
+      ],
+      "Keyboard": [
+        "Shortcuts for align, space and tidy up: ⌥A/H/D, ⌥W/V/S, ⌥⇧H/V and ⌥⇧T.",
+        "Fixed the Bold and Underline row in the shortcuts list on Windows."
+      ],
+      "Agents": [
+        "Removed the in-app Connect AI links and remote MCP endpoints. Agents use the local MCP server."
+      ],
+      "App": [
+        "What's new shows the latest release notes, with this changelog one click away."
+      ]
+    }
+  },
+  {
+    "version": "0.3.0",
+    "date": "2026-11-21",
+    "changes": {
+      "Text": [
+        "Bold or underline individual words.",
+        "Fonts preview on the selected text as you browse the font picker.",
+        "Resize selected text with + and −.",
+        "Typing reaches collaborators keystroke by keystroke.",
+        "Text size controls stay put while you resize, and the toolbar glides into place.",
+        "Fixed double-click creating a stray text box instead of editing."
+      ],
+      "Drawing": [
+        "Set pen and eraser size in one-pixel steps, by Shift-drag or by Shift-scroll.",
+        "A ruler shows the brush size while you change it.",
+        "The eraser removes only the ink under the brush. Whole-stroke mode is one tap away.",
+        "Others watch your pen strokes appear as you draw them."
+      ],
+      "Boards": [
+        "All boards screen: live now, recent, shared with you and everything you own, with search.",
+        "Views save named spots on a board. Jump with the arrows, { }, or ⌥1–9.",
+        "Views name themselves from what's in frame.",
+        "Export to PNG, PDF, SVG, a Markdown outline or a re-importable board file.",
+        "Every visit starts on a blank board that is saved once you add something.",
+        "A loading screen replaces the empty-board flash when switching boards.",
+        "The URL stays clean until you work on a board."
+      ],
+      "Sharing": [
+        "One People list shows who you invited and when they were last here.",
+        "Removing someone retires their link, so they can't rejoin.",
+        "Following frames what the presenter is working on. Exact mode mirrors their screen.",
+        "A glowing edge and a Back button lead you to the presenter when the action is elsewhere.",
+        "Pick a collaborator by name to follow, and see who is working in each view.",
+        "Invited guests find their name already filled in on the join screen.",
+        "Profiles take a preset avatar or a photo.",
+        "Link previews show a share card.",
+        "Banners and tooltips stay clear of the corner bars."
+      ],
+      "Voice": [
+        "Voice chat between browsers, with speaking rings on avatars and sound bars on cursors.",
+        "The owner or presenter can mute anyone or everyone, or turn on Stage mode.",
+        "Switch microphone or speaker mid-call, with a level meter.",
+        "Chimes play when people join or leave."
+      ],
+      "Keyboard": [
+        "Pan with ⌘-drag on Mac and Ctrl-drag on Windows and Linux.",
+        "Shortcut labels show Ctrl, Alt and Shift on Windows and Linux.",
+        "gv opens saved views.",
+        "p stays bound to the pen in Vim mode."
+      ],
+      "Accounts": [
+        "Optional accounts with a passkey or email. Boards made in the browser move into the account.",
+        "A Save button and a reminder before you leave an unsaved board.",
+        "Collaborating needs only a screen name.",
+        "Hosted mode for running Brainboard on a public domain."
+      ],
+      "Agents": [
+        "Connect AI linked ChatGPT, Claude and Codex over HTTP (removed in 0.4.0)."
+      ],
+      "App": [
+        "The empty board no longer shows made-up collaborators."
+      ]
+    }
+  },
+  {
+    "version": "0.2.0",
+    "date": "2026-11-20",
+    "title": "Collaboration, agents and Vim keys",
+    "highlights": [
+      "Invite people with links that can edit or only view. See their cursors, selections and typing live, follow anyone, or present to the room.",
+      "AI agents can list, read, render and edit boards through a built-in MCP server. Their edits appear live in your tab.",
+      "Drive the board from the keyboard with a : command line, / search and an optional Vim mode."
+    ],
+    "changes": {
+      "Sharing": [
+        "Invite links that can edit or view. Change or revoke them at any time.",
+        "Named cursors, selections and typing markers for everyone on the board.",
+        "Follow anyone from their avatar. Present makes everyone follow you, with an optional view lock.",
+        "Pause editing for guests or hide viewers' cursors.",
+        "Undo reverts only your own edits.",
+        "npm run share serves the board on your local network."
+      ],
+      "Boards": [
+        "Boards are saved as files in ~/.brainboard and sync live between tabs.",
+        "Multiple boards with a switcher, rename and trash."
+      ],
+      "Agents": [
+        "MCP server with tools to list, read, render, add, update and delete.",
+        "Agents get readable outlines, and their flow charts are laid out automatically."
+      ],
+      "Keyboard": [
+        "A : command line with completion and history, and / incremental search.",
+        "Always-on Vim keys for undo, yank, marks, zoom and moving between items and boards.",
+        "Vim mode adds hjkl moves, insert, open, delete and put.",
+        "Commands for boards, find and replace, color, shape, zoom, theme, follow and present."
+      ],
+      "App": [
+        "Black-and-white look with Geist type and a new logo. Color is kept where it carries meaning.",
+        "An animated empty board.",
+        "A first-run tour you can replay from the menu."
+      ]
+    }
+  },
+  {
+    "version": "0.1.0",
+    "date": "2026-11-19",
+    "title": "The first whiteboard",
+    "highlights": [
+      "A near-infinite canvas for images, sticky notes, text, pen sketches and flow charts, saved in your browser."
+    ],
+    "changes": {
+      "Canvas": [
+        "Pan and zoom a near-infinite canvas.",
+        "Paste or drop images.",
+        "Bubble, box and decision shapes joined by curved connectors.",
+        "Undo and redo."
+      ],
+      "Text": [
+        "Sticky notes and free text."
+      ],
+      "Drawing": [
+        "A smoothed pen and an eraser."
+      ],
+      "Boards": [
+        "Boards are saved in the browser, with JSON export and import."
+      ]
+    }
+  }
+]
