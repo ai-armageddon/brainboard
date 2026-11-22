@@ -7,7 +7,7 @@ import {
   selectionItems, setTool, siblingOf, startEditing, stopCamAnim, stopEditing, uid, zoomAt, zoomBy,
   zoomToFit, setZoom, type Side,
 } from './actions';
-import { clamp, contains, resizeStroke, edgeGeom, strokePath, unionBox } from './geometry';
+import { clamp, intersects, resizeStroke, edgeGeom, strokePath, unionBox } from './geometry';
 import { closePopovers, openImagePicker, setBrushSize, toast, toggleShortcuts } from './ui';
 import { canEdit } from './net';
 import { userMovedCamera } from './collab';
@@ -249,7 +249,7 @@ function onMove(e: PointerEvent) {
       const a = screenToWorld(x0, y0);
       const rect = { x: a.x, y: a.y, w: w / z, h: h / z };
       const sel = new Set(drag.base);
-      for (const it of S.items) if (isNode(it) && contains(rect, it)) sel.add(it.id);
+      for (const it of S.items) if (isNode(it) && intersects(rect, it)) sel.add(it.id);
       S.selected = sel;
       requestRender();
       return;
