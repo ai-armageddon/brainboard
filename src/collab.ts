@@ -591,6 +591,7 @@ export function initCollab() {
   });
   events.addEventListener('profile', renderAvatars);
   events.addEventListener('join', (e) => toast(`${(e as CustomEvent<PeerInfo>).detail.name} joined`));
+  events.addEventListener('leave', (e) => toast(`${(e as CustomEvent<PeerInfo>).detail.name} left the board`));
   events.addEventListener('presence', (e) => {
     const id = (e as CustomEvent<string>).detail;
     const p = session.peers.get(id);

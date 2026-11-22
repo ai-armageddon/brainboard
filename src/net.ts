@@ -320,12 +320,13 @@ function handle(m: ServerMsg) {
     case 'deleted': emit('fatal', 'This board was deleted.'); return;
     case 'join': session.peers.set(m.peer.id, m.peer); emit('peers'); emit('join', m.peer); return;
     case 'leave': {
-      const wasInVoice = session.peers.get(m.id)?.voice;
+      const peer = session.peers.get(m.id);
       session.peers.delete(m.id);
       if (session.presenter === m.id) session.presenter = null;
-      if (wasInVoice) emit('voice-membership', false);
+      if (peer?.voice) emit('voice-membership', false);
       emit('peers');
       emit('presenter');
+      if (peer) emit('leave', peer);
       return;
     }
     case 'peer': {
