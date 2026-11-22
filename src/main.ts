@@ -103,16 +103,32 @@ async function main() {
     return;
   }
   if (!boards.length && await migrateFromBrowser()) boards = await api.boards();
-  // A link to one of your boards opens it. Anything else starts blank: your boards are in the menu,
+  // A link to one of your boards opens it. With no link you start blank: your boards are in the menu,
   // and a visit alone never shows (or creates) a board.
-  const id = boards.find((b) => b.id === hashId)?.id;
-  if (id) openBoard(id);
+  if (boards.some((b) => b.id === hashId)) openBoard(hashId);
+  else if (hashId) await openSomeoneElses(hashId);
   else openDraft();
 
   window.addEventListener('hashchange', () => {
     const next = location.hash.slice(1);
-    if (next && next !== session.boardId) openBoard(next);
+    if (!next || next === session.boardId) return;
+    void api.boards().then((mine) => (mine.some((b) => b.id === next) ? openBoard(next) : openSomeoneElses(next)), () => openBoard(next));
   });
+}
+
+/**
+ * The link names a board that isn't yours. A board's address alone lets nobody in, so say so: quietly
+ * showing a blank board instead leaves the visitor thinking they joined, on a board of their own.
+ */
+async function openSomeoneElses(id: string) {
+  // Been invited to it before? Go back in through that invite.
+  const invited = (await api.shared().catch(() => [])).find((b) => b.id === id);
+  if (invited) {
+    location.replace(`/?invite=${encodeURIComponent(invited.token)}#${id}`);
+    return;
+  }
+  openDraft();
+  showOverlay('private');
 }
 
 void main();

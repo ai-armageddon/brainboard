@@ -89,7 +89,7 @@ Passwords are hashed with scrypt, and sessions are random tokens stored only as 
 
 ## Collaborate in real time
 
-Click **Share** to create an invite link for each person. Each link either **can edit** or **can view**. The **People** list shows everyone you've invited, whether they're here now or when they were last here, and lets you change what they can do or **Remove** them. Removing someone disconnects them and retires their link, so they can't rejoin with it. Changes apply instantly. You can also remove someone from the menu on their avatar. Collaborating doesn't need an account, just a **screen name**: brainboard asks for one before you share or present, and guests pick theirs when they join. Guests see only the board they were invited to.
+Click **Share** to create an invite link for each person. Send that link, not the address in your browser's address bar: the address alone only opens the board for you, and anyone else who opens it is told to ask for an invite. Each link either **can edit** or **can view**. The **People** list shows everyone you've invited, whether they're here now or when they were last here, and lets you change what they can do or **Remove** them. Removing someone disconnects them and retires their link, so they can't rejoin with it. Changes apply instantly. You can also remove someone from the menu on their avatar. Collaborating doesn't need an account, just a **screen name**: brainboard asks for one before you share or present, and guests pick theirs when they join. Guests see only the board they were invited to.
 
 ![The share dialog with two invite links and live session controls](docs/screenshots/share.png)
 

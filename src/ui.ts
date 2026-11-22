@@ -606,7 +606,7 @@ async function deleteCurrentBoard() {
 // ---------------------------------------------------------------- full-screen states
 
 export function showOverlay(
-  kind: 'offline' | 'invalid' | 'join' | 'fatal', onJoin?: () => void, msg?: string,
+  kind: 'offline' | 'invalid' | 'join' | 'fatal' | 'private', onJoin?: () => void, msg?: string,
   invite?: { role: string; name?: string | null; from?: string | null; board?: string | null },
 ) {
   const el = $('overlay');
@@ -639,6 +639,20 @@ export function showOverlay(
       el.hidden = true;
       onJoin?.();
     });
+    return;
+  }
+  if (kind === 'private') {
+    // Not an error to reload from: the visitor can carry on with a board of their own.
+    el.innerHTML = `
+      <div class="panel sheet notice">
+        ${logo}
+        <h2>You need an invite to open this board</h2>
+        <p class="muted">This link is the board’s address, and that only opens for its owner. Ask the person who sent it to select <b>Share</b> on the board and send you the invite link from there.</p>
+        <button class="primary" data-act="new">Start a new board instead</button>
+        ${account.user ? '' : '<button class="link" data-act="signin">Is this your board? Sign in</button>'}
+      </div>`;
+    el.querySelector<HTMLElement>('[data-act="new"]')!.addEventListener('click', () => { el.hidden = true; });
+    el.querySelector<HTMLElement>('[data-act="signin"]')?.addEventListener('click', () => { el.hidden = true; openAuth('signin'); });
     return;
   }
   const copy = {
