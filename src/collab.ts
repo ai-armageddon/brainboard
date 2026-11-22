@@ -140,13 +140,15 @@ function avatar(p: PeerInfo, extra = '') {
   return `<button class="avatar ${extra}" data-peer="${p.id}" style="--c:${p.color}" aria-label="${extra === 'me' ? tip : esc(p.name)}" data-tip="${tip}">${avatarFace(p.name, p.picture)}</button>`;
 }
 
+const compactAvatars = matchMedia('(max-width: 600px)');
+
 function renderAvatars() {
   const box = $('avatars');
   const others = [...session.peers.values()];
-  const shown = others.slice(0, matchMedia('(max-width: 600px)').matches ? 2 : 5); // a phone has room for a couple
-  let html = shown.map((p) => avatar(p, `${p.id === following ? 'followed' : ''} ${p.id === session.presenter ? 'presenting' : ''}`)).join('');
+  const shown = others.slice(0, compactAvatars.matches ? 2 : 5);
+  let html = session.you || session.draft ? avatar(myAvatar(), 'me') : '';
+  html += shown.map((p) => avatar(p, `${p.id === following ? 'followed' : ''} ${p.id === session.presenter ? 'presenting' : ''}`)).join('');
   if (others.length > shown.length) html += `<span class="avatar more">+${others.length - shown.length}</span>`;
-  if (session.you || session.draft) html += avatar(myAvatar(), 'me');
   box.innerHTML = html;
   $('collab').classList.toggle('solo', others.length === 0);
   const pres = $('present-btn');
@@ -502,6 +504,7 @@ function dodgeCorners() {
 }
 
 export function initCollab() {
+  compactAvatars.addEventListener('change', renderAvatars);
   const ro = new ResizeObserver(dodgeCorners);
   for (const id of ['topbar', 'collab', 'follow-banner', 'catch-up', 'toast']) ro.observe($(id));
   window.addEventListener('resize', dodgeCorners);
