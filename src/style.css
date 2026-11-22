@@ -884,6 +884,29 @@ body:not(.ready) .panel { opacity: 0; }
 }
 #undobar { left: calc(14px + var(--sa-l)); }
 #zoombar { right: calc(14px + var(--sa-r)); }
+#board-areas {
+  position: fixed; right: calc(14px + var(--sa-r)); bottom: calc(68px + var(--sa-b));
+  z-index: 18; padding: 3px; max-width: calc(100vw - 28px);
+}
+#board-areas button {
+  display: flex; align-items: center; gap: 8px; min-height: 34px; padding: 5px 9px;
+  border: 0; border-radius: var(--r-sm); background: transparent; color: var(--fg);
+  font: 500 13px/1.3 var(--font); text-align: left; cursor: pointer;
+}
+#board-areas button:hover, #board-areas button:focus-visible { background: var(--hover); }
+#areas-toggle { width: 100%; }
+#areas-toggle [data-icon] { display: flex; }
+#areas-toggle::after { content: '▾'; margin-left: auto; color: var(--fg-3); }
+#areas-toggle[aria-expanded="true"]::after { transform: rotate(180deg); }
+#areas-list { width: min(240px, 65vw); max-height: min(30dvh, 240px); overflow-y: auto; overscroll-behavior: contain; border-top: 1px solid var(--line); }
+#areas-list button { width: 100%; }
+.area-arrow { flex: 0 0 20px; color: var(--accent); text-align: center; }
+.area-name { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+#areas-list small { margin-left: auto; flex: none; color: var(--fg-2); }
+@media (max-width: 760px) {
+  #board-areas { top: calc(66px + var(--sa-t)); bottom: auto; right: calc(10px + var(--sa-r)); }
+  #board-areas button { min-height: 42px; }
+}
 .zoom-label {
   position: relative;
   min-width: 56px;

@@ -57,9 +57,9 @@ const face = (p: PeerInfo, act = '') =>
 
 // ---------------------------------------------------------------- moving the camera
 
-function cameraFor(r: Rect) {
+function cameraFor(r: Rect, maxZoom = 4) {
   const pad = 0.94;
-  const z = Math.min(4, Math.max(0.05, Math.min((innerWidth / r.w) * pad, (innerHeight / r.h) * pad)));
+  const z = Math.min(maxZoom, Math.max(0.05, Math.min((innerWidth / r.w) * pad, (innerHeight / r.h) * pad)));
   const cx = r.x + r.w / 2, cy = r.y + r.h / 2;
   return { x: innerWidth / 2 - cx * z, y: innerHeight / 2 - cy * z, z };
 }
@@ -72,9 +72,9 @@ function freeCamera(): boolean {
   return true;
 }
 
-export function goToView(v: BoardView) {
+export function goToView(v: Rect, maxZoom = 4) {
   if (!freeCamera()) return;
-  animateCam(cameraFor(v), 420);
+  animateCam(cameraFor(v, maxZoom), 420);
 }
 
 function goToPerson(id: string) {
