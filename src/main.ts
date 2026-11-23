@@ -18,6 +18,7 @@ import { initHome } from './home';
 import { initViews } from './views';
 import { initBoardAreas } from './board-areas';
 import { initWriting } from './writing';
+import { initScreenshot } from './screenshot';
 import { blobGet, kvGet, kvSet } from './db';
 import type { Item } from './types';
 
@@ -52,6 +53,7 @@ async function main() {
   initHome();
   initViews();
   initBoardAreas();
+  initScreenshot();
   initVim();
   initWriting();
   initAccount();

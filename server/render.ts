@@ -9,16 +9,16 @@ import { SHAPE_TEXT_W, isEdge, isNode, wrapLines } from './agent.ts';
 export type Theme = 'light' | 'dark';
 
 /** Colours match the app's light and dark themes. */
-const PALETTE: Record<Theme, { fill: Record<ColorKey, string>; ink: Record<ColorKey, string>; bg: string; text: string; label: string; placeholder: string; noteEdge: string }> = {
+const PALETTE: Record<Theme, { fill: Record<ColorKey, string>; ink: Record<ColorKey, string>; bg: string; text: string; label: string; placeholder: string; noteEdge: string; dot: string }> = {
   light: {
     fill: { ink: '#ffffff', gray: '#f0f0f0', red: '#ffe1e3', orange: '#ffe7cf', yellow: '#fff2a8', green: '#d8f5e1', blue: '#dbecff', purple: '#ece2ff' },
     ink: { ink: '#0a0a0a', gray: '#8a8a8a', red: '#e5484d', orange: '#f0701f', yellow: '#cf9d00', green: '#2f9e5e', blue: '#1a82f0', purple: '#8b4fd0' },
-    bg: '#fafafa', text: '#0a0a0a', label: '#525252', placeholder: '#e8e8e8', noteEdge: 'rgba(0,0,0,0.07)',
+    bg: '#fafafa', text: '#0a0a0a', label: '#525252', placeholder: '#e8e8e8', noteEdge: 'rgba(0,0,0,0.07)', dot: '#d6d6d6',
   },
   dark: {
     fill: { ink: '#141414', gray: '#262626', red: '#47252a', orange: '#48301f', yellow: '#463d1c', green: '#1e3c2a', blue: '#1b334f', purple: '#33294b' },
     ink: { ink: '#fafafa', gray: '#9a9a9a', red: '#ff6b70', orange: '#ff8d45', yellow: '#f2c84b', green: '#4cc38a', blue: '#5aaeff', purple: '#b48cf2' },
-    bg: '#0a0a0a', text: '#fafafa', label: '#a3a3a3', placeholder: '#262626', noteEdge: 'rgba(255,255,255,0.08)',
+    bg: '#0a0a0a', text: '#fafafa', label: '#a3a3a3', placeholder: '#262626', noteEdge: 'rgba(255,255,255,0.08)', dot: '#262626',
   },
 };
 const FONT = "'Geist Variable', Geist, Inter, 'Helvetica Neue', Helvetica, Arial, sans-serif";
@@ -96,21 +96,43 @@ export interface SvgOpts {
   background?: boolean;
   /** id-tag size depends on the final pixel scale */
   idScale?: number;
+  /** draw exactly this area of the board (a screenshot), instead of fitting the content */
+  frame?: Box;
+  /** the canvas dot grid behind the content, spaced as it looks at this zoom on screen (only with `frame`) */
+  grid?: { zoom: number };
 }
+
+const touches = (a: Box, b: Box) => a.x < b.x + b.w && a.x + a.w > b.x && a.y < b.y + b.h && a.y + a.h > b.y;
 
 /** The board (or some of its items) as a standalone SVG document, or null when there's nothing to draw. */
 export async function boardSvg(b: Board, opts: SvgOpts = {}): Promise<{ svg: string; box: Box } | null> {
   const P = PALETTE[opts.theme ?? 'light'];
   const want = opts.ids?.length ? new Set(opts.ids) : null;
-  const nodes = b.items.filter((i): i is NodeItem => isNode(i) && (!want || want.has(i.id)));
-  if (!nodes.length) return null;
-  const ids = new Set(nodes.map((x) => x.id));
+  const frame = opts.frame;
   const byId = new Map<string, Item>(b.items.map((i) => [i.id, i]));
-  const edges = b.items.filter(isEdge).filter((e) => ids.has(e.from) && ids.has(e.to));
-
-  const raw = unionBox(nodes);
-  const pad = Math.max(40, Math.max(raw.w, raw.h) * 0.03);
-  const box = { x: raw.x - pad, y: raw.y - pad, w: raw.w + pad * 2, h: raw.h + pad * 2 };
+  let nodes: NodeItem[], edges: EdgeItem[], box: Box;
+  if (frame) {
+    // Everything that reaches into the frame (a little slack for ink width and text overflow); the viewBox crops it.
+    const slack = { x: frame.x - 40, y: frame.y - 40, w: frame.w + 80, h: frame.h + 80 };
+    const all = b.items.filter(isNode);
+    const near = new Set(all.filter((i) => touches(i, slack)).map((i) => i.id));
+    edges = b.items.filter(isEdge).filter((e) => {
+      const a = byId.get(e.from), c = byId.get(e.to);
+      return !!a && !!c && isNode(a) && isNode(c) && touches(unionBox([a, c]), slack);
+    });
+    // Arrows need both ends drawn under them; shapes outside the frame are cropped away anyway.
+    for (const e of edges) { near.add(e.from); near.add(e.to); }
+    nodes = all.filter((i) => near.has(i.id));
+    box = frame;
+  } else {
+    nodes = b.items.filter((i): i is NodeItem => isNode(i) && (!want || want.has(i.id)));
+    if (!nodes.length) return null;
+    const ids = new Set(nodes.map((x) => x.id));
+    edges = b.items.filter(isEdge).filter((e) => ids.has(e.from) && ids.has(e.to));
+    const raw = unionBox(nodes);
+    const pad = Math.max(40, Math.max(raw.w, raw.h) * 0.03);
+    box = { x: raw.x - pad, y: raw.y - pad, w: raw.w + pad * 2, h: raw.h + pad * 2 };
+  }
 
   const parts: string[] = [];
   for (const e of edges) {
@@ -139,7 +161,17 @@ export async function boardSvg(b: Board, opts: SvgOpts = {}): Promise<{ svg: str
         textBlock([it.id], at.x + fs * 0.5, at.y + fs * 1.08, fs, fs, '#ffffff', 'start', 600));
     }
   }
-  const bg = opts.background === false ? '' : `<rect x="${n(box.x)}" y="${n(box.y)}" width="${n(box.w)}" height="${n(box.h)}" fill="${P.bg}"/>`;
+  let bg = opts.background === false ? '' : `<rect x="${n(box.x)}" y="${n(box.y)}" width="${n(box.w)}" height="${n(box.h)}" fill="${P.bg}"/>`;
+  if (frame && opts.grid && opts.background !== false) {
+    // The canvas dots: 24 units apart at 100%, regrouped so they stay 14–56 px apart on screen, like the app.
+    const z = Math.min(Math.max(opts.grid.zoom, 0.02), 8);
+    let g = 24 * z;
+    while (g < 14) g *= 4;
+    while (g > 56) g /= 4;
+    const step = g / z, r = 1.15 / z;
+    bg += `<pattern id="bb-dots" patternUnits="userSpaceOnUse" x="0" y="0" width="${n(step)}" height="${n(step)}"><circle cx="${n(step / 2)}" cy="${n(step / 2)}" r="${n(r)}" fill="${P.dot}"/></pattern>` +
+      `<rect x="${n(box.x)}" y="${n(box.y)}" width="${n(box.w)}" height="${n(box.h)}" fill="url(#bb-dots)"/>`;
+  }
   const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="${n(box.x)} ${n(box.y)} ${n(box.w)} ${n(box.h)}" width="${n(box.w)}" height="${n(box.h)}">${bg}${parts.join('')}</svg>`;
   return { svg, box };
 }

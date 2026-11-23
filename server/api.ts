@@ -17,6 +17,9 @@ import {
 import { liveBoard, liveBoardPresence, onlineByInvite, refreshAccess } from './realtime.ts';
 import { EXPORT_TYPES, exportBoard, type ExportFormat } from './export.ts';
 import {
+  BACKDROPS, addShot, cleanMediaName, getMedia, listMedia, mediaFile, publicMedia, renameMedia, renderShot, transferMedia, trashMedia, type Backdrop,
+} from './media.ts';
+import {
   checkPassword, cleanEmail, cleanName, createSession, createUser, endSession, getUser, limited, publicUser, updateUser, userByEmail,
   validEmail, type User,
 } from './accounts.ts';
@@ -199,6 +202,64 @@ export async function handleApi(req: IncomingMessage, res: ServerResponse): Prom
       return true;
     }
 
+    // ---- screenshots: anyone who can open the board takes one into their own media
+    if (parts[0] === 'boards' && parts[2] === 'screenshot' && method === 'POST') {
+      const id = parts[1];
+      const token = inviteToken(req, url);
+      if (!isValidId(id) || !((await owns(p, id)) || (token && (await findInvite(id, token))))) return send(res, 403, { error: 'forbidden' }), true;
+      const owner = ownerKeyOf(p);
+      if (!owner && !p.local) return send(res, 403, { error: 'forbidden' }), true;
+      if (limited(`shot:${clientIp(req)}`, 90)) return send(res, 429, { error: 'Too many screenshots at once. Try again in a few minutes.' }), true;
+      const b = (await liveBoard(id)) ?? (await readBoard(id));
+      if (!b) return send(res, 404, { error: 'not found' }), true;
+      const body = await readJson<{ frame?: Record<string, unknown>; scale?: number; theme?: string; grid?: boolean; zoom?: number; backdrop?: string; name?: string }>(req);
+      const num = (v: unknown) => (typeof v === 'number' && Number.isFinite(v) && Math.abs(v) < 1e8 ? v : NaN);
+      const frame = { x: num(body.frame?.x), y: num(body.frame?.y), w: num(body.frame?.w), h: num(body.frame?.h) };
+      if (Object.values(frame).some(Number.isNaN) || frame.w < 1 || frame.h < 1) return send(res, 400, { error: 'Frame an area first' }), true;
+      const backdrop: Backdrop = (BACKDROPS as readonly string[]).includes(String(body.backdrop)) ? body.backdrop as Backdrop : 'none';
+      const theme = body.theme === 'dark' ? 'dark' : 'light';
+      const zoom = num(body.zoom);
+      const shot = await renderShot(b, { frame, scale: num(body.scale) || 2, theme, backdrop, grid: body.grid && zoom > 0 ? { zoom } : undefined });
+      const item = await addShot({
+        name: cleanMediaName(body.name) || `${b.name} screenshot`, owner, board: { id: b.id, name: b.name },
+        w: shot.w, h: shot.h, backdrop, theme,
+      }, shot.png, shot.thumb);
+      return send(res, 201, publicMedia(item)), true;
+    }
+
+    // ---- media: your own screenshots
+    if (parts[0] === 'media') {
+      const mine = (owner: string | null) => ownsKey(p, owner);
+      const id = parts[1]?.replace(/\.png$/, '');
+      if (!id && method === 'GET') return send(res, 200, (await listMedia(mine)).map(publicMedia)), true;
+      const it = id ? await getMedia(id) : null;
+      if (!it || !mine(it.owner)) return send(res, 404, { error: 'not found' }), true;
+      if (method === 'GET') {
+        const thumb = url.searchParams.has('thumb');
+        const data = await fs.readFile(mediaFile(it.id, thumb)).catch(() => (thumb ? fs.readFile(mediaFile(it.id)) : null));
+        if (!data) return send(res, 404, { error: 'not found' }), true;
+        const name = `${it.name}.png`;
+        res.writeHead(200, {
+          'content-type': 'image/png',
+          'cache-control': 'private, max-age=31536000, immutable',
+          ...(url.searchParams.has('download')
+            ? { 'content-disposition': `attachment; filename="${name.replace(/[^\x20-\x7e]/g, '_').replace(/"/g, '')}"; filename*=UTF-8''${encodeURIComponent(name)}` }
+            : {}),
+        });
+        res.end(data);
+        return true;
+      }
+      if (method === 'PATCH') {
+        const body = await readJson<{ name?: string }>(req);
+        const renamed = await renameMedia(it.id, String(body.name ?? ''));
+        return send(res, 200, renamed ? publicMedia(renamed) : { error: 'not found' }), true;
+      }
+      if (method === 'DELETE') {
+        await trashMedia(it.id);
+        return send(res, 200, { ok: true }), true;
+      }
+    }
+
     if (parts[0] === 'boards') {
       const id = parts[1];
       if (!id) {
@@ -294,6 +355,7 @@ async function signIn(res: ServerResponse, p: Principal, user: User) {
   sessionCookie(res, await createSession(user.id));
   const claimed = p.anonId ? await transferOwnership(anonKey(p.anonId), userKey(user.id)) : 0;
   if (p.anonId) await transferMemberships(anonKey(p.anonId), userKey(user.id));
+  if (p.anonId) await transferMedia(anonKey(p.anonId), userKey(user.id));
   return { user: publicUser(user), claimed };
 }
 

@@ -20,6 +20,8 @@ import { openBoard } from './boards';
 import { openViews } from './views';
 import { saveCommand } from './account';
 import { openExport } from './export';
+import { openScreenshot } from './screenshot';
+import { openMedia } from './media';
 import { pointerWorld, putClip, yank, clipBounds } from './input';
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
@@ -545,6 +547,8 @@ const COMMANDS: Cmd[] = [
     follow(p.id);
   }, complete: (a) => filterPrefix(peerNames(), a) },
   { names: ['export', 'exp'], desc: 'Export as PNG, PDF, SVG, Markdown or a brainboard file', run: () => openExport() },
+  { names: ['screenshot', 'shot', 'snap'], desc: 'Take a screenshot: the screen, an area, the selection or a view', run: () => openScreenshot() },
+  { names: ['media', 'shots'], desc: 'Open your screenshots', run: () => openMedia(undefined, openScreenshot) },
   { names: ['import', 'r', 'read'], desc: 'Import a board file', run: () => { if (ownerOnly()) $('file-board').click(); } },
   { names: ['clear', '%d', '%delete'], desc: 'Clear the board (undoable)', run: () => clearBoard() },
   { names: ['undo', 'u', 'un'], desc: 'Undo', run: () => undo() },

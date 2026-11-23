@@ -22,6 +22,8 @@ import { isWritingHelp, setWritingHelp } from './writing';
 import { startTour } from './tour';
 import { openAuth, signOut } from './account';
 import { openExport } from './export';
+import { openScreenshot } from './screenshot';
+import { openMedia } from './media';
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
 
@@ -414,6 +416,8 @@ export function buildUI() {
       case 'fit': if (userMovedCamera()) zoomToFit(); break;
       case 'record-screen': window.open('/recorder/', '_blank', 'noopener,noreferrer'); break;
       case 'export': openExport(); break;
+      case 'screenshot': openScreenshot(); break;
+      case 'media': openMedia(undefined, openScreenshot); break;
       case 'import': fileBoard.click(); break;
       case 'theme': {
         const order: Theme[] = ['auto', 'light', 'dark'];
