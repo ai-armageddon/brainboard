@@ -13,6 +13,7 @@ import {
   panIntoView, selectionItems, setColor, setShape, setTool, setZoom, startEditing, zoomBy, zoomToFit,
 } from './actions';
 import { api, canEdit, isOwner, session } from './net';
+import { isWritingHelp, setWritingHelp } from './writing';
 import { closePopovers, getTheme, applyTheme, newBoard, openImagePicker, toggleShortcuts, type Theme } from './ui';
 import { follow, userMovedCamera } from './collab';
 import { openBoard } from './boards';
@@ -487,13 +488,17 @@ const COMMANDS: Cmd[] = [
     if (!THEMES.includes(t)) return fail(`E185: Cannot find theme '${a}'`);
     applyTheme(t);
   }, complete: (a) => filterPrefix(THEMES, a) },
-  { names: ['set', 'se'], usage: '{vim|novim|bg=dark}', desc: 'Set an option', run: (a) => {
-    if (!a) return message(`${vimMode ? '' : 'no'}vim  background=${getTheme()}`);
+  { names: ['set', 'se'], usage: '{vim|nospell|bg=dark}', desc: 'Set an option', run: (a) => {
+    if (!a) return message(`${vimMode ? '' : 'no'}vim  ${isWritingHelp() ? '' : 'no'}spell  background=${getTheme()}`);
     for (const opt of a.split(/\s+/)) {
       if (opt === 'vim') setVimMode(true);
       else if (opt === 'novim') setVimMode(false);
       else if (opt === 'vim!' || opt === 'invvim') setVimMode(!vimMode);
       else if (opt === 'vim?') message(`${vimMode ? '' : 'no'}vim`);
+      else if (/^(no|inv)?spell[!?]?$/.test(opt)) {
+        if (!opt.endsWith('?')) setWritingHelp(opt === 'spell' ? true : opt === 'nospell' ? false : !isWritingHelp());
+        message(isWritingHelp() ? 'Spelling and suggestions on' : 'Spelling and suggestions off');
+      }
       else if (/^(bg|background)=/.test(opt)) {
         const v = opt.split('=')[1] as Theme;
         if (!THEMES.includes(v)) return fail(`E474: Invalid argument: ${opt}`);
@@ -501,7 +506,7 @@ const COMMANDS: Cmd[] = [
       } else return fail(`E518: Unknown option: ${opt}`);
     }
     if (/\b(no|inv)?vim!?\b/.test(a)) message(vimMode ? 'Vim mode on: hjkl, i, o, gp, dd…' : 'Vim mode off');
-  }, complete: (a) => filterPrefix(['vim', 'novim', 'bg=light', 'bg=dark', 'bg=auto'], a) },
+  }, complete: (a) => filterPrefix(['vim', 'novim', 'spell', 'nospell', 'bg=light', 'bg=dark', 'bg=auto'], a) },
   ...TOOL_CMDS.map(([names, tool, desc]): Cmd => ({ names, desc, run: () => {
     if (!canEdit() && tool !== 'select' && tool !== 'hand') return fail('E21: Cannot make changes, board is view-only');
     setTool(tool);

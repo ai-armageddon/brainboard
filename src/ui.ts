@@ -18,6 +18,7 @@ import { keyLabel, localizeKeys } from './keys';
 import { uploadsPending } from './uploading';
 import { ARRANGE, arrange, arrangeAvailable, type ArrangeKind } from './arrange';
 import { isVimMode, setVimMode } from './vim';
+import { isWritingHelp, setWritingHelp } from './writing';
 import { startTour } from './tour';
 import { openAuth, signOut } from './account';
 import { openExport } from './export';
@@ -408,7 +409,7 @@ export function buildUI() {
     const b = (e.target as Element).closest<HTMLElement>('button');
     if (!b) return;
     const act = b.dataset.action;
-    if (act !== 'theme' && act !== 'vim') closePopovers();
+    if (act !== 'theme' && act !== 'vim' && act !== 'writing') closePopovers();
     switch (act) {
       case 'fit': if (userMovedCamera()) zoomToFit(); break;
       case 'record-screen': window.open('/recorder/', '_blank', 'noopener,noreferrer'); break;
@@ -421,6 +422,7 @@ export function buildUI() {
       }
       case 'shortcuts': toggleShortcuts(true); break;
       case 'vim': setVimMode(!isVimMode()); break;
+      case 'writing': setWritingHelp(!isWritingHelp()); break;
       case 'tour': startTour(); break;
       case 'release-tour': startTour('latest'); break;
       case 'account': if (account.user) void signOut(); else openAuth('signin'); break;
