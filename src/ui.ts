@@ -411,6 +411,7 @@ export function buildUI() {
     if (act !== 'theme' && act !== 'vim') closePopovers();
     switch (act) {
       case 'fit': if (userMovedCamera()) zoomToFit(); break;
+      case 'record-screen': window.open('/recorder/', '_blank', 'noopener,noreferrer'); break;
       case 'export': openExport(); break;
       case 'import': fileBoard.click(); break;
       case 'theme': {
