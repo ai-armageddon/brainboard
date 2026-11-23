@@ -1,7 +1,10 @@
 // Server connection: REST helpers + the live socket (item sync, presence, collaboration).
 import { S, getItem, noteLocalChange, pruneSelection, requestRender, resetHistory, setCollector, setSyncScheduler } from './state';
 import type { Item } from './types';
-import type { BoardSettings, BoardView, ClientMsg, Ink, LivePerson, Op, PeerInfo, Presence, Role, RtcSignal, ServerMsg } from './protocol';
+import type {
+  BoardSettings, BoardView, BrowserAction, BrowserEvent, BrowserState, ClientMsg, Ink, LivePerson, Op, PeerInfo, Presence, Role, RtcSignal,
+  ServerMsg,
+} from './protocol';
 import { validPicture } from './profile-picture';
 import { DEFAULT_SETTINGS } from './protocol';
 import { applyOps, diffItems } from './ops';
@@ -41,6 +44,8 @@ export const session = {
   you: null as PeerInfo | null,
   peers: new Map<string, PeerInfo>(),
   presenter: null as string | null,
+  /** the shared browser, while someone has it open */
+  browser: null as BrowserState | null,
   settings: { ...DEFAULT_SETTINGS } as BoardSettings,
   status: 'offline' as 'offline' | 'connecting' | 'live' | 'draft',
   profile: loadProfile(),
@@ -66,6 +71,8 @@ export const account = {
   passkeys: false,
   /** ICE servers for voice chat */
   ice: [] as RTCIceServer[],
+  /** the server offers the shared browser */
+  browser: true,
 };
 
 export const canEdit = () => session.role !== 'viewer';
@@ -99,7 +106,7 @@ export function setAccount(user: Account | null, color = session.profile.color) 
   emit('account');
 }
 
-/** UI subscribes to: status, welcome, peers, presence, presenter, settings, role, meta, fatal */
+/** UI subscribes to: status, welcome, peers, presence, presenter, settings, role, meta, fatal, browser, bev */
 export const events = new EventTarget();
 const emit = (type: string, detail?: unknown) => events.dispatchEvent(new CustomEvent(type, { detail }));
 
@@ -129,7 +136,7 @@ export const api = {
   revokeInvite: (id: string, token: string) => j<{ ok: true }>('DELETE', `/api/boards/${id}/invites/${token}`),
   net: () => j<{ lan: boolean; lanUrls: string[]; hosted: boolean; publicUrl: string | null }>('GET', '/api/net'),
   me: (board: string) => j<{ role: Role; saved?: boolean; name?: string | null; from?: string | null; board?: string | null }>('GET', `/api/me?board=${encodeURIComponent(board)}`),
-  session: () => j<{ user: Account | null; local: boolean; hosted: boolean; publicUrl: string | null; passkeys: boolean; ice: RTCIceServer[] }>('GET', '/api/session'),
+  session: () => j<{ user: Account | null; local: boolean; hosted: boolean; publicUrl: string | null; passkeys: boolean; ice: RTCIceServer[]; browser?: boolean }>('GET', '/api/session'),
   auth: <T = { user: Account; claimed: number }>(path: string, body?: unknown, method = 'POST') => j<T>(method, `/api/auth/${path}`, body ?? {}),
   /** Upload an image; `onProgress` hears the share sent so far (0–1). XHR, because fetch can't report upload progress. */
   uploadImage(blob: Blob, id?: string, onProgress?: (fraction: number) => void): Promise<string> {
@@ -291,6 +298,7 @@ function handle(m: ServerMsg) {
       session.peers = new Map(m.peers.map((p) => [p.id, p]));
       session.presenter = m.presenter;
       session.settings = m.settings;
+      session.browser = m.browser ?? null;
       pending.clear();
       pendingOrder = 0;
       if (firstWelcome) {
@@ -309,6 +317,7 @@ function handle(m: ServerMsg) {
       emit('welcome', first);
       emit('status');
       emit('peers');
+      emit('browser');
       requestRender();
       collect();
       sendPresence(true);
@@ -356,6 +365,8 @@ function handle(m: ServerMsg) {
     }
     case 'error': emit('notice', m.msg); return;
     case 'rtc': emit('rtc', { from: m.from, data: m.data }); return;
+    case 'browser': session.browser = m.s; emit('browser'); return;
+    case 'bev': emit('bev', { n: m.n, e: m.e }); return;
     case 'muted': emit('muted', m.by); return;
   }
 }
@@ -365,6 +376,8 @@ function resetBoardState() {
   if (ws) { const old = ws; ws = null; old.close(); }
   session.peers.clear();
   session.presenter = null;
+  session.browser = null;
+  emit('browser');
   firstWelcome = true;
   retry = 0;
   known = new Map();
@@ -416,6 +429,8 @@ export function joinBoard(id: string) {
   session.views = [];
   session.peers.clear();
   session.presenter = null;
+  session.browser = null;
+  emit('browser');
   firstWelcome = true;
   retry = 0;
   known = new Map();
@@ -460,6 +475,8 @@ export const present = (on: boolean) => sendMsg({ t: 'present', on });
 export const sendVoice = (on: boolean, muted: boolean) => sendMsg({ t: 'voice', on, muted });
 export const sendRtc = (to: string, data: RtcSignal) => sendMsg({ t: 'rtc', to, data });
 export const sendInk = (ink: Ink) => sendMsg({ t: 'ink', ink });
+export const browserDo = (action: BrowserAction) => sendMsg({ t: 'browser', do: action });
+export const sendBrowserEvent = (n: number, e: BrowserEvent) => sendMsg({ t: 'bev', n, e });
 
 function applyView(m: { put?: BoardView; del?: string }) {
   if (m.put) {

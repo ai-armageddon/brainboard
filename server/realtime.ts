@@ -13,7 +13,11 @@ import { inviteToken, isCrossSite, ownerKeyOf, owns, principal } from './auth.ts
 type Identity = { owner: true; token: null } | { owner: false; token: string; key: string | null };
 import { getSharing, inviteRole, noteInviteUse, revokeInvite, setSettings } from './sharing.ts';
 import { applyOps, diffItems, validOp } from '../src/ops.ts';
-import { MAX_VIEWS, cleanView, type BoardSettings, type ClientMsg, type LivePerson, type Op, type PeerInfo, type Presence, type Role, type ServerMsg } from '../src/protocol.ts';
+import {
+  MAX_VIEWS, cleanBrowserEvent, cleanView, type BoardSettings, type BrowserAction, type BrowserState, type ClientMsg, type LivePerson,
+  type Op, type PeerInfo, type Presence, type Role, type ServerMsg,
+} from '../src/protocol.ts';
+import { BROWSE_ENABLED, browseKey, endBrowse, resolveAddress } from './browse.ts';
 import { COLORS, type Item } from '../src/types.ts';
 
 interface Client {
@@ -42,6 +46,8 @@ interface Room {
   clients: Set<Client>;
   presenter: string | null;
   settings: BoardSettings;
+  /** the shared browser, while it is open: what everyone sees, plus the pages to go back and forward through */
+  browser: { state: BrowserState; pages: string[]; at: number } | null;
   dead: boolean;
 }
 
@@ -62,7 +68,7 @@ function getRoom(id: string): Promise<Room | null> {
       const sharing = await getSharing(id);
       return {
         id, board, known: s.known, knownOrder: s.order, writtenRev: board.rev, dirty: false, timer: null,
-        clients: new Set(), presenter: null, settings: { ...sharing.settings }, dead: false,
+        clients: new Set(), presenter: null, settings: { ...sharing.settings }, browser: null, dead: false,
       };
     })();
     rooms.set(id, p);
@@ -105,6 +111,7 @@ async function onFileChange(id: string) {
     room.dead = true;
     if (room.timer) clearTimeout(room.timer);
     broadcast(room, { t: 'deleted' });
+    closeBrowser(room);
     for (const c of room.clients) c.ws.close(4410, 'board deleted');
     rooms.delete(id);
     return;
@@ -195,6 +202,95 @@ function sanitizePresence(p: Presence): Presence {
   return out;
 }
 
+// ------------------------------------------------------------------ the shared browser
+
+const pageSize = (v: unknown, fallback: number, max: number) =>
+  typeof v === 'number' && Number.isFinite(v) ? Math.round(Math.min(max, Math.max(240, v))) : fallback;
+
+const announceBrowser = (room: Room) => broadcast(room, { t: 'browser', s: room.browser?.state ?? null });
+
+function closeBrowser(room: Room) {
+  if (!room.browser) return;
+  room.browser = null;
+  endBrowse(room.id);
+  announceBrowser(room);
+}
+
+/** Someone who can no longer edit (left, paused, or made a viewer) stops driving; the page stays up for the rest. */
+function checkBrowserDriver(room: Room) {
+  const b = room.browser;
+  if (!b?.state.driver) return;
+  const driver = [...room.clients].find((o) => o.id === b.state.driver);
+  if (driver && roleOf(room, driver) !== 'viewer') return;
+  b.state.driver = null;
+  announceBrowser(room);
+}
+
+function browserAction(room: Room, c: Client, d: BrowserAction) {
+  if (!d || typeof d !== 'object') return;
+  const editor = roleOf(room, c) !== 'viewer';
+  const b = room.browser;
+  const driving = editor && !!b && b.state.driver === c.id;
+  /** Show the page at `at` to everyone as a fresh load. */
+  const show = (at: number) => {
+    if (!b || at < 0 || at >= b.pages.length) return;
+    b.at = at;
+    const { scroll: _, ...rest } = b.state;
+    b.state = { ...rest, url: b.pages[at], n: b.state.n + 1, back: at > 0, fwd: at < b.pages.length - 1 };
+    announceBrowser(room);
+  };
+  switch (d.a) {
+    case 'nav': {
+      if (!BROWSE_ENABLED || !editor || (b && !driving)) return;
+      const url = resolveAddress(d.q);
+      if (!url) { send(c, { t: 'error', msg: 'That address doesn’t look right.' }); return; }
+      if (!b) {
+        room.browser = {
+          pages: [url], at: 0,
+          state: { key: browseKey(room.id), url, n: 1, driver: c.id, w: pageSize(d.w, 1024, 3840), h: pageSize(d.h, 640, 2400), back: false, fwd: false },
+        };
+        announceBrowser(room);
+        return;
+      }
+      b.pages = [...b.pages.slice(Math.max(0, b.at - 48), b.at + 1), url];
+      show(b.pages.length - 1);
+      return;
+    }
+    case 'back': if (driving) show(b.at - 1); return;
+    case 'fwd': if (driving) show(b.at + 1); return;
+    case 'reload': if (driving) show(b.at); return;
+    case 'loc': {
+      // The page settled on another address (a redirect, or the site rewrote it): same page, new label.
+      if (!driving || d.n !== b.state.n) return;
+      const url = /^https?:\/\//i.test(String(d.url)) ? resolveAddress(d.url) : null;
+      if (!url || url === b.state.url) return;
+      b.pages[b.at] = b.state.url = url;
+      announceBrowser(room);
+      return;
+    }
+    case 'size': {
+      if (!driving) return;
+      const w = pageSize(d.w, b.state.w, 3840), h = pageSize(d.h, b.state.h, 2400);
+      if (w === b.state.w && h === b.state.h) return;
+      b.state.w = w;
+      b.state.h = h;
+      announceBrowser(room);
+      return;
+    }
+    case 'take': {
+      if (!b || !editor || driving) return;
+      b.state.driver = c.id;
+      announceBrowser(room);
+      return;
+    }
+    case 'close': {
+      // The driver closes it for everyone; so can any editor once nobody is driving.
+      if (b && (driving || (editor && !b.state.driver))) closeBrowser(room);
+      return;
+    }
+  }
+}
+
 /** Called by the API when invites change: re-evaluate everyone's access. */
 export async function refreshAccess(boardId: string) {
   const p = rooms.get(boardId);
@@ -214,6 +310,7 @@ export async function refreshAccess(boardId: string) {
       broadcast(room, { t: 'peer', peer: info(room, c, false) }, c);
     }
   }
+  checkBrowserDriver(room);
 }
 
 /** Who is connected through each invite link right now (owner-only: feeds the Share dialog). */
@@ -306,6 +403,7 @@ async function handle(room: Room, c: Client, raw: string) {
           send(o, { t: 'role', role: roleOf(room, o) });
           broadcast(room, { t: 'peer', peer: info(room, o, false) }, o);
         }
+        checkBrowserDriver(room);
       }
       return;
     }
@@ -362,6 +460,18 @@ async function handle(room: Room, c: Client, raw: string) {
       broadcast(room, { t: 'ink', from: c.id, ink: { id: k.id, color: k.color, size: k.size, add: k.add, ...end } }, c);
       return;
     }
+    case 'browser': browserAction(room, c, m.do); return;
+    case 'bev': {
+      // What the driver does on the page: pass it on to everyone else's copy. Only the scroll position is
+      // remembered, so people who arrive later start where the driver is.
+      const b = room.browser;
+      if (!b || b.state.driver !== c.id || m.n !== b.state.n || roleOf(room, c) === 'viewer') return;
+      const e = cleanBrowserEvent(m.e);
+      if (!e) return;
+      if (e.k === 'scroll') b.state.scroll = e;
+      broadcast(room, { t: 'bev', n: b.state.n, e }, c);
+      return;
+    }
     case 'kick': {
       if (c.baseRole !== 'owner') return;
       const target = [...room.clients].find((o) => o.id === m.id);
@@ -404,6 +514,7 @@ async function onConnection(ws: WebSocket, identity: Identity, baseRole: Role, b
     peers: [...room.clients].filter((o) => o !== c).map((o) => info(room, o)),
     presenter: room.presenter,
     settings: room.settings,
+    browser: room.browser?.state ?? null,
   });
   broadcast(room, { t: 'join', peer: info(room, c, false) }, c);
 
@@ -417,6 +528,8 @@ async function onConnection(ws: WebSocket, identity: Identity, baseRole: Role, b
       room.presenter = null;
       broadcast(room, { t: 'presenter', id: null });
     }
+    if (!room.clients.size) closeBrowser(room);
+    else checkBrowserDriver(room);
   });
 }
 

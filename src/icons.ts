@@ -60,6 +60,10 @@ const P: Record<string, string> = {
   sound: '<path d="M4.5 9.5h3l4.5-4v13l-4.5-4h-3z"/><path d="M15.5 9a4.2 4.2 0 0 1 0 6M18 6.5a7.8 7.8 0 0 1 0 11"/>',
   soundOff: '<path d="M4.5 9.5h3l4.5-4v13l-4.5-4h-3z"/><path d="m16 9.5 5 5m0-5-5 5"/>',
   place: '<rect x="3.5" y="3.5" width="17" height="17" rx="2.5" stroke-dasharray="3 2.6"/><path d="M12 8.5v7M8.5 12h7"/>',
+  grip: '<path d="M9.5 6.5h.01M14.5 6.5h.01M9.5 12h.01M14.5 12h.01M9.5 17.5h.01M14.5 17.5h.01" stroke-width="2.4"/>',
+  globe: '<circle cx="12" cy="12" r="8.5"/><path d="M3.5 12h17"/><path d="M12 3.5c2.4 2.5 3.6 5.3 3.6 8.5s-1.2 6-3.6 8.5c-2.4-2.5-3.6-5.3-3.6-8.5s1.2-6 3.6-8.5z"/>',
+  reload: '<path d="M19.5 12a7.5 7.5 0 1 1-2.3-5.4"/><path d="M19.5 4.5V9H15"/>',
+  shrink: '<path d="M9 4.5V9H4.5"/><path d="M19.5 9H15V4.5"/><path d="M15 19.5V15h4.5"/><path d="M4.5 15H9v4.5"/>',
   sizeDown: '<path d="M4 18 9 6l5 12"/><path d="M5.8 14h6.4"/><path d="M16 12h5"/>',
   sizeUp: '<path d="M4 18 9 6l5 12"/><path d="M5.8 14h6.4"/><path d="M16 12h5M18.5 9.5v5"/>',
 };

@@ -19,6 +19,7 @@ import { initViews } from './views';
 import { initBoardAreas } from './board-areas';
 import { initWriting } from './writing';
 import { initScreenshot } from './screenshot';
+import { initBrowse } from './browse';
 import { blobGet, kvGet, kvSet } from './db';
 import type { Item } from './types';
 
@@ -58,6 +59,7 @@ async function main() {
   initWriting();
   initAccount();
   initVoice();
+  initBrowse();
   initInput();
   updateToolUI();
   applyCamera();

@@ -25,6 +25,7 @@ import {
 } from './accounts.ts';
 import { authenticationOptions, authenticationVerify, registrationOptions, registrationVerify, relyingParty } from './passkeys.ts';
 import { HOSTED, ICE_SERVERS, PUBLIC_URL } from './config.ts';
+import { BROWSE_ENABLED, handleBrowse } from './browse.ts';
 
 const MAX_BODY = 30 * 1024 * 1024;
 
@@ -91,6 +92,9 @@ export async function handleApi(req: IncomingMessage, res: ServerResponse): Prom
   const parts = url.pathname.split('/').filter(Boolean).slice(1); // drop "api"
 
   try {
+    // The shared browser's pages. Checked by the board's browser key, not by cookies: the frame they load in
+    // has no origin, so it has no identity here (and is given none).
+    if (parts[0] === 'browse' && method === 'GET') return await handleBrowse(req, res, url), true;
     if (isCrossSite(req)) return send(res, 403, { error: 'cross-site request refused' }), true;
     const p = principal(req, res);
 
@@ -103,6 +107,7 @@ export async function handleApi(req: IncomingMessage, res: ServerResponse): Prom
         publicUrl: PUBLIC_URL,
         passkeys: !!relyingParty(req),
         ice: ICE_SERVERS,
+        browser: BROWSE_ENABLED,
       }), true;
     }
     if (parts[0] === 'auth') return await handleAuth(req, res, parts.slice(1), method, p), true;

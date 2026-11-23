@@ -22,6 +22,7 @@ import { saveCommand } from './account';
 import { openExport } from './export';
 import { openScreenshot } from './screenshot';
 import { openMedia } from './media';
+import { openBrowser } from './browse';
 import { pointerWorld, putClip, yank, clipBounds } from './input';
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
@@ -539,6 +540,7 @@ const COMMANDS: Cmd[] = [
   } },
   { names: ['share'], desc: 'Invite people', run: () => { if (ownerOnly()) $('share-btn').click(); } },
   { names: ['present'], desc: 'Start or stop presenting', run: () => { $('present-btn').click(); } },
+  { names: ['browse', 'web'], usage: '[address or search]', desc: 'Browse a site together: everyone follows along', run: (a) => openBrowser(a) },
   { names: ['follow'], usage: '[name]', desc: 'Follow someone (no name: stop)', run: (a) => {
     if (!a) { follow(null); return; }
     const q = a.toLowerCase();
