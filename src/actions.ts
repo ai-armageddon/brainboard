@@ -8,6 +8,7 @@ import { appendStyle, drawText, editorFont, forgetDrawnText, readEditor, sameSty
 import { clamp, intersects, unionBox } from './geometry';
 import { toast, updateToolUI } from './ui';
 import { keyLabel } from './keys';
+import { prepareEditor } from './writing';
 
 export const uid = () => Math.random().toString(36).slice(2, 9) + Date.now().toString(36).slice(-4);
 export const isNode = (it: Item | undefined): it is NodeItem => !!it && it.type !== 'edge';
@@ -305,6 +306,7 @@ export function startEditing(id: string) {
   if (!t) return;
   const text = it.type === 'edge' ? it.label : it.text;
   drawText(t, text, it.runs);
+  prepareEditor(t);
   t.contentEditable = 'true';
   t.classList.add('editing');
   t.focus({ preventScroll: true });

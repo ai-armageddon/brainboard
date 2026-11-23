@@ -18,6 +18,7 @@ import { eraseStroke } from './erase';
 import { IS_MAC, keyLabel } from './keys';
 import { recognize, smoothLine, steady, taper, type ShapeFix, type ShapeName } from './beautify';
 import { arrange, arrangeForKey } from './arrange';
+import { acceptSuggestion } from './writing';
 
 type Drag =
   | { kind: 'brush-size'; tool: 'pen' | 'eraser'; pointerId: number; startX: number; startSize: number }
@@ -694,7 +695,9 @@ function onKeyDown(e: KeyboardEvent) {
     return;
   }
   if (S.editing) {
-    if (e.key === 'Escape' || (e.key === 'Enter' && mod)) {
+    if ((e.key === 'Tab' || e.key === 'ArrowRight') && !mod && !e.altKey && !e.shiftKey && acceptSuggestion()) {
+      e.preventDefault();
+    } else if (e.key === 'Escape' || (e.key === 'Enter' && mod)) {
       e.preventDefault();
       stopEditing();
     } else if (e.key === 'Tab') {
