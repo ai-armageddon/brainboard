@@ -21,6 +21,8 @@ import { isVimMode, setVimMode } from './vim';
 import { startTour } from './tour';
 import { openAuth, signOut } from './account';
 import { openExport } from './export';
+import { openScreenshot } from './screenshot';
+import { openMedia } from './media';
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
 
@@ -412,6 +414,8 @@ export function buildUI() {
     switch (act) {
       case 'fit': if (userMovedCamera()) zoomToFit(); break;
       case 'export': openExport(); break;
+      case 'screenshot': openScreenshot(); break;
+      case 'media': openMedia(undefined, openScreenshot); break;
       case 'import': fileBoard.click(); break;
       case 'theme': {
         const order: Theme[] = ['auto', 'light', 'dark'];

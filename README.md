@@ -14,6 +14,7 @@ Live at **[brainboard.ink](https://brainboard.ink)**, or run your own: boards ar
 - **Vim keys.** A `:` command line with completion, `/` search, find and replace, and an optional vim mode with `hjkl` navigation.
 - **Agent friendly.** A built-in MCP server lets Claude, Cursor and other agents list, read, render and edit boards. Their edits appear live in your tab.
 - **No sign-up wall.** Start drawing straight away. Create an account (with a passkey, or email and password) when you want to keep your boards and open them anywhere.
+- **Screenshots.** A camera mode frames the whole screen, an area you drag, your selection or a saved view, with a shutter, a flash and an optional gradient frame. Every shot is kept in **Media**, ready to save anywhere, copy or put back on the board.
 - **Export anywhere.** PNG, PDF, SVG, a Markdown outline, or a full brainboard file, saved wherever you choose.
 - **Yours.** Self-host it in one command. Light and dark themes and per-user undo.
 
@@ -42,7 +43,7 @@ Opening the address on its own always starts a blank board. It's saved, and gets
 | `npm run prod` | Production build in hosted mode for https://brainboard.ink (see [Deploy](#deploy)) |
 | `npm run mcp` | The MCP server on stdio, for AI agents |
 
-Boards are saved in `~/.brainboard/`, with images next to them. Set `BRAINBOARD_DIR` to use another folder. Deleted boards go to `~/.brainboard/trash/`.
+Boards are saved in `~/.brainboard/`, with images next to them and screenshots in `~/.brainboard/media/`. Set `BRAINBOARD_DIR` to use another folder. Deleted boards go to `~/.brainboard/trash/`.
 
 To keep the dev server running in the background and across restarts, run it under [pm2](https://pm2.keymetrics.io):
 
@@ -70,6 +71,8 @@ Shortcuts are written for Mac. On Windows and Linux, `⌘` is `Ctrl` and `⌥` (
 | **Arrange** | Select 2 or more and open the align menu in the selection bar: align edges or centers, space evenly across or down, or **Tidy up** into neat rows. `⌥A` `⌥H` `⌥D` left / center / right · `⌥W` `⌥V` `⌥S` top / middle / bottom · `⌥⇧H` `⌥⇧V` space evenly · `⌥⇧T` tidy up |
 | **Boards** | `⌥B` all boards · open the menu at the top left · `⌥N` new board · double-click the board name to rename it |
 | **Views** | `{` `}` previous / next view · `⌥1`–`⌥9` jump to a view |
+| **Screenshot** | `⇧⌘S`, the camera in the toolbar, or `:shot`. Frame **Screen** (what you see), **Area** (drag a frame; it shoots when you let go, or hold `⌥` to adjust it first), **Selection** or a saved **View**, then press the shutter or `Enter`. Scroll and pinch still move the board to compose the shot. Pick a look: **Clean**, or the board on a gradient (**Aurora**, **Sunset**, **Ocean**, **Mist**, **Night**) with rounded corners and a soft shadow. Toggle the canvas dots (`G`) and sharpness 1–3× (`Q`). Shots render crisp on the server in your current theme, and a print of each lands in the corner with **Save…** and **Copy** |
+| **Media** | `⌥M`, **Media** in the menu, or `:media`. Every screenshot you've taken, newest first, across all your boards or just this one. Open one to rename it, **Save as…** anywhere (your Desktop, say) in Chrome, Edge and Opera, or to Downloads in other browsers, copy it, put it on the board, or delete it |
 | **Export** | `⇧⌘E`, or **Export…** in the menu: PNG (1–3×, transparent if you like), PDF, SVG, a Markdown outline of the text and flow, or a brainboard file you can import again. Pick the whole board or just the selection, and a light or dark theme. **Save as…** lets you choose the folder and file name in Chrome, Edge and Opera. Other browsers save to Downloads |
 | **Undo** | `⌘Z` / `⇧⌘Z` undo only *your* changes, never anyone else's |
 

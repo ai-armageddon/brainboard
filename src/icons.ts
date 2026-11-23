@@ -53,6 +53,13 @@ const P: Record<string, string> = {
   mic: '<rect x="9" y="3.5" width="6" height="11" rx="3"/><path d="M5.5 11a6.5 6.5 0 0 0 13 0M12 17.5v3"/>',
   micOff: '<path d="M15 10.5V6.5a3 3 0 0 0-5.6-1.5M9 9v2.5a3 3 0 0 0 4.6 2.5"/><path d="M5.5 11a6.5 6.5 0 0 0 10.4 5.2M18.5 11a6.5 6.5 0 0 1-.6 2.7M12 17.5v3M4 4l16 16"/>',
   phoneOff: '<path d="M4.5 13.5c-.6-.6-.7-1.6-.1-2.2C6.6 9 9.2 8 12 8s5.4 1 7.6 3.3c.6.6.5 1.6-.1 2.2l-1.4 1.4a1.2 1.2 0 0 1-1.6.1l-1.8-1.4a1.2 1.2 0 0 1-.4-1.1l.2-1.3a9 9 0 0 0-5 0l.2 1.3a1.2 1.2 0 0 1-.4 1.1l-1.8 1.4a1.2 1.2 0 0 1-1.6-.1z"/>',
+  camera: '<path d="M3.5 8.5a2 2 0 0 1 2-2h2.1l1.5-2.2h5.8l1.5 2.2h2.1a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2h-13a2 2 0 0 1-2-2z"/><circle cx="12" cy="13" r="3.6"/>',
+  media: '<rect x="7.5" y="3.5" width="13" height="13" rx="2"/><path d="M4.5 7.5v10a2 2 0 0 0 2 2h10"/><path d="m20.5 13.2-3.4-3.4-6.6 6.7"/><circle cx="12.3" cy="8" r="1.4"/>',
+  download: '<path d="M12 4.5v11m-4.5-4.5 4.5 4.5 4.5-4.5"/><path d="M5 19.5h14"/>',
+  dots: '<g fill="currentColor" stroke="none"><circle cx="6.5" cy="6.5" r="1.25"/><circle cx="12" cy="6.5" r="1.25"/><circle cx="17.5" cy="6.5" r="1.25"/><circle cx="6.5" cy="12" r="1.25"/><circle cx="12" cy="12" r="1.25"/><circle cx="17.5" cy="12" r="1.25"/><circle cx="6.5" cy="17.5" r="1.25"/><circle cx="12" cy="17.5" r="1.25"/><circle cx="17.5" cy="17.5" r="1.25"/></g>',
+  sound: '<path d="M4.5 9.5h3l4.5-4v13l-4.5-4h-3z"/><path d="M15.5 9a4.2 4.2 0 0 1 0 6M18 6.5a7.8 7.8 0 0 1 0 11"/>',
+  soundOff: '<path d="M4.5 9.5h3l4.5-4v13l-4.5-4h-3z"/><path d="m16 9.5 5 5m0-5-5 5"/>',
+  place: '<rect x="3.5" y="3.5" width="17" height="17" rx="2.5" stroke-dasharray="3 2.6"/><path d="M12 8.5v7M8.5 12h7"/>',
   sizeDown: '<path d="M4 18 9 6l5 12"/><path d="M5.8 14h6.4"/><path d="M16 12h5"/>',
   sizeUp: '<path d="M4 18 9 6l5 12"/><path d="M5.8 14h6.4"/><path d="M16 12h5M18.5 9.5v5"/>',
 };

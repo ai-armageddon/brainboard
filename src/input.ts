@@ -13,6 +13,8 @@ import { canEdit } from './net';
 import { userMovedCamera } from './collab';
 import { vimKey } from './vim';
 import { openExport } from './export';
+import { openScreenshot } from './screenshot';
+import { openMedia } from './media';
 import { inkEnd, inkMove, inkStart } from './ink';
 import { eraseStroke } from './erase';
 import { IS_MAC, keyLabel } from './keys';
@@ -713,6 +715,7 @@ function onKeyDown(e: KeyboardEvent) {
     const k = e.key.toLowerCase();
     if (ro && ['z', 'y', 'd', 'x'].includes(k)) { e.preventDefault(); return; }
     if (k === 'e' && e.shiftKey) { e.preventDefault(); openExport(); return; }
+    if (k === 's' && e.shiftKey && !e.altKey) { e.preventDefault(); openScreenshot(); return; }
     if (k === 'r' && e.ctrlKey && !e.metaKey && !e.shiftKey) { e.preventDefault(); if (!ro) redo(); return; } // vim redo
     if (['=', '+', '-', '0'].includes(k) && !userMovedCamera()) { e.preventDefault(); return; }
     switch (k) {
@@ -728,6 +731,7 @@ function onKeyDown(e: KeyboardEvent) {
     return;
   }
   if (e.altKey) {
+    if (e.code === 'KeyM' && !e.shiftKey && !e.ctrlKey && !e.metaKey) { e.preventDefault(); openMedia(undefined, openScreenshot); return; }
     // ⌥A/H/D align left/center/right, ⌥W/V/S top/middle/bottom, ⌥⇧H/V space evenly, ⌥⇧T tidy up.
     const kind = e.ctrlKey || e.metaKey ? null : arrangeForKey(e.code, e.shiftKey);
     if (kind && S.selected.size) {
