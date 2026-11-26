@@ -130,6 +130,24 @@ function mimeFor(audio: boolean) {
   ].find((t) => MediaRecorder.isTypeSupported(t));
 }
 
+/**
+ * Is this capture of our own tab? A tab can put a name tag on itself that any capture of it carries. The tag is
+ * written fresh once the capture is running and we wait for it to show up on the track: a tag set beforehand
+ * reaches the first capture a tab ever has, but not the ones after it.
+ */
+function isThisTab(track: Track): Promise<boolean> {
+  const tag = `bb-${crypto.randomUUID()}`;
+  const mine = () => track.getCaptureHandle?.()?.handle === tag;
+  return new Promise((resolve) => {
+    const done = () => { clearTimeout(timer); track.removeEventListener('capturehandlechange', check); resolve(mine()); };
+    const check = () => { if (mine()) done(); };
+    const timer = setTimeout(done, 2000);
+    track.addEventListener('capturehandlechange', check);
+    devices!.setCaptureHandleConfig!({ handle: tag, permittedOrigins: [location.origin] });
+    check();
+  });
+}
+
 function stopTracks(...streams: (MediaStream | null)[]) {
   for (const s of streams) s?.getTracks().forEach((t) => t.stop());
 }
@@ -142,8 +160,6 @@ export async function startRecording(opts: RecordOpts): Promise<boolean> {
   let display: MediaStream | null = null;
   let voice: MediaStream | null = null;
   try {
-    const handle = `bb-${crypto.randomUUID()}`;
-    devices!.setCaptureHandleConfig!({ handle, permittedOrigins: [location.origin] });
     const dpr = devicePixelRatio || 1;
     display = await devices!.getDisplayMedia({
       video: {
@@ -155,7 +171,7 @@ export async function startRecording(opts: RecordOpts): Promise<boolean> {
       preferCurrentTab: true, selfBrowserSurface: 'include', surfaceSwitching: 'exclude', monitorTypeSurfaces: 'exclude',
     } as DisplayMediaStreamOptions);
     const track = display.getVideoTracks()[0] as Track;
-    if (track.getCaptureHandle?.()?.handle !== handle) {
+    if (!(await isThisTab(track))) {
       stopTracks(display);
       toast('To record the board, choose “This tab” when your browser asks');
       return false;
