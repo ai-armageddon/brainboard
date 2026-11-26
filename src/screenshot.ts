@@ -1,6 +1,7 @@
-// The screenshotter. ⇧⌘S (or the camera button) turns the screen into a viewfinder: frame the whole screen,
+// The camera. ⇧⌘S (or the camera button) turns the screen into a viewfinder: frame the whole screen,
 // drag out an area, use the selection or a saved view, pick a look, and press the shutter. The shot is
 // rendered sharp on the server and kept in Media; a little print of it lands in the corner with Save and Copy.
+// Switch it to Video (⌥R opens it that way) and the same frame records the board instead: see record.ts.
 import { S } from './state';
 import { hooks, viewport, world, selBounds } from './render';
 import { session } from './net';
@@ -12,6 +13,7 @@ import {
   BACKDROP_NAMES, copyMedia, latestMedia, listMedia, mediaEvents, mediaUrl, openMedia, saveMedia, takeScreenshot,
   type Backdrop, type MediaItem,
 } from './media';
+import { canRecord, recordingActive, recordingName, startRecording } from './record';
 import type { Box } from './types';
 
 type Mode = 'screen' | 'region' | 'selection' | 'view';
@@ -22,11 +24,16 @@ const MODES: [Mode, string, string][] = [
   ['view', 'View', 'A saved view'],
 ];
 const LOOKS: Backdrop[] = ['none', 'aurora', 'sunset', 'ocean', 'mist', 'night'];
+export type Kind = 'photo' | 'video';
 
-interface Prefs { backdrop: Backdrop; grid: boolean; quality: 1 | 2 | 3; sound: boolean }
+interface Prefs {
+  backdrop: Backdrop; grid: boolean; quality: 1 | 2 | 3; sound: boolean;
+  /** video: frames a second, your microphone, and whether the toolbars are in the picture */
+  fps: 30 | 60; mic: boolean; chrome: boolean;
+}
 const PREFS = 'bb-shot';
 const prefs: Prefs = (() => {
-  const d: Prefs = { backdrop: 'aurora', grid: true, quality: 2, sound: true };
+  const d: Prefs = { backdrop: 'aurora', grid: true, quality: 2, sound: true, fps: 60, mic: false, chrome: true };
   try { return { ...d, ...JSON.parse(localStorage.getItem(PREFS) ?? '{}') as Partial<Prefs> }; } catch { return d; }
 })();
 const savePrefs = () => { try { localStorage.setItem(PREFS, JSON.stringify(prefs)); } catch { /* ignore */ } };
@@ -36,6 +43,7 @@ const esc = (s: string) => s.replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`)
 
 let root: HTMLDivElement | null = null;
 let active = false;
+let kind: Kind = 'photo';
 let mode: Mode = 'screen';
 /** The framed area in board coordinates (screen mode recomputes it from the camera). */
 let frame: Box | null = null;
@@ -94,6 +102,10 @@ function build() {
     <div class="shot-hint" role="status" aria-live="polite"></div>
     <div class="shot-dock panel" role="toolbar" aria-label="Screenshot">
       <button class="shot-roll" data-act="roll" aria-label="Open Media" data-tip="Media"><span class="shot-roll-img"></span></button>
+      <div class="shot-kind" role="radiogroup" aria-label="Photo or video">
+        <button role="radio" data-kind="photo" data-tip="Screenshot">${icon('camera', 16)}<span>Photo</span></button>
+        <button role="radio" data-kind="video" data-tip="Record the board · V"><i class="rec-dot"></i><span>Video</span></button>
+      </div>
       <div class="shot-modes" role="radiogroup" aria-label="Capture">
         ${MODES.map(([m, label, tip], i) => `<button role="radio" data-mode="${m}" data-tip="${tip} · ${i + 1}">${label}${m === 'view' ? icon('chevron', 13) : ''}</button>`).join('')}
       </div>
@@ -103,8 +115,11 @@ function build() {
       </div>
       <span class="sep"></span>
       <button class="cbtn" data-act="grid" data-tip="Canvas dots · G">${icon('dots', 18)}</button>
-      <button class="cbtn shot-q" data-act="quality" data-tip="Sharpness · Q"></button>
-      <button class="cbtn" data-act="sound" data-tip="Shutter sound"></button>
+      <button class="cbtn shot-q photo-only" data-act="quality" data-tip="Sharpness · Q"></button>
+      <button class="cbtn photo-only" data-act="sound" data-tip="Shutter sound"></button>
+      <button class="cbtn shot-q video-only" data-act="fps" data-tip="Frames a second · F"></button>
+      <button class="cbtn video-only" data-act="mic" data-tip="Microphone · M"></button>
+      <button class="cbtn video-only" data-act="chrome" data-tip="Toolbars in the video · T">${icon('eye', 18)}</button>
       <button class="cbtn" data-act="close" data-tip="Cancel · Esc" aria-label="Cancel">${icon('close', 18)}</button>
     </div>
     <div class="shot-views panel" role="menu" hidden></div>`;
@@ -115,6 +130,7 @@ function build() {
     const b = (e.target as Element).closest<HTMLElement>('button');
     if (!b) return;
     if (b.dataset.mode) return pickMode(b.dataset.mode as Mode, b);
+    if (b.dataset.kind) return pickKind(b.dataset.kind as Kind);
     if (b.dataset.look) { prefs.backdrop = b.dataset.look as Backdrop; savePrefs(); return paint(); }
     switch (b.dataset.act) {
       case 'shoot': return void shoot();
@@ -123,6 +139,9 @@ function build() {
       case 'grid': prefs.grid = !prefs.grid; savePrefs(); return paint();
       case 'quality': prefs.quality = prefs.quality === 3 ? 1 : (prefs.quality + 1) as 2 | 3; savePrefs(); return paint();
       case 'sound': prefs.sound = !prefs.sound; savePrefs(); if (prefs.sound) shutterSound(); return paint();
+      case 'fps': prefs.fps = prefs.fps === 60 ? 30 : 60; savePrefs(); return paint();
+      case 'mic': prefs.mic = !prefs.mic; savePrefs(); return paint();
+      case 'chrome': prefs.chrome = !prefs.chrome; savePrefs(); return paint();
     }
   });
   $('.shot-views').addEventListener('click', (e) => {
@@ -187,7 +206,8 @@ function build() {
     if (!d.moved) return;
     if (frame && (frame.w * S.cam.z < 8 || frame.h * S.cam.z < 8)) { frame = null; mode = 'screen'; paint(); return; }
     // A fresh drag shoots straight away, like a camera; holding ⌥ keeps the frame to adjust first.
-    if (d.kind === 'new' && !e.altKey) void shoot();
+    // A video frame always waits for the record button.
+    if (kind === 'photo' && d.kind === 'new' && !e.altKey) void shoot();
   };
   for (const el of [catcher, frameEl]) {
     el.addEventListener('pointerdown', onDown);
@@ -212,6 +232,13 @@ function easeFrame() {
   root!.classList.add('ease');
   clearTimeout(easeTimer);
   easeTimer = window.setTimeout(() => root?.classList.remove('ease'), 360);
+}
+
+function pickKind(k: Kind) {
+  if (k === 'video' && !canRecord) return hint('Recording needs Chrome, Edge or another Chromium browser on a computer', true);
+  if (k === 'photo' && !session.boardId) return hint(S.items.length ? 'One moment: the board is still saving' : 'Add something to the board first, then take a screenshot', true);
+  kind = k;
+  paint();
 }
 
 function pickMode(m: Mode, btn?: HTMLElement) {
@@ -255,14 +282,19 @@ function hint(msg?: string, warn = false) {
     hintTimer = window.setTimeout(() => hint(), 2600);
     return;
   }
-  el.innerHTML = keyLabel(mode === 'screen'
-    ? 'Drag over an area to shoot it (hold <kbd>⌥</kbd> to adjust first) · <kbd>Enter</kbd> the whole screen · <kbd>Esc</kbd> cancel'
-    : 'Drag the frame or its corners · <kbd>Enter</kbd> capture · <kbd>Esc</kbd> cancel');
+  el.innerHTML = keyLabel(kind === 'video'
+    ? (mode === 'screen'
+      ? 'Drag over an area to record just that · <kbd>Enter</kbd> record the whole screen · <kbd>Esc</kbd> cancel'
+      : 'Drag the frame or its corners · <kbd>Enter</kbd> start recording · <kbd>Esc</kbd> cancel')
+    : mode === 'screen'
+      ? 'Drag over an area to shoot it (hold <kbd>⌥</kbd> to adjust first) · <kbd>Enter</kbd> the whole screen · <kbd>Esc</kbd> cancel'
+      : 'Drag the frame or its corners · <kbd>Enter</kbd> capture · <kbd>Esc</kbd> cancel');
 }
 
 function paint() {
   if (!root) return;
   root.dataset.mode = mode;
+  root.dataset.kind = kind;
   const b = currentFrame();
   const fr = $('.shot-frame');
   if (b) {
@@ -270,8 +302,14 @@ function paint() {
     fr.style.transform = `translate(${r.x}px,${r.y}px)`;
     fr.style.width = `${r.w}px`;
     fr.style.height = `${r.h}px`;
-    const k = scaleFor(b);
-    $('.shot-size').textContent = `${Math.round(b.w * k).toLocaleString()} × ${Math.round(b.h * k).toLocaleString()}`;
+    if (kind === 'video') {
+      // A video is as sharp as the screen it's filmed from.
+      const v = videoRect() ?? r, d = devicePixelRatio || 1;
+      $('.shot-size').textContent = `${Math.round(v.w * d).toLocaleString()} × ${Math.round(v.h * d).toLocaleString()} · ${prefs.fps} fps`;
+    } else {
+      const k = scaleFor(b);
+      $('.shot-size').textContent = `${Math.round(b.w * k).toLocaleString()} × ${Math.round(b.h * k).toLocaleString()}`;
+    }
     fr.classList.toggle('low', r.y + r.h > innerHeight - 120);
   }
   root.querySelectorAll<HTMLElement>('[data-mode]').forEach((x) => {
@@ -279,7 +317,21 @@ function paint() {
     if (x.dataset.mode === 'selection') x.classList.toggle('off', !selectionBox());
     if (x.dataset.mode === 'view') x.classList.toggle('off', !session.views.length);
   });
+  root.querySelectorAll<HTMLElement>('[data-kind]').forEach((x) => x.setAttribute('aria-checked', String(x.dataset.kind === kind)));
   root.querySelectorAll<HTMLElement>('[data-look]').forEach((x) => x.setAttribute('aria-checked', String(x.dataset.look === prefs.backdrop)));
+  const shutter = $('.shot-shutter');
+  shutter.setAttribute('aria-label', kind === 'video' ? 'Start recording' : 'Take screenshot');
+  shutter.dataset.tip = kind === 'video' ? 'Record · Enter' : 'Capture · Enter';
+  const fps = root.querySelector<HTMLElement>('[data-act="fps"]')!;
+  fps.innerHTML = `<b>${prefs.fps}</b>`;
+  fps.setAttribute('aria-label', `${prefs.fps} frames a second`);
+  const mic = root.querySelector<HTMLElement>('[data-act="mic"]')!;
+  mic.innerHTML = icon(prefs.mic ? 'mic' : 'micOff', 18);
+  mic.setAttribute('aria-pressed', String(prefs.mic));
+  mic.setAttribute('aria-label', prefs.mic ? 'Microphone on' : 'Microphone off');
+  const chrome = root.querySelector<HTMLElement>('[data-act="chrome"]')!;
+  chrome.setAttribute('aria-pressed', String(prefs.chrome));
+  chrome.setAttribute('aria-label', prefs.chrome ? 'Toolbars in the video' : 'Only the board in the video');
   root.dataset.look = prefs.backdrop;
   const grid = root.querySelector<HTMLElement>('[data-act="grid"]')!;
   grid.setAttribute('aria-pressed', String(prefs.grid));
@@ -297,17 +349,23 @@ function paintRoll() {
   if (!root) return;
   const it = latestMedia();
   const el = $('.shot-roll-img');
-  el.innerHTML = it ? `<img alt="" src="${mediaUrl(it.id, { thumb: true })}">` : icon('media', 18);
+  el.innerHTML = it ? `<img alt="" src="${mediaUrl(it, { thumb: true })}">` : icon('media', 18);
+  el.querySelector('img')?.addEventListener('error', () => { el.innerHTML = icon('media', 18); }, { once: true });
 }
 
 // ---------------------------------------------------------------- open & close
 
-export function openScreenshot() {
-  if (active) return;
+/** Open the camera: for a screenshot, or (`video`) to record the board. */
+export function openScreenshot(want: Kind = 'photo') {
+  if (recordingActive()) return toast(keyLabel('Already recording: press ⌥R to stop'));
+  if (active) { if (want !== kind) pickKind(want); return; }
   if (document.querySelector('.auth-backdrop')) return; // another dialog is open
-  if (!session.boardId) return toast(S.items.length ? 'One moment: the board is still saving' : 'Add something to the board first, then take a screenshot');
+  if (want === 'video' && !canRecord) return toast('Recording needs Chrome, Edge or another Chromium browser on a computer');
+  // A screenshot is drawn from the saved board, so it needs one. A video films the screen: an empty board is fine.
+  if (want === 'photo' && !session.boardId) return toast(S.items.length ? 'One moment: the board is still saving' : 'Add something to the board first, then take a screenshot');
   if (!root) build();
   active = true;
+  kind = want;
   viewId = null;
   const sel = selectionBox();
   // Something selected: start framed on it. Otherwise the whole screen.
@@ -347,6 +405,8 @@ function onKey(e: KeyboardEvent) {
     return;
   }
   if (e.key === 'Enter' || e.key === ' ' || (mod && e.code === 'KeyS')) { e.preventDefault(); void shoot(); return; }
+  // ⌥R, which opened the camera for video, flips it between photo and video once it's up.
+  if (e.altKey && e.code === 'KeyR') { e.preventDefault(); return pickKind(kind === 'video' ? 'photo' : 'video'); }
   const n = Number(e.key);
   if (n >= 1 && n <= 4) {
     e.preventDefault();
@@ -355,7 +415,12 @@ function onKey(e: KeyboardEvent) {
   }
   const k = e.key.toLowerCase();
   if (k === 'g') { prefs.grid = !prefs.grid; savePrefs(); paint(); }
-  if (k === 'q') { prefs.quality = prefs.quality === 3 ? 1 : (prefs.quality + 1) as 2 | 3; savePrefs(); paint(); }
+  if (k === 'v') pickKind(kind === 'video' ? 'photo' : 'video');
+  if (kind === 'video') {
+    if (k === 'f') { prefs.fps = prefs.fps === 60 ? 30 : 60; savePrefs(); paint(); }
+    if (k === 'm') { prefs.mic = !prefs.mic; savePrefs(); paint(); }
+    if (k === 't') { prefs.chrome = !prefs.chrome; savePrefs(); paint(); }
+  } else if (k === 'q') { prefs.quality = prefs.quality === 3 ? 1 : (prefs.quality + 1) as 2 | 3; savePrefs(); paint(); }
   if (k === 'b' || e.key === 'ArrowRight' || e.key === 'ArrowLeft') {
     const i = LOOKS.indexOf(prefs.backdrop) + (e.key === 'ArrowLeft' ? -1 : 1);
     prefs.backdrop = LOOKS[(i + LOOKS.length) % LOOKS.length];
@@ -368,15 +433,37 @@ function onKey(e: KeyboardEvent) {
 export function initScreenshot() {
   const prev = hooks.afterCamera;
   hooks.afterCamera = () => { prev(); if (active) paint(); };
-  document.getElementById('shot-btn')?.addEventListener('click', openScreenshot);
+  document.getElementById('shot-btn')?.addEventListener('click', () => openScreenshot());
 }
 
 // ---------------------------------------------------------------- the shot
 
 let shooting = false;
 
+/** The frame as it sits on screen, cut to what's actually visible: a video can only film what the tab shows. */
+function videoRect(): Box | null {
+  const b = currentFrame();
+  if (!b) return null;
+  const r = mode === 'screen' ? { x: 0, y: 0, w: innerWidth, h: innerHeight } : toScreen(b);
+  const x = Math.max(0, r.x), y = Math.max(0, r.y);
+  const w = Math.min(innerWidth, r.x + r.w) - x, h = Math.min(innerHeight, r.y + r.h) - y;
+  return w >= 32 && h >= 32 ? { x: Math.round(x), y: Math.round(y), w: Math.round(w), h: Math.round(h) } : null;
+}
+
+function record() {
+  const rect = videoRect();
+  if (!rect) return hint('Bring what you want to record onto the screen first', true);
+  const full = mode === 'screen' || (rect.w >= innerWidth - 1 && rect.h >= innerHeight - 1);
+  close();
+  void startRecording({
+    rect, full, look: prefs.backdrop, fps: prefs.fps, mic: prefs.mic, chrome: prefs.chrome, grid: prefs.grid,
+    name: recordingName(), camera: openScreenshot,
+  });
+}
+
 async function shoot() {
   if (!active || shooting) return;
+  if (kind === 'video') return record();
   const b = currentFrame();
   if (!b || b.w <= 0 || b.h <= 0) return;
   shooting = true;
@@ -525,7 +612,7 @@ function showCard(look: Backdrop, r: Box) {
       const img = new Image();
       img.alt = '';
       img.className = 'shot-real';
-      img.src = mediaUrl(it.id, { thumb: true });
+      img.src = mediaUrl(it, { thumb: true });
       img.decode().then(() => {
         el.querySelector('.shot-slot')!.append(img);
         // The framed shot is a little taller than the print: the thumbnail eases to its shape as it appears.

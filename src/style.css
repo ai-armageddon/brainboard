@@ -2650,6 +2650,114 @@ body.shooting :is(#topbar, #collab, #toolbar, #undobar, #zoombar, #board-areas, 
   .shot.in .shot-c { animation: none; }
 }
 
+/* ---------------------------------------------------------------- recording */
+/* Photo or video, in the camera dock. */
+.shot-kind { display: flex; align-items: center; gap: 2px; padding: 3px; border-radius: 11px; background: rgba(255, 255, 255, 0.07); }
+.shot-kind button {
+  display: inline-flex; align-items: center; gap: 6px; height: 30px; padding: 0 10px; border: 0; border-radius: 8px;
+  background: transparent; color: rgba(255, 255, 255, 0.55); font: 600 12px/1 var(--font); cursor: pointer;
+  transition: color 0.15s, background 0.15s;
+}
+.shot-kind button:hover { color: #fff; }
+.shot-kind button[aria-checked="true"] { background: rgba(255, 255, 255, 0.16); color: #fff; }
+.rec-dot { display: inline-block; width: 9px; height: 9px; border-radius: 50%; background: #ff453a; flex: none; }
+.shot[data-kind="photo"] .video-only, .shot[data-kind="video"] .photo-only { display: none; }
+/* The shutter becomes a record button. */
+.shot[data-kind="video"] .shot-shutter i { inset: 11px; background: #ff453a; box-shadow: inset 0 -3px 6px rgba(0, 0, 0, 0.18); }
+.shot[data-kind="video"] .shot-shutter:active i { background: #e03a30; }
+.shot[data-kind="video"] .shot-thirds, .shot[data-kind="video"] .shot-focus { opacity: 0; }
+
+/* While recording: only the board, if you asked for that. Cursors and the selection stay: they're the work. */
+body.recording.rec-clean :is(#topbar, #collab, #toolbar, #undobar, #zoombar, #board-areas, #ctxbar, #penbar, #follow-banner,
+  #elsewhere, #catch-up, #modeline, #voice-panel, .shot-card) {
+  opacity: 0 !important; pointer-events: none !important;
+}
+body.recording.rec-nogrid #viewport { background-image: none !important; }
+
+.rec { position: fixed; inset: 0; z-index: 72; pointer-events: none; font-family: var(--font); }
+/* Corner marks sit just outside the frame, so they're never in the video. */
+.rec-frame { position: absolute; }
+.rec-frame i { position: absolute; width: 18px; height: 18px; border: 0 solid #ff453a; opacity: 0.95; filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.35)); }
+.rec-frame .tl { left: -5px; top: -5px; border-width: 3px 0 0 3px; border-radius: 4px 0 0 0; }
+.rec-frame .tr { right: -5px; top: -5px; border-width: 3px 3px 0 0; border-radius: 0 4px 0 0; }
+.rec-frame .bl { left: -5px; bottom: -5px; border-width: 0 0 3px 3px; border-radius: 0 0 0 4px; }
+.rec-frame .br { right: -5px; bottom: -5px; border-width: 0 3px 3px 0; border-radius: 0 0 4px 0; }
+.rec.paused .rec-frame i { border-color: #ffd23f; }
+.rec.in-shot .rec-frame, .rec.in-shot.live .rec-pill { display: none; }
+
+.rec-count {
+  position: absolute; transform: translate(-50%, -50%); display: flex; flex-direction: column; align-items: center; gap: 14px;
+  opacity: 0; transition: opacity 0.16s ease;
+}
+.rec-count.in { opacity: 1; }
+.rec-count b {
+  display: grid; place-items: center; width: 132px; height: 132px; border-radius: 50%;
+  background: rgba(14, 14, 18, 0.78); color: #fff; font: 600 68px/1 var(--font); letter-spacing: -0.04em;
+  -webkit-backdrop-filter: blur(14px) saturate(1.4); backdrop-filter: blur(14px) saturate(1.4);
+  box-shadow: 0 24px 60px -18px rgba(0, 0, 0, 0.7), inset 0 0 0 1px rgba(255, 255, 255, 0.1);
+}
+.rec-count b.pop { animation: rec-pop 0.5s cubic-bezier(0.2, 0.9, 0.3, 1.2); }
+@keyframes rec-pop { from { transform: scale(1.25); opacity: 0.2; } }
+.rec-count span {
+  padding: 7px 13px; border-radius: 999px; background: rgba(14, 14, 18, 0.8); color: rgba(255, 255, 255, 0.88);
+  font-size: 13px; font-weight: 500; white-space: nowrap;
+  -webkit-backdrop-filter: blur(12px); backdrop-filter: blur(12px);
+}
+.rec-count kbd { background: rgba(255, 255, 255, 0.12); border-color: rgba(255, 255, 255, 0.16); color: #fff; }
+
+.rec-pill.panel {
+  position: absolute; pointer-events: auto; display: flex; align-items: center; gap: 6px; height: 40px; padding: 0 6px 0 12px;
+  background: rgba(16, 16, 20, 0.88); color: #fff; border: 1px solid rgba(255, 255, 255, 0.1); border-radius: 999px;
+  /* A tight shadow: a wide one would spill into the frame and be filmed. */
+  box-shadow: 0 8px 18px -10px rgba(0, 0, 0, 0.7), inset 0 1px 0 rgba(255, 255, 255, 0.06);
+  -webkit-backdrop-filter: blur(18px) saturate(1.4); backdrop-filter: blur(18px) saturate(1.4);
+  opacity: 0; transition: opacity 0.2s ease;
+}
+.rec.live .rec-pill { opacity: 1; }
+.rec-time { display: inline-flex; align-items: center; gap: 8px; margin-right: 4px; }
+.rec-time b { font: 600 13px/1 var(--mono); letter-spacing: 0.01em; min-width: 34px; font-variant-numeric: tabular-nums; }
+.rec.live:not(.paused) .rec-time .rec-dot { animation: rec-blink 1.2s ease-in-out infinite; }
+.rec.paused .rec-time .rec-dot { background: #ffd23f; }
+@keyframes rec-blink { 50% { opacity: 0.25; } }
+.rec-mic { display: grid; place-items: center; color: rgba(255, 255, 255, 0.7); }
+.rec-pill button {
+  display: inline-flex; align-items: center; justify-content: center; gap: 7px; height: 28px; min-width: 28px; padding: 0 8px;
+  border: 0; border-radius: 999px; background: transparent; color: #fff; font: 600 12.5px/1 var(--font); cursor: pointer;
+}
+.rec-pill button:hover { background: rgba(255, 255, 255, 0.12); }
+.rec-pill button:focus-visible { outline: 2px solid #fff; outline-offset: 2px; }
+.rec-bars { width: 10px; height: 11px; border: solid #fff; border-width: 0 3px; box-sizing: border-box; }
+.rec.paused .rec-bars { width: 0; height: 0; border: solid transparent; border-width: 6px 0 6px 10px; border-left-color: #fff; }
+.rec-stop { background: rgba(255, 69, 58, 0.18) !important; padding: 0 12px 0 10px !important; }
+.rec-stop:hover { background: rgba(255, 69, 58, 0.32) !important; }
+.rec-stop i { width: 10px; height: 10px; border-radius: 2.5px; background: #ff453a; }
+
+/* The finished take, where screenshots land. */
+.rec-card .shot-card-thumb { background: #0c0c10; }
+.rec-card .shot-real { object-fit: cover; }
+.shot-card.unkept .shot-card-body b { color: var(--danger); }
+.mtile-play {
+  position: absolute; left: 50%; top: 50%; width: 38px; height: 38px; margin: -19px 0 0 -19px; border-radius: 50%;
+  background: rgba(12, 12, 16, 0.72); box-shadow: 0 6px 18px -6px rgba(0, 0, 0, 0.6), inset 0 0 0 1px rgba(255, 255, 255, 0.18);
+  -webkit-backdrop-filter: blur(8px); backdrop-filter: blur(8px); pointer-events: none;
+}
+.mtile-play::after {
+  content: ""; position: absolute; left: 50%; top: 50%; margin: -7px 0 0 -4px;
+  border: solid transparent; border-width: 7px 0 7px 11px; border-left-color: #fff;
+}
+.shot-card .mtile-play { width: 30px; height: 30px; margin: -15px 0 0 -15px; }
+.shot-card .mtile-play::after { margin: -6px 0 0 -3px; border-width: 6px 0 6px 9px; }
+.mtile-len {
+  position: absolute; right: 8px; bottom: 8px; padding: 3px 6px; border-radius: 5px; font-style: normal;
+  background: rgba(12, 12, 16, 0.78); color: #fff; font: 600 11px/1 var(--mono); font-variant-numeric: tabular-nums;
+}
+.md-stage video { max-width: 100%; max-height: 100%; display: block; border-radius: 6px; background: #000; box-shadow: 0 22px 50px -24px rgba(0, 0, 0, 0.6); animation: md-in 0.3s cubic-bezier(0.2, 0.9, 0.3, 1.1); }
+.media-new.quiet { background: transparent; color: var(--fg); box-shadow: inset 0 0 0 1px var(--line-strong); }
+.media-new.quiet kbd { background: var(--hover); color: var(--fg-2); opacity: 1; }
+.media-new.quiet:hover { background: var(--hover); opacity: 1; }
+@media (max-width: 760px) { .shot-kind { order: -2; } .shot-kind span { display: none; } }
+@media (prefers-reduced-motion: reduce) { .rec-count b.pop, .rec.live .rec-time .rec-dot { animation: none !important; } }
+
 /* ---------------------------------------------------------------- media gallery */
 .auth-card.media-card {
   width: min(1060px, 100%); height: min(780px, calc(100dvh - 32px));

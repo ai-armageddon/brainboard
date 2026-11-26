@@ -23,6 +23,7 @@ import { startTour } from './tour';
 import { openAuth, signOut } from './account';
 import { openExport } from './export';
 import { openScreenshot } from './screenshot';
+import { recordingActive, stopRecording } from './record';
 import { openMedia } from './media';
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
@@ -414,7 +415,7 @@ export function buildUI() {
     if (act !== 'theme' && act !== 'vim' && act !== 'writing') closePopovers();
     switch (act) {
       case 'fit': if (userMovedCamera()) zoomToFit(); break;
-      case 'record-screen': window.open('/recorder/', '_blank', 'noopener,noreferrer'); break;
+      case 'record': if (recordingActive()) stopRecording(); else openScreenshot('video'); break;
       case 'export': openExport(); break;
       case 'screenshot': openScreenshot(); break;
       case 'media': openMedia(undefined, openScreenshot); break;

@@ -174,8 +174,8 @@
         <button data-action="rename">Rename board…</button>
       </div>
       <button data-action="fit">Zoom to fit <kbd>⇧1</kbd></button>
-      <button data-action="record-screen">Screen recorder</button>
       <button data-action="screenshot">Screenshot… <kbd>⇧⌘S</kbd></button>
+      <button data-action="record">Record board… <kbd>⌥R</kbd></button>
       <button data-action="media">Media <kbd>⌥M</kbd></button>
       <button data-action="export">Export… <kbd>⇧⌘E</kbd></button>
       <button data-action="import" class="owner-only">Import board…</button>
@@ -224,7 +224,7 @@
     <nav id="toolbar" class="panel" aria-label="Tools">
       <button class="tbtn" data-tool="select" data-icon="select" data-tip="Select · V" aria-label="Select"></button>
       <button class="tbtn" data-tool="hand" data-icon="hand" data-tip="Pan · H, Space or ⌘-drag" data-vim-tip="Pan · :hand or hold Space" aria-label="Pan"></button>
-      <button id="shot-btn" class="tbtn" data-icon="camera" data-tip="Screenshot · ⇧⌘S" data-vim-tip="Screenshot · :shot or ⇧⌘S" aria-label="Screenshot"></button>
+      <button id="shot-btn" class="tbtn" data-icon="camera" data-tip="Screenshot · ⇧⌘S  ·  Record · ⌥R" data-vim-tip="Screenshot · :shot or ⇧⌘S  ·  Record · :record or ⌥R" aria-label="Screenshot or recording"></button>
       <span class="sep"></span>
       <button class="tbtn edit-tool" data-tool="pen" data-icon="pen" data-tip="Pen · P" aria-label="Pen"></button>
       <button class="tbtn edit-tool" data-tool="eraser" data-icon="eraser" data-tip="Eraser · E" data-vim-tip="Eraser · :eraser" aria-label="Eraser"></button>
@@ -332,7 +332,8 @@
               <dt>Zoom to fit</dt><dd><kbd>⇧1</kbd></dd>
               <dt>Zoom to 100%</dt><dd><kbd>⌘0</kbd></dd>
               <dt>Screenshot</dt><dd><kbd>⇧⌘S</kbd></dd>
-              <dt>Media (your screenshots)</dt><dd><kbd>⌥M</kbd></dd>
+              <dt>Record the board (again to stop)</dt><dd><kbd>⌥R</kbd></dd>
+              <dt>Media (shots and recordings)</dt><dd><kbd>⌥M</kbd></dd>
               <dt>Undo / Redo</dt><dd><kbd>⌘Z</kbd> <kbd>⇧⌘Z</kbd></dd>
             </dl>
           </section>

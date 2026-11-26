@@ -28,7 +28,7 @@ function brainboardServer(): Plugin {
 
 export default defineConfig({
   plugins: [brainboardServer()],
-  build: { rollupOptions: { input: { board: 'index.html', changelog: 'changelog/index.html', recorder: 'recorder/index.html' } } },
+  build: { rollupOptions: { input: { board: 'index.html', changelog: 'changelog/index.html' } } },
   server: { port: 5317, host: 'localhost' },
   preview: { port: 5317, host: 'localhost' },
 });
