@@ -1,7 +1,7 @@
 // HTTP API (mounted in the Vite dev server and in server/main.ts). Live editing goes over /ws.
 import { acceptsPicture } from './profile-picture.ts';
 import os from 'node:os';
-import { promises as fs } from 'node:fs';
+import { createReadStream, promises as fs } from 'node:fs';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import {
   NotFoundError, createBoard, findImage, listBoards, metaOf, putImage, readBoard, renameBoard, trashBoard, isValidId,
@@ -17,7 +17,8 @@ import {
 import { liveBoard, liveBoardPresence, onlineByInvite, refreshAccess } from './realtime.ts';
 import { EXPORT_TYPES, exportBoard, type ExportFormat } from './export.ts';
 import {
-  BACKDROPS, addShot, cleanMediaName, getMedia, listMedia, mediaFile, publicMedia, renameMedia, renderShot, transferMedia, trashMedia, type Backdrop,
+  BACKDROPS, RecordingError, VIDEO_TYPES, addRecording, addShot, cleanMediaName, getMedia, itemFile, listMedia, mediaFile, publicMedia,
+  recordingBytes, renameMedia, renderShot, setPoster, transferMedia, trashMedia, type Backdrop, type VideoExt,
 } from './media.ts';
 import {
   checkPassword, cleanEmail, cleanName, createSession, createUser, endSession, getUser, limited, publicUser, updateUser, userByEmail,
@@ -28,6 +29,9 @@ import { HOSTED, ICE_SERVERS, PUBLIC_URL } from './config.ts';
 import { BROWSE_ENABLED, handleBrowse } from './browse.ts';
 
 const MAX_BODY = 30 * 1024 * 1024;
+/** One recording, and (on the hosted service) all of one person's recordings together. */
+const MAX_RECORDING = (HOSTED ? 300 : 4096) * 1024 * 1024;
+const MAX_RECORDINGS = 2048 * 1024 * 1024;
 
 /** Set by the server entry point: is this server reachable from other machines? */
 export const network = { lan: false };
@@ -232,25 +236,98 @@ export async function handleApi(req: IncomingMessage, res: ServerResponse): Prom
       return send(res, 201, publicMedia(item)), true;
     }
 
-    // ---- media: your own screenshots
+    // ---- media: your own screenshots and recordings
     if (parts[0] === 'media') {
       const mine = (owner: string | null) => ownsKey(p, owner);
-      const id = parts[1]?.replace(/\.png$/, '');
+      const id = parts[1]?.replace(/\.(png|mp4|webm)$/, '');
       if (!id && method === 'GET') return send(res, 200, (await listMedia(mine)).map(publicMedia)), true;
+
+      // A recording made in the browser: the video is the request body, its details are in the query.
+      if (!id && method === 'POST') {
+        const owner = ownerKeyOf(p);
+        if (!owner && !p.local) return send(res, 403, { error: 'forbidden' }), true;
+        const ext = (Object.keys(VIDEO_TYPES) as VideoExt[]).find((e) => (req.headers['content-type'] ?? '').startsWith(VIDEO_TYPES[e]));
+        if (!ext) return send(res, 415, { error: 'Send the recording as MP4 or WebM' }), true;
+        if (Number(req.headers['content-length']) > MAX_RECORDING) return send(res, 413, { error: 'That recording is too long to keep. Save it to your computer instead.' }), true;
+        if (limited(`rec:${clientIp(req)}`, 40)) return send(res, 429, { error: 'Too many recordings at once. Try again in a few minutes.' }), true;
+        if (HOSTED && (await recordingBytes(owner)) > MAX_RECORDINGS) return send(res, 413, { error: 'Your Media is full of recordings. Delete some to keep new ones.' }), true;
+        const q = url.searchParams;
+        // Say which board it's of only if they can open that board.
+        const boardId = q.get('board');
+        let board: { id: string; name: string } | null = null;
+        if (boardId && isValidId(boardId)) {
+          const token = inviteToken(req, url);
+          if ((await owns(p, boardId)) || (token && (await findInvite(boardId, token)))) {
+            const b = (await liveBoard(boardId)) ?? (await readBoard(boardId).catch(() => null));
+            if (b) board = { id: b.id, name: b.name };
+          }
+        }
+        const size = (v: string | null) => Math.min(Math.max(Math.round(Number(v)) || 0, 0), 16384);
+        const backdrop: Backdrop = (BACKDROPS as readonly string[]).includes(String(q.get('backdrop'))) ? q.get('backdrop') as Backdrop : 'none';
+        try {
+          const item = await addRecording({
+            name: cleanMediaName(q.get('name')) || `${board?.name ?? 'Brainboard'} recording`, owner, board, ext,
+            w: size(q.get('w')), h: size(q.get('h')), duration: Math.min(Math.max(Number(q.get('duration')) || 0, 0), 86400),
+            backdrop, theme: q.get('theme') === 'dark' ? 'dark' : 'light',
+          }, req, MAX_RECORDING);
+          return send(res, 201, publicMedia(item)), true;
+        } catch (e) {
+          if (e instanceof RecordingError) return send(res, e.status, { error: e.message }), true;
+          throw e;
+        }
+      }
+
       const it = id ? await getMedia(id) : null;
       if (!it || !mine(it.owner)) return send(res, 404, { error: 'not found' }), true;
+      if (parts[2] === 'poster' && method === 'PUT') {
+        if (it.kind !== 'recording') return send(res, 400, { error: 'Only recordings have a preview to set' }), true;
+        try {
+          await setPoster(it.id, await readBody(req));
+        } catch (e) {
+          if (e instanceof RecordingError) return send(res, e.status, { error: e.message }), true;
+          throw e;
+        }
+        return send(res, 200, { ok: true }), true;
+      }
       if (method === 'GET') {
         const thumb = url.searchParams.has('thumb');
-        const data = await fs.readFile(mediaFile(it.id, thumb)).catch(() => (thumb ? fs.readFile(mediaFile(it.id)) : null));
-        if (!data) return send(res, 404, { error: 'not found' }), true;
-        const name = `${it.name}.png`;
-        res.writeHead(200, {
-          'content-type': 'image/png',
+        const video = it.kind === 'recording' && !thumb;
+        const ext = video ? it.ext ?? 'webm' : 'png';
+        const name = `${it.name}.${ext}`;
+        const head = {
+          'content-type': video ? VIDEO_TYPES[ext as VideoExt] : 'image/png',
           'cache-control': 'private, max-age=31536000, immutable',
+          'x-content-type-options': 'nosniff',
           ...(url.searchParams.has('download')
             ? { 'content-disposition': `attachment; filename="${name.replace(/[^\x20-\x7e]/g, '_').replace(/"/g, '')}"; filename*=UTF-8''${encodeURIComponent(name)}` }
             : {}),
-        });
+        };
+        if (video) {
+          // Videos are sent in the pieces the player asks for, so it can start at once and skip around.
+          const file = itemFile(it);
+          const size = (await fs.stat(file).catch(() => null))?.size;
+          if (!size) return send(res, 404, { error: 'not found' }), true;
+          const m = /^bytes=(\d*)-(\d*)$/.exec(String(req.headers.range ?? ''));
+          let start = 0, end = size - 1;
+          if (m && (m[1] || m[2])) {
+            if (m[1]) { start = Number(m[1]); if (m[2]) end = Math.min(Number(m[2]), size - 1); }
+            else start = Math.max(0, size - Number(m[2]));
+            if (start > end || start >= size) {
+              res.writeHead(416, { 'content-range': `bytes */${size}` });
+              res.end();
+              return true;
+            }
+            res.writeHead(206, { ...head, 'accept-ranges': 'bytes', 'content-range': `bytes ${start}-${end}/${size}`, 'content-length': end - start + 1 });
+          } else res.writeHead(200, { ...head, 'accept-ranges': 'bytes', 'content-length': size });
+          const stream = createReadStream(file, { start, end });
+          stream.on('error', () => res.destroy());
+          stream.pipe(res);
+          return true;
+        }
+        // A screenshot's thumbnail falls back to the shot itself; a recording without a preview has nothing to show.
+        const data = await fs.readFile(mediaFile(it.id, thumb)).catch(() => (thumb && it.kind !== 'recording' ? fs.readFile(mediaFile(it.id)) : null));
+        if (!data) return send(res, 404, { error: 'not found' }), true;
+        res.writeHead(200, head);
         res.end(data);
         return true;
       }

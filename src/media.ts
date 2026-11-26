@@ -1,5 +1,5 @@
-// Media: every screenshot you take lands here. Browse them, rename them, put one on the board, copy it,
-// or save it anywhere: "Save as…" asks where (Chrome, Edge, Opera); other browsers save to Downloads.
+// Media: every screenshot and recording you take lands here. Browse them, rename them, put a shot on the board,
+// copy it, or save it anywhere: "Save as…" asks where (Chrome, Edge, Opera); other browsers save to Downloads.
 import { session, canEdit } from './net';
 import { addImages, viewCenter } from './actions';
 import { icon } from './icons';
@@ -9,7 +9,10 @@ import { keyLabel } from './keys';
 export type Backdrop = 'none' | 'aurora' | 'sunset' | 'ocean' | 'mist' | 'night';
 export interface MediaItem {
   id: string;
-  kind: 'screenshot';
+  kind: 'screenshot' | 'recording';
+  /** recordings: the file type, and the length in seconds */
+  ext?: 'mp4' | 'webm';
+  duration?: number;
   name: string;
   board: { id: string; name: string } | null;
   w: number;
@@ -24,10 +27,13 @@ export const BACKDROP_NAMES: Record<Backdrop, string> = {
   none: 'Clean', aurora: 'Aurora', sunset: 'Sunset', ocean: 'Ocean', mist: 'Mist', night: 'Night',
 };
 
-export const mediaUrl = (id: string, o: { thumb?: boolean; download?: boolean } = {}) =>
-  `/api/media/${encodeURIComponent(id)}.png${o.thumb ? '?thumb' : o.download ? '?download' : ''}`;
+const isVideo = (it: MediaItem) => it.kind === 'recording';
+const extOf = (it: MediaItem) => (isVideo(it) ? it.ext ?? 'webm' : 'png');
+/** The item's file (a PNG, or a recording's video), or with `thumb` its small still. */
+export const mediaUrl = (it: MediaItem, o: { thumb?: boolean; download?: boolean } = {}) =>
+  `/api/media/${encodeURIComponent(it.id)}.${o.thumb ? 'png' : extOf(it)}${o.thumb ? '?thumb' : o.download ? '?download' : ''}`;
 
-/** Events: "added" (a new shot) so open galleries and the camera roll refresh. */
+/** Events: "added" (a new shot or recording) so open galleries and the camera roll refresh. */
 export const mediaEvents = new EventTarget();
 let cache: MediaItem[] | null = null;
 
@@ -56,32 +62,62 @@ export async function takeScreenshot(body: {
   return item;
 }
 
+/**
+ * Keep a recording made in this browser: the video goes up as it is, then one frame of it as the still shown in
+ * Media. The still is a nicety, so a recording is kept even if that part fails.
+ */
+export async function keepRecording(video: Blob, poster: Blob | null, meta: {
+  name: string; w: number; h: number; duration: number; theme: 'light' | 'dark'; backdrop: Backdrop;
+}): Promise<MediaItem> {
+  const q = new URLSearchParams({
+    name: meta.name, w: String(meta.w), h: String(meta.h), duration: String(Math.round(meta.duration * 10) / 10),
+    theme: meta.theme, backdrop: meta.backdrop, ...(session.boardId ? { board: session.boardId } : {}),
+  });
+  const invite: Record<string, string> = session.invite ? { 'x-invite': session.invite } : {};
+  const res = await fetch(`/api/media?${q}`, {
+    method: 'POST', headers: { 'content-type': video.type.includes('mp4') ? 'video/mp4' : 'video/webm', ...invite }, body: video,
+  });
+  if (!res.ok) throw new Error((await res.json().catch(() => null))?.error ?? `HTTP ${res.status}`);
+  const item = await res.json() as MediaItem;
+  if (poster) await fetch(`/api/media/${item.id}/poster`, { method: 'PUT', headers: { 'content-type': 'image/png', ...invite }, body: poster }).catch(() => {});
+  cache = [item, ...(cache ?? []).filter((i) => i.id !== item.id)];
+  mediaEvents.dispatchEvent(new CustomEvent('added', { detail: item }));
+  return item;
+}
+
 // ---------------------------------------------------------------- actions on one item
 
-const fileName = (it: MediaItem) => `${it.name.replace(/[\\/:*?"<>|]+/g, '').trim() || 'Screenshot'}.png`;
+const fileName = (it: MediaItem) => `${it.name.replace(/[\\/:*?"<>|]+/g, '').trim() || (isVideo(it) ? 'Recording' : 'Screenshot')}.${extOf(it)}`;
 const fetchBlob = async (it: MediaItem) => {
-  const res = await fetch(mediaUrl(it.id));
-  if (!res.ok) throw new Error('Could not load the image');
+  const res = await fetch(mediaUrl(it));
+  if (!res.ok) throw new Error(isVideo(it) ? 'Could not load the recording' : 'Could not load the image');
   return res.blob();
+};
+const fileType = (it: MediaItem) => {
+  const ext = extOf(it);
+  return { description: ext === 'png' ? 'PNG image' : ext === 'mp4' ? 'MP4 video' : 'WebM video', accept: { [ext === 'png' ? 'image/png' : `video/${ext}`]: [`.${ext}`] } };
 };
 
 type Picker = (o: { suggestedName: string; startIn?: string; types: { description: string; accept: Record<string, string[]> }[] }) => Promise<FileSystemFileHandle>;
 const picker = (window as unknown as { showSaveFilePicker?: Picker }).showSaveFilePicker;
 export const canChooseFolder = !!picker;
 
-/** Ask where to save it (desktop, anywhere) when the browser can; otherwise it goes to Downloads. */
-export async function saveMedia(it: MediaItem): Promise<boolean> {
+/**
+ * Ask where to save it (desktop, anywhere) when the browser can; otherwise it goes to Downloads.
+ * A recording that was just made can be handed over as `have`, to save it without fetching it back.
+ */
+export async function saveMedia(it: MediaItem, have?: Blob): Promise<boolean> {
   if (picker) {
     let handle: FileSystemFileHandle;
     try {
-      handle = await picker({ suggestedName: fileName(it), startIn: 'desktop', types: [{ description: 'PNG image', accept: { 'image/png': ['.png'] } }] });
+      handle = await picker({ suggestedName: fileName(it), startIn: 'desktop', types: [fileType(it)] });
     } catch (e) {
       if ((e as Error).name === 'AbortError') return false;
-      return download(it);
+      return download(it, have);
     }
     try {
       const w = await handle.createWritable();
-      await w.write(await fetchBlob(it));
+      await w.write(have ?? await fetchBlob(it));
       await w.close();
       toast(`Saved ${handle.name}`);
       return true;
@@ -90,21 +126,24 @@ export async function saveMedia(it: MediaItem): Promise<boolean> {
       return false;
     }
   }
-  return download(it);
+  return download(it, have);
 }
 
-function download(it: MediaItem) {
+function download(it: MediaItem, have?: Blob) {
   const a = document.createElement('a');
-  a.href = mediaUrl(it.id, { download: true });
+  const local = have ? URL.createObjectURL(have) : '';
+  a.href = local || mediaUrl(it, { download: true });
   a.download = fileName(it);
   document.body.append(a);
   a.click();
   a.remove();
+  if (local) setTimeout(() => URL.revokeObjectURL(local), 60_000);
   toast('Saved to your Downloads folder');
   return true;
 }
 
 export async function copyMedia(it: MediaItem) {
+  if (isVideo(it)) return toast('Recordings can’t be copied. Save it instead');
   try {
     // A promise keeps Safari's user-gesture window open while the image loads.
     await navigator.clipboard.write([new ClipboardItem({ 'image/png': fetchBlob(it) })]);
@@ -116,6 +155,7 @@ export async function copyMedia(it: MediaItem) {
 
 export async function placeMedia(it: MediaItem) {
   if (!canEdit() || (!session.boardId && !session.draft)) return toast('You can only view this board');
+  if (isVideo(it)) return toast('Recordings can’t be put on a board yet');
   try {
     const file = new File([await fetchBlob(it)], fileName(it), { type: 'image/png' });
     await addImages([file], viewCenter());
@@ -130,6 +170,12 @@ const esc = (s: string) => s.replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`)
 const dims = (it: MediaItem) => `${it.w.toLocaleString()} × ${it.h.toLocaleString()}`;
 const size = (b: number) => (b > 1048576 ? `${(b / 1048576).toFixed(1)} MB` : `${Math.max(1, Math.round(b / 1024))} KB`);
 const when = (iso: string) => new Date(iso).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
+/** A recording's length: 0:07, 12:40, 1:02:03. */
+export function clock(seconds: number) {
+  const s = Math.max(0, Math.round(seconds));
+  const p = (n: number) => String(n).padStart(2, '0');
+  return s >= 3600 ? `${Math.floor(s / 3600)}:${p(Math.floor(s / 60) % 60)}:${p(s % 60)}` : `${Math.floor(s / 60)}:${p(s % 60)}`;
+}
 const time = (iso: string) => new Date(iso).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
 
 function group(iso: string) {
@@ -144,8 +190,8 @@ function group(iso: string) {
 
 let sheet: HTMLDivElement | null = null;
 
-/** Open the Media gallery, optionally straight onto one shot. */
-export function openMedia(focus?: string, onNew?: () => void) {
+/** Open the Media gallery, optionally straight onto one item. `onNew` opens the camera, for a photo or a video. */
+export function openMedia(focus?: string, onNew?: (kind?: 'photo' | 'video') => void) {
   if (sheet) { if (focus) sheet.dispatchEvent(new CustomEvent('focus-item', { detail: focus })); return; }
   let items: MediaItem[] = cache ?? [];
   let scope: 'all' | 'board' = 'all';
@@ -160,13 +206,14 @@ export function openMedia(focus?: string, onNew?: () => void) {
     <div class="media-head">
       <div>
         <div class="auth-eyebrow">Media</div>
-        <h2 id="media-title">Screenshots <span class="media-count"></span></h2>
+        <h2 id="media-title">Shots &amp; recordings <span class="media-count"></span></h2>
       </div>
       <div class="media-tools">
         <div class="xseg media-scope" role="radiogroup" aria-label="Show">
           <button role="radio" data-scope="all">All</button><button role="radio" data-scope="board">This board</button>
         </div>
-        <button class="media-new" data-new>${icon('camera', 17)}<span>New screenshot</span>${keyLabel('<kbd>⇧⌘S</kbd>')}</button>
+        <button class="media-new quiet" data-new="video"><i class="rec-dot"></i><span>Record</span>${keyLabel('<kbd>⌥R</kbd>')}</button>
+        <button class="media-new" data-new="photo">${icon('camera', 17)}<span>New screenshot</span>${keyLabel('<kbd>⇧⌘S</kbd>')}</button>
       </div>
     </div>
     <div class="media-grid" aria-live="polite"></div>
@@ -178,7 +225,7 @@ export function openMedia(focus?: string, onNew?: () => void) {
   const grid = el.querySelector<HTMLElement>('.media-grid')!;
   const detail = el.querySelector<HTMLElement>('.media-detail')!;
   if (!session.boardId) el.querySelector<HTMLElement>('.media-scope')!.hidden = true;
-  if (!onNew) el.querySelector<HTMLElement>('[data-new]')!.hidden = true;
+  if (!onNew) el.querySelectorAll<HTMLElement>('[data-new]').forEach((b) => { b.hidden = true; });
 
   const shown = () => (scope === 'board' && session.boardId ? items.filter((i) => i.board?.id === session.boardId) : items);
 
@@ -189,9 +236,9 @@ export function openMedia(focus?: string, onNew?: () => void) {
     if (!list.length) {
       grid.innerHTML = `<div class="media-empty">
         <div class="media-empty-art" aria-hidden="true"><i></i><i></i><i></i>${icon('camera', 30)}</div>
-        <b>${items.length ? 'No screenshots of this board yet' : 'No screenshots yet'}</b>
-        <span>Frame the whole screen, an area you drag, your selection or a saved view. Every shot is kept here.</span>
-        ${onNew ? `<button class="auth-passkey media-empty-go" data-new>${icon('camera', 18)}<span>Take a screenshot</span></button>` : ''}
+        <b>${items.length ? 'Nothing captured on this board yet' : 'Nothing captured yet'}</b>
+        <span>Frame the whole screen, an area you drag, your selection or a saved view, then take a screenshot or record a video. Everything is kept here.</span>
+        ${onNew ? `<button class="auth-passkey media-empty-go" data-new="photo">${icon('camera', 18)}<span>Take a screenshot</span></button>` : ''}
       </div>`;
       return;
     }
@@ -199,13 +246,17 @@ export function openMedia(focus?: string, onNew?: () => void) {
     for (const it of list) {
       const g = group(it.created);
       if (g !== last) { html += `${last ? '</div>' : ''}<h3 class="media-group">${esc(g)}</h3><div class="media-tiles">`; last = g; }
-      html += `<button class="mtile" data-id="${it.id}" style="--ar:${it.w}/${it.h}" aria-label="${esc(it.name)}">
-        <span class="mtile-img"><img loading="lazy" decoding="async" alt="" src="${mediaUrl(it.id, { thumb: true })}"></span>
+      html += `<button class="mtile${isVideo(it) ? ' video' : ''}" data-id="${it.id}" style="--ar:${it.w}/${it.h}" aria-label="${esc(it.name)}${isVideo(it) ? ', recording' : ''}">
+        <span class="mtile-img"><img loading="lazy" decoding="async" alt="" src="${mediaUrl(it, { thumb: true })}">${isVideo(it) ? `<i class="mtile-play"></i><em class="mtile-len">${clock(it.duration ?? 0)}</em>` : ''}</span>
         <span class="mtile-meta"><b>${esc(it.name)}</b><em>${it.board && scope === 'all' ? `${esc(it.board.name)} · ` : ''}${time(it.created)}</em></span>
       </button>`;
     }
     grid.innerHTML = html + '</div>';
-    for (const img of grid.querySelectorAll('img')) img.addEventListener('load', () => img.classList.add('in'), { once: true });
+    for (const img of grid.querySelectorAll('img')) {
+      img.addEventListener('load', () => img.classList.add('in'), { once: true });
+      // A recording whose still never arrived just shows its play button.
+      img.addEventListener('error', () => img.remove(), { once: true });
+    }
   }
 
   function renderDetail() {
@@ -219,25 +270,28 @@ export function openMedia(focus?: string, onNew?: () => void) {
     const prev = list[i - 1], next = list[i + 1];
     detail.innerHTML = `
       <div class="md-stage ${it.backdrop === 'none' ? 'plain' : ''}">
-        <img alt="${esc(it.name)}" src="${mediaUrl(it.id)}">
+        ${isVideo(it)
+    ? `<video controls playsinline preload="metadata" poster="${mediaUrl(it, { thumb: true })}" src="${mediaUrl(it)}" aria-label="${esc(it.name)}"></video>`
+    : `<img alt="${esc(it.name)}" src="${mediaUrl(it)}">`}
         <button class="md-nav prev" data-go="${prev?.id ?? ''}" ${prev ? '' : 'disabled'} aria-label="Previous">${icon('chevronLeft', 20)}</button>
         <button class="md-nav next" data-go="${next?.id ?? ''}" ${next ? '' : 'disabled'} aria-label="Next">${icon('chevronRight', 20)}</button>
       </div>
       <div class="md-side">
-        <button class="md-back" data-back>${icon('chevronLeft', 16)}<span>All screenshots</span></button>
-        <label class="auth-field"><span>Name</span><span class="xname"><input name="name" spellcheck="false" maxlength="100"><i>.png</i></span></label>
+        <button class="md-back" data-back>${icon('chevronLeft', 16)}<span>All media</span></button>
+        <label class="auth-field"><span>Name</span><span class="xname"><input name="name" spellcheck="false" maxlength="100"><i>.${extOf(it)}</i></span></label>
         <dl class="md-facts">
+          ${isVideo(it) ? `<dt>Length</dt><dd>${clock(it.duration ?? 0)}</dd>` : ''}
           <dt>Size</dt><dd>${dims(it)} px · ${size(it.bytes)}</dd>
           <dt>Look</dt><dd><i class="md-swatch" data-look="${it.backdrop}"></i>${BACKDROP_NAMES[it.backdrop]} · ${it.theme === 'dark' ? 'Dark' : 'Light'}</dd>
           ${it.board ? `<dt>Board</dt><dd>${esc(it.board.name)}</dd>` : ''}
-          <dt>Taken</dt><dd>${when(it.created)}</dd>
+          <dt>${isVideo(it) ? 'Recorded' : 'Taken'}</dt><dd>${when(it.created)}</dd>
         </dl>
         <button class="auth-passkey md-save" data-act="save">${icon('download', 18)}<span>${canChooseFolder ? 'Save as…' : 'Download'}</span></button>
         <p class="xfine">${canChooseFolder ? 'Choose any folder, like your Desktop.' : 'Saves to your Downloads folder. To pick a folder each time, turn on “Ask where to save each file” in your browser’s settings.'}</p>
-        <div class="md-row">
+        ${isVideo(it) ? '' : `<div class="md-row">
           <button class="auth-submit" data-act="copy">${icon('copy', 16)}<span>Copy</span></button>
           ${canEdit() && (session.boardId || session.draft) ? `<button class="auth-submit" data-act="place">${icon('place', 16)}<span>Put on board</span></button>` : ''}
-        </div>
+        </div>`}
         <button class="md-delete" data-act="delete">${icon('trash', 15)}<span>Delete</span></button>
       </div>`;
     const input = detail.querySelector<HTMLInputElement>('input[name="name"]')!;
@@ -282,7 +336,8 @@ export function openMedia(focus?: string, onNew?: () => void) {
   el.addEventListener('click', async (e) => {
     const t = e.target as Element;
     if (t.closest('[data-close]')) return close();
-    if (t.closest('[data-new]')) { close(); onNew?.(); return; }
+    const fresh = t.closest<HTMLElement>('[data-new]');
+    if (fresh) { close(); onNew?.(fresh.dataset.new === 'video' ? 'video' : 'photo'); return; }
     const scopeBtn = t.closest<HTMLElement>('[data-scope]');
     if (scopeBtn) { scope = scopeBtn.dataset.scope as 'all' | 'board'; return renderGrid(); }
     const tile = t.closest<HTMLElement>('.mtile');
@@ -313,7 +368,7 @@ export function openMedia(focus?: string, onNew?: () => void) {
         items = items.filter((x) => x.id !== it.id);
         cache = items;
         current = (list[i + 1] ?? list[i - 1])?.id ?? null;
-        toast('Screenshot moved to the trash');
+        toast(`${isVideo(it) ? 'Recording' : 'Screenshot'} moved to the trash`);
         show();
       } catch { toast('Couldn’t delete it'); }
     }

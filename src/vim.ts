@@ -21,6 +21,7 @@ import { openViews } from './views';
 import { saveCommand } from './account';
 import { openExport } from './export';
 import { openScreenshot } from './screenshot';
+import { recordingActive, stopRecording } from './record';
 import { openMedia } from './media';
 import { openBrowser } from './browse';
 import { pointerWorld, putClip, yank, clipBounds } from './input';
@@ -550,7 +551,8 @@ const COMMANDS: Cmd[] = [
   }, complete: (a) => filterPrefix(peerNames(), a) },
   { names: ['export', 'exp'], desc: 'Export as PNG, PDF, SVG, Markdown or a brainboard file', run: () => openExport() },
   { names: ['screenshot', 'shot', 'snap'], desc: 'Take a screenshot: the screen, an area, the selection or a view', run: () => openScreenshot() },
-  { names: ['media', 'shots'], desc: 'Open your screenshots', run: () => openMedia(undefined, openScreenshot) },
+  { names: ['record', 'rec', 'video'], desc: 'Record the board as a video: the screen, an area, the selection or a view. Again to stop', run: () => { if (recordingActive()) stopRecording(); else openScreenshot('video'); } },
+  { names: ['media', 'shots'], desc: 'Open your screenshots and recordings', run: () => openMedia(undefined, openScreenshot) },
   { names: ['import', 'r', 'read'], desc: 'Import a board file', run: () => { if (ownerOnly()) $('file-board').click(); } },
   { names: ['clear', '%d', '%delete'], desc: 'Clear the board (undoable)', run: () => clearBoard() },
   { names: ['undo', 'u', 'un'], desc: 'Undo', run: () => undo() },

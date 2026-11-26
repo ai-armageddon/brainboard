@@ -1,5 +1,6 @@
-// Media: screenshots of boards, kept per person in <DATA_DIR>/media/ (index.json plus <id>.png and <id>.thumb.png).
-// Each item belongs to the browser or account that took it ("anon:<id>" / "user:<id>"), or to this machine (null).
+// Media: screenshots and recordings of boards, kept per person in <DATA_DIR>/media/ (index.json plus <id>.png or
+// <id>.mp4 / <id>.webm, and <id>.thumb.png). Each item belongs to the browser or account that took it
+// ("anon:<id>" / "user:<id>"), or to this machine (null).
 import { promises as fs, mkdirSync } from 'node:fs';
 import path from 'node:path';
 import { DATA_DIR, TRASH_DIR, isValidId, newId, type Board } from './store.ts';
@@ -14,9 +15,16 @@ const INDEX = path.join(MEDIA_DIR, 'index.json');
 export const BACKDROPS = ['none', 'aurora', 'sunset', 'ocean', 'mist', 'night'] as const;
 export type Backdrop = (typeof BACKDROPS)[number];
 
+/** Recordings arrive from the browser's recorder: MP4 where it can make one, WebM otherwise. */
+export const VIDEO_TYPES = { mp4: 'video/mp4', webm: 'video/webm' } as const;
+export type VideoExt = keyof typeof VIDEO_TYPES;
+
 export interface MediaItem {
   id: string;
-  kind: 'screenshot';
+  kind: 'screenshot' | 'recording';
+  /** recordings: the file type, and the length in seconds */
+  ext?: VideoExt;
+  duration?: number;
   name: string;
   owner: string | null;
   board: { id: string; name: string } | null;
@@ -143,10 +151,12 @@ function persist() {
 /** What the browser sees of an item: not whose key owns it. */
 export const publicMedia = ({ owner: _owner, ...rest }: MediaItem) => rest;
 
-export const mediaFile = (id: string, thumb = false) => {
+export const mediaFile = (id: string, thumb = false, ext: 'png' | VideoExt = 'png') => {
   if (!isValidId(id)) throw new Error('Invalid media id');
-  return path.join(MEDIA_DIR, `${id}${thumb ? '.thumb' : ''}.png`);
+  return path.join(MEDIA_DIR, thumb ? `${id}.thumb.png` : `${id}.${ext}`);
 };
+/** Where an item's own file is: the PNG of a screenshot, or the video of a recording. */
+export const itemFile = (it: MediaItem) => mediaFile(it.id, false, it.kind === 'recording' ? it.ext ?? 'webm' : 'png');
 
 export const cleanMediaName = (s: unknown) => String(s ?? '').replace(/[\u0000-\u001f\\/:*?"<>|]+/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 100);
 
@@ -159,6 +169,63 @@ export async function addShot(meta: Omit<MediaItem, 'id' | 'created' | 'bytes' |
   list.unshift(item);
   await persist();
   return item;
+}
+
+export class RecordingError extends Error {
+  status: number;
+  constructor(status: number, message: string) { super(message); this.status = status; }
+}
+
+const isPng = (b: Buffer) => b.length > 8 && b.readUInt32BE(0) === 0x89504e47 && b.readUInt32BE(4) === 0x0d0a1a0a;
+/** Does the file start the way its type says? MP4 has "ftyp" in its first box; WebM opens with the EBML mark. */
+const looksLike = (ext: VideoExt, head: Buffer) => head.length >= 12 &&
+  (ext === 'mp4' ? head.toString('latin1', 4, 8) === 'ftyp' : head.readUInt32BE(0) === 0x1a45dfa3);
+
+/**
+ * Keep a recording. The video is written to disk as it arrives (recordings are far bigger than screenshots),
+ * and dropped if it passes `limit` bytes or turns out not to be a video.
+ */
+export async function addRecording(
+  meta: Omit<MediaItem, 'id' | 'created' | 'bytes' | 'kind'> & { ext: VideoExt }, body: AsyncIterable<Buffer>, limit: number,
+): Promise<MediaItem> {
+  const list = await load();
+  const id = newId();
+  const file = mediaFile(id, false, meta.ext);
+  const tmp = `${file}.part`;
+  const out = await fs.open(tmp, 'w');
+  let bytes = 0;
+  try {
+    for await (const chunk of body) {
+      if (!bytes && !looksLike(meta.ext, chunk)) throw new RecordingError(415, 'That isn’t a video Brainboard can keep');
+      bytes += chunk.length;
+      if (bytes > limit) throw new RecordingError(413, 'That recording is too long to keep. Save it to your computer instead.');
+      await out.write(chunk);
+    }
+    if (!bytes) throw new RecordingError(400, 'The recording was empty');
+    await out.close();
+    await fs.rename(tmp, file);
+  } catch (e) {
+    await out.close().catch(() => {});
+    await fs.unlink(tmp).catch(() => {});
+    throw e;
+  }
+  const item: MediaItem = {
+    id, kind: 'recording', created: new Date().toISOString(), bytes, ...meta, name: cleanMediaName(meta.name) || 'Recording',
+  };
+  list.unshift(item);
+  await persist();
+  return item;
+}
+
+/** The still shown for a recording in Media: one frame of it, sent by the browser that made it. */
+export async function setPoster(id: string, png: Buffer) {
+  if (!isPng(png)) throw new RecordingError(415, 'The preview must be a PNG');
+  await fs.writeFile(mediaFile(id, true), png);
+}
+
+/** How much room one person's recordings take. */
+export async function recordingBytes(owner: string | null) {
+  return (await load()).reduce((sum, i) => sum + (i.kind === 'recording' && i.owner === owner ? i.bytes : 0), 0);
 }
 
 export async function listMedia(visible: (owner: string | null) => boolean): Promise<MediaItem[]> {
@@ -178,16 +245,17 @@ export async function renameMedia(id: string, name: string): Promise<MediaItem |
   return it;
 }
 
-/** Deleted shots go to the trash folder, like boards. */
+/** Deleted shots and recordings go to the trash folder, like boards. */
 export async function trashMedia(id: string) {
   const list = await load();
   const i = list.findIndex((x) => x.id === id);
   if (i < 0) return;
-  list.splice(i, 1);
+  const [it] = list.splice(i, 1);
   await persist();
   const dir = path.join(TRASH_DIR, 'media');
   mkdirSync(dir, { recursive: true });
-  await fs.rename(mediaFile(id), path.join(dir, `${id}-${Date.now()}.png`)).catch(() => {});
+  const file = itemFile(it);
+  await fs.rename(file, path.join(dir, `${id}-${Date.now()}${path.extname(file)}`)).catch(() => {});
   await fs.unlink(mediaFile(id, true)).catch(() => {});
 }
 

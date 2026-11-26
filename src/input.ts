@@ -14,6 +14,7 @@ import { userMovedCamera } from './collab';
 import { vimKey } from './vim';
 import { openExport } from './export';
 import { openScreenshot } from './screenshot';
+import { recordingActive, stopRecording } from './record';
 import { openMedia } from './media';
 import { inkEnd, inkMove, inkStart } from './ink';
 import { eraseStroke } from './erase';
@@ -735,6 +736,8 @@ function onKeyDown(e: KeyboardEvent) {
   }
   if (e.altKey) {
     if (e.code === 'KeyM' && !e.shiftKey && !e.ctrlKey && !e.metaKey) { e.preventDefault(); openMedia(undefined, openScreenshot); return; }
+    // ⌥R opens the camera ready to record; while recording, it stops.
+    if (e.code === 'KeyR' && !e.shiftKey && !e.ctrlKey && !e.metaKey) { e.preventDefault(); if (recordingActive()) stopRecording(); else openScreenshot('video'); return; }
     // ⌥A/H/D align left/center/right, ⌥W/V/S top/middle/bottom, ⌥⇧H/V space evenly, ⌥⇧T tidy up.
     const kind = e.ctrlKey || e.metaKey ? null : arrangeForKey(e.code, e.shiftKey);
     if (kind && S.selected.size) {
