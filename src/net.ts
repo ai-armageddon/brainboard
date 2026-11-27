@@ -2,7 +2,7 @@
 import { S, getItem, noteLocalChange, pruneSelection, requestRender, resetHistory, setCollector, setSyncScheduler } from './state';
 import type { Item } from './types';
 import type {
-  BoardSettings, BoardView, BrowserAction, BrowserEvent, BrowserState, ClientMsg, Ink, LivePerson, Op, PeerInfo, Presence, Role, RtcSignal,
+  BoardSearchHit, BoardSettings, BoardView, BrowserAction, BrowserEvent, BrowserState, ClientMsg, Ink, LivePerson, Op, PeerInfo, Presence, Role, RtcSignal,
   ServerMsg,
 } from './protocol';
 import { validPicture } from './profile-picture';
@@ -112,9 +112,9 @@ const emit = (type: string, detail?: unknown) => events.dispatchEvent(new Custom
 
 // ---------------------------------------------------------------- REST
 
-async function j<T>(method: string, url: string, body?: unknown): Promise<T> {
+async function j<T>(method: string, url: string, body?: unknown, signal?: AbortSignal): Promise<T> {
   const res = await fetch(url, {
-    method,
+    method, signal,
     headers: { ...(body !== undefined ? { 'content-type': 'application/json' } : {}), ...(session.invite ? { 'x-invite': session.invite } : {}) },
     body: body !== undefined ? JSON.stringify(body) : undefined,
   });
@@ -124,6 +124,8 @@ async function j<T>(method: string, url: string, body?: unknown): Promise<T> {
 
 export const api = {
   boards: () => j<BoardMeta[]>('GET', '/api/boards'),
+  searchBoards: (query: string, signal: AbortSignal) =>
+    j<BoardSearchHit[]>('GET', `/api/board-search?q=${encodeURIComponent(query)}`, undefined, signal),
   board: (id: string) => j<{ id: string; name: string; items: Item[] }>('GET', `/api/boards/${id}`),
   createBoard: (name: string, items?: Item[]) => j<BoardMeta>('POST', '/api/boards', { name, items }),
   renameBoard: (id: string, name: string) => j<BoardMeta>('PATCH', `/api/boards/${id}`, { name }),

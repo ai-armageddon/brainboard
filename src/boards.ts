@@ -108,3 +108,12 @@ export function openBoard(id: string, name?: string) {
   joinBoard(id);
 }
 
+
+/** Switching to or from a guest board needs a fresh page with the destination's invite. */
+export function navigateToBoard(id: string, name: string, token?: string) {
+  if (id === session.boardId) return;
+  if (token || session.invite) {
+    const search = token ? `?invite=${encodeURIComponent(token)}` : '';
+    location.href = `/${search}#${encodeURIComponent(id)}`;
+  } else openBoard(id, name);
+}

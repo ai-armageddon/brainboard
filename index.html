@@ -169,6 +169,7 @@
     <div id="peer-pop" class="panel" hidden></div>
 
     <div id="menu" class="panel" role="menu" hidden>
+      <button data-action="search" aria-haspopup="dialog" aria-controls="board-search">Search… <kbd>⌘K</kbd></button>
       <button data-action="home" class="menu-home">All boards <kbd>⌥B</kbd></button>
       <button data-action="new-board" class="owner-only accent">New board <kbd>⌥N</kbd></button>
       <section id="recent-menu" class="owner-only" aria-labelledby="recent-menu-title" hidden>
@@ -206,6 +207,17 @@
         <small class="production-credit">A Jérémy Boulerice production</small>
       </footer>
     </div>
+
+    <dialog id="board-search" aria-label="Search Brainboard">
+      <div class="search-field">
+        <span data-icon="search" aria-hidden="true"></span>
+        <input type="text" role="combobox" aria-label="Search tools, menus and boards" aria-controls="search-results"
+          aria-expanded="true" aria-autocomplete="list" placeholder="Search tools, menus and boards…" maxlength="120" autocomplete="off" spellcheck="false" autofocus />
+        <button type="button" aria-label="Close search">Esc</button>
+      </div>
+      <div id="search-results" role="listbox" aria-label="Search results"></div>
+      <p class="search-status" role="status" hidden></p>
+    </dialog>
 
     <div id="home" hidden>
       <div class="panel sheet home-sheet" role="dialog" aria-labelledby="home-title">
@@ -321,6 +333,7 @@
           <section>
             <h3>Tools</h3>
             <dl>
+              <dt>Search tools, menus and boards</dt><dd><kbd>⌘K</kbd></dd>
               <dt>Select</dt><dd><kbd>V</kbd></dd>
               <dt>Pan</dt><dd><kbd>H</kbd>, hold <kbd>Space</kbd>, or <kbd class="pan-key">⌘</kbd>-drag</dd>
               <dt>Pen / Eraser</dt><dd><kbd>P</kbd> <kbd>E</kbd></dd>

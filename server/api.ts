@@ -1,4 +1,5 @@
 // HTTP API (mounted in the Vite dev server and in server/main.ts). Live editing goes over /ws.
+import { searchBoards } from './search.ts';
 import { acceptsPicture } from './profile-picture.ts';
 import os from 'node:os';
 import { createReadStream, promises as fs } from 'node:fs';
@@ -117,12 +118,17 @@ export async function handleApi(req: IncomingMessage, res: ServerResponse): Prom
     if (parts[0] === 'auth') return await handleAuth(req, res, parts.slice(1), method, p), true;
 
     // ---- boards shared with me: ones I joined with a link, or addressed to my account. Only ever my own.
-    if (parts[0] === 'shared' && method === 'GET') {
+    if ((parts[0] === 'shared' || parts[0] === 'board-search') && method === 'GET') {
       const keys = [p.user ? userKey(p.user.id) : null, p.anonId ? anonKey(p.anonId) : null].filter((k): k is string => !!k);
       if (!keys.length) return send(res, 200, []), true;
+      const invited = await sharedWith(keys, p.user?.id ?? null);
+      if (parts[0] === 'board-search') {
+        const hits = await searchBoards(p, invited, url.searchParams.get('q') ?? '', () => res.destroyed);
+        return send(res, 200, hits), true;
+      }
       const presence = await liveBoardPresence();
       const out = [];
-      for (const { boardId, invite, lastHere } of await sharedWith(keys, p.user?.id ?? null)) {
+      for (const { boardId, invite, lastHere } of invited) {
         const b = await readBoard(boardId);
         if (!b) continue;
         const owner = await getOwner(boardId);

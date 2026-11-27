@@ -195,3 +195,6 @@ export type ServerMsg =
   /** the shared browser opened, changed or (null) closed */
   | { t: 'browser'; s: BrowserState | null }
   | { t: 'bev'; n: number; e: BrowserEvent };
+
+/** A board matched by title or by a text item the requester can read. */
+export interface BoardSearchHit { id: string; name: string; token?: string; excerpt?: string }

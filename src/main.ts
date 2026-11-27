@@ -14,6 +14,7 @@ import { api, events, loadSession, session } from './net';
 import { openBoard, openDraft, restoreCamera } from './boards';
 import { initCollab } from './collab';
 import { initInk } from './ink';
+import { initSearch } from './search';
 import { initHome, loadBoards } from './home';
 import { initViews } from './views';
 import { initBoardAreas } from './board-areas';
@@ -52,6 +53,7 @@ async function main() {
   initCollab();
   initInk();
   initHome();
+  initSearch();
   initViews();
   initBoardAreas();
   initScreenshot();

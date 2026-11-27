@@ -79,12 +79,15 @@ export const metaOf = (b: Board): BoardMeta => ({
   id: b.id, name: b.name, rev: b.rev, created: b.created, updated: b.updated, itemCount: b.items.length,
 });
 
-export async function listBoards(): Promise<BoardMeta[]> {
+export async function listBoardIds() {
   ensureDirs();
+  return (await fs.readdir(BOARDS_DIR)).filter(f => f.endsWith('.json')).map(f => f.slice(0, -5)).filter(isValidId);
+}
+
+export async function listBoards(): Promise<BoardMeta[]> {
   const out: BoardMeta[] = [];
-  for (const f of await fs.readdir(BOARDS_DIR)) {
-    if (!f.endsWith('.json')) continue;
-    const b = await readBoard(f.slice(0, -5)).catch(() => null);
+  for (const id of await listBoardIds()) {
+    const b = await readBoard(id).catch(() => null);
     if (b) out.push(metaOf(b));
   }
   return out.sort((a, b) => b.updated.localeCompare(a.updated));

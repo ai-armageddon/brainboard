@@ -2,7 +2,7 @@
 // It only ever lists boards you own or that were shared with you (a link you opened, or an invite to your account).
 import { avatarFace } from './avatar';
 import { account, api, boardCallCount, events, session, type BoardMeta, type LivePerson, type SharedBoard } from './net';
-import { openBoard, openedAt } from './boards';
+import { navigateToBoard, openedAt } from './boards';
 import { closePopovers, newBoard } from './ui';
 import { icon } from './icons';
 
@@ -181,19 +181,9 @@ export function loadBoards(initialOwned?: BoardMeta[]) {
 }
 
 function go(id: string, kind: string) {
-  if (id === session.boardId) return closeHome();
-  if (kind === 'shared') {
-    const b = shared.find((x) => x.id === id);
-    if (!b) return;
-    // Guest boards open through their invite (a fresh page, so the guest flow and permissions apply).
-    location.href = `/?invite=${encodeURIComponent(b.token)}#${id}`;
-    return;
-  }
-  const b = owned.find((x) => x.id === id);
   closeHome();
-  // From a guest page, your own boards need a clean page (no invite).
-  if (session.invite) { location.href = `/#${id}`; return; }
-  openBoard(id, b?.name);
+  const board = (kind === 'shared' ? shared : owned).find(b => b.id === id);
+  if (board) navigateToBoard(board.id, board.name, 'token' in board ? board.token : undefined);
 }
 
 export function openHome() {
