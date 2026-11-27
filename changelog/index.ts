@@ -71,7 +71,7 @@ function body(e: Entry) {
   const n = total(e);
   if (n) {
     const all = el('details', 'all');
-    all.append(el('summary', '', `All ${count(n, 'change')}`));
+    all.append(el('summary', '', `All ${count(n, 'update')}`));
     all.addEventListener('toggle', () => { if (all.open && all.childElementCount === 1) all.append(groups(Object.entries(e.changes))); });
     box.append(all);
   }
@@ -83,7 +83,7 @@ function row(e: Entry, found?: Groups) {
   const item = el('details', 'release');
   item.id = `v${e.version}`;
   const head = el('summary');
-  const tally = found ? count(size(found), 'match', 'matches') : total(e) ? count(total(e), 'change') : '';
+  const tally = found ? count(size(found), 'match', 'matches') : total(e) ? count(total(e), 'update') : '';
   head.append(el('span', 'ver', `v${e.version}`), el('span', 'title', e.title), el('span', 'meta', [day(e.date), tally].filter(Boolean).join(' · ')));
   item.append(head);
   if (found) {
@@ -102,7 +102,7 @@ function render() {
   if (state.area || state.query) {
     const hits = log.map((e) => ({ e, found: matching(e) })).filter((h) => h.found.length);
     for (const h of hits) root.append(row(h.e, h.found));
-    if (!hits.length) root.append(el('p', 'empty', 'No changes match.'));
+    if (!hits.length) root.append(el('p', 'empty', 'No updates match your filters.'));
     return;
   }
   log.slice(0, state.shown).forEach((e, i) => {
@@ -140,7 +140,7 @@ for (const area of ['', ...areas]) {
   chips.append(chip);
 }
 search.addEventListener('input', () => setFilter(state.area, search.value.trim()));
-document.querySelector('#stats')!.textContent = `${count(log.length, 'release')} · ${count(log.reduce((n, e) => n + total(e), 0), 'change')}`;
+document.querySelector('#stats')!.textContent = `${count(log.length, 'release')} · ${count(log.reduce((n, e) => n + total(e), 0), 'update')}`;
 
 // A link to #v0.3.0 opens that release, even if it sits under "Show older".
 function openFromHash() {
