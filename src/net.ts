@@ -12,7 +12,7 @@ import { applyOps, diffItems } from './ops';
 // ---------------------------------------------------------------- identity & session
 
 export type { LivePerson };
-export interface BoardMeta { id: string; name: string; rev: number; updated: string; itemCount: number; live?: number; inCall?: number; people?: LivePerson[] }
+export interface BoardMeta { id: string; name: string; rev: number; updated: string; itemCount: number; sharedWith?: string[]; live?: number; inCall?: number; people?: LivePerson[] }
 /** A board someone else owns that was shared with you (a link you opened, or an invite to your account). */
 export interface SharedBoard {
   id: string; name: string; role: 'editor' | 'viewer'; from: string | null; token: string;

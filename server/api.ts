@@ -349,9 +349,13 @@ export async function handleApi(req: IncomingMessage, res: ServerResponse): Prom
           const presence = await liveBoardPresence();
           const mine = [];
           for (const b of await listBoards()) {
-            if (!ownsKey(p, await getOwner(b.id))) continue;
+            const sharing = await getSharing(b.id);
+            if (!ownsKey(p, sharing.owner ?? null)) continue;
+            const sharedWith = sharing.invites.length
+              ? [...new Set(sharing.invites.map(i => i.seen?.name || i.name || i.email).filter(Boolean))]
+              : undefined;
             const live = presence.get(b.id) ?? { people: [], inCall: 0 };
-            mine.push({ ...b, ...live, live: live.people.length });
+            mine.push({ ...b, ...live, live: live.people.length, sharedWith });
           }
           return send(res, 200, mine), true;
         }

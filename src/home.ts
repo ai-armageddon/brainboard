@@ -87,8 +87,8 @@ function recentBoards(all: Entry[], limit: number) {
   return [...all].sort((a, b) => b.visited - a.visited || b.seen - a.seen).slice(0, limit);
 }
 
-function recentRows() {
-  return recentBoards(entries(), 3).map((e) => {
+function recentRows(recent: Entry[]) {
+  return recent.map((e) => {
     const detail = e.kind === 'shared' ? `Shared · ${e.b.role === 'editor' ? 'Can edit' : 'Can view'}` : ago(e.visited || e.b.updated);
     const live = e.kind === 'own' ? e.b.live ?? 0 : e.people.length;
     return `<button class="board-row${e.b.id === session.boardId ? ' current' : ''}" data-id="${esc(e.b.id)}" data-kind="${e.kind}">
@@ -99,15 +99,42 @@ function recentRows() {
   }).join('');
 }
 
+function previewCard(e: Entry) {
+  const query = new URLSearchParams({ format: 'png', max: '360', bg: '0' });
+  if (e.kind === 'shared') query.set('invite', e.b.token);
+  const src = `/api/boards/${encodeURIComponent(e.b.id)}/export?${query}`;
+  const names = e.kind === 'own' ? e.b.sharedWith ?? [] : e.b.from ? [e.b.from] : [];
+  const people = [...new Set([...e.people.map(p => p.name), ...names])];
+  const shared = e.kind === 'shared' || !!e.b.sharedWith || !!people.length;
+  const sharing = e.kind === 'shared' && e.b.from ? `From ${e.b.from}`
+    : people.length ? `With ${people.join(', ')}` : 'Shared link';
+  const badges = people.slice(0, 3).map(name => {
+    const person = e.people.find(p => p.name === name);
+    return `<b title="${esc(name)}" style="--c:${esc(person?.color || '#657690')}">${avatarFace(name, person?.picture)}</b>`;
+  }).join('');
+  return `<button class="preview-card" data-id="${esc(e.b.id)}" data-kind="${e.kind}">
+    <span class="preview-canvas">
+      ${e.b.itemCount ? `<img src="${esc(src)}" alt="" decoding="async" draggable="false">` : '<span>Empty board</span>'}
+    </span>
+    <span class="preview-caption">
+      <strong title="${esc(e.b.name)}">${esc(e.b.name)}</strong>
+      <small title="${esc(shared ? sharing : '')}">
+        ${shared ? badges ? `<span class="hc-faces" aria-hidden="true">${badges}</span>` : icon('users', 13) : ''}
+        <span>${shared ? esc(sharing) : ago(e.visited || e.b.updated)}</span>
+      </small>
+    </span>
+  </button>`;
+}
+
 function renderRecentBoards() {
-  const rows = recentRows();
+  const recent = recentBoards(entries(), 3);
   if (!session.invite && !$('menu').hidden) {
-    $('board-list').innerHTML = rows;
-    $('recent-menu').hidden = !rows;
+    $('board-list').innerHTML = recentRows(recent);
+    $('recent-menu').hidden = !recent.length;
   }
   const welcome = $('welcome-boards');
-  welcome.hidden = welcomeDismissed || !session.draft || !rows;
-  if (!welcome.hidden) welcome.querySelector('.recent-rows')!.innerHTML = rows;
+  welcome.hidden = welcomeDismissed || !session.draft || !recent.length;
+  if (!welcome.hidden) welcome.querySelector('.preview-grid')!.innerHTML = recent.map(previewCard).join('');
 }
 
 function render() {
@@ -195,6 +222,11 @@ export function initHome() {
     if (!$('menu').hidden) renderRecentBoards();
   });
   events.addEventListener('status', () => { if (!session.draft) dismissWelcomeBoards(); });
+  $('welcome-boards').addEventListener('error', (e) => {
+    if (e.target instanceof HTMLImageElement && e.target.closest('.preview-canvas')) {
+      e.target.replaceWith('Preview unavailable');
+    }
+  }, true);
   for (const list of [$('board-list'), $('welcome-boards')]) {
     list.addEventListener('click', (e) => {
       const button = (e.target as Element).closest<HTMLElement>('button');
