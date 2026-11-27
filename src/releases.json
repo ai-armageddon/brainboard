@@ -46,7 +46,7 @@
       {
         "scene": "record",
         "title": "Choose what your recording hears",
-        "body": "In Chrome or Edge on a computer, open the camera and choose Video. Switch Tab audio and Microphone on independently, then start recording. Click Stop recording to see the same two save options.",
+        "body": "In Chrome or Edge on a computer, open the camera and choose Video. Choose Tab audio, Microphone, or both. Press <kbd>⇧⌘S</kbd> to start or stop recording, or use the on-screen buttons.",
         "target": "#shot-btn"
       },
       {

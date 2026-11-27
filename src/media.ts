@@ -272,7 +272,7 @@ export function openMedia(focus?: string, onNew?: (kind?: 'photo' | 'video') => 
           <button role="radio" data-scope="all">All</button><button role="radio" data-scope="board">This board</button>
         </div>
         <button class="media-new quiet" data-new="video"><i class="rec-dot"></i><span>Record</span>${keyLabel('<kbd>⌥R</kbd>')}</button>
-        <button class="media-new" data-new="photo">${icon('camera', 17)}<span>New screenshot</span>${keyLabel('<kbd>⇧⌘S</kbd>')}</button>
+        <button class="media-new" data-new="photo">${icon('camera', 17)}<span>New screenshot</span></button>
       </div>
     </div>
     <div class="media-grid" aria-live="polite"></div>

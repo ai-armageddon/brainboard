@@ -1,4 +1,4 @@
-// The camera. ⇧⌘S (or the camera button) turns the screen into a viewfinder: frame the whole screen,
+// The camera button turns the screen into a viewfinder: frame the whole screen,
 // drag out an area, use the selection or a saved view, pick a look, and press the shutter. The shot is
 // rendered sharp on the server; a little print of it lands in the corner with Save and Copy.
 // Switch it to Video (⌥R opens it that way) and the same frame records the board instead: see record.ts.
@@ -13,7 +13,7 @@ import {
   BACKDROP_NAMES, bindCaptureSave, copyMedia, dismissCaptureCard, latestMedia, listMedia, mediaEvents, mediaUrl, openMedia, saveMedia, takeScreenshot,
   type Backdrop, type MediaItem,
 } from './media';
-import { canRecord, recordingActive, recordingName, startRecording } from './record';
+import { canRecord, recordingActive, recordingName, startRecording, stopRecording } from './record';
 import type { Box } from './types';
 
 type Mode = 'screen' | 'region' | 'selection' | 'view';
@@ -404,9 +404,7 @@ function close() {
 function onKey(e: KeyboardEvent) {
   if (!active) return;
   if (e.key === ' ' && (e.target as Element)?.matches?.('.shot-dock input[type=checkbox]')) { e.stopPropagation(); return; }
-  const mod = e.metaKey || e.ctrlKey;
-  // Let ⌘ shortcuts through (zoom with ⌘+ / ⌘−), except the one that opened us.
-  if (mod && !(e.shiftKey && e.code === 'KeyS')) return;
+  if (e.metaKey || e.ctrlKey) return;
   e.stopImmediatePropagation();
   if (e.key === 'Escape') {
     e.preventDefault();
@@ -414,7 +412,7 @@ function onKey(e: KeyboardEvent) {
     else close();
     return;
   }
-  if (e.key === 'Enter' || e.key === ' ' || (mod && e.code === 'KeyS')) { e.preventDefault(); void shoot(); return; }
+  if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); void shoot(); return; }
   // ⌥R, which opened the camera for video, flips it between photo and video once it's up.
   if (e.altKey && e.code === 'KeyR') { e.preventDefault(); return pickKind(kind === 'video' ? 'photo' : 'video'); }
   const n = Number(e.key);
@@ -444,6 +442,17 @@ export function initScreenshot() {
   const prev = hooks.afterCamera;
   hooks.afterCamera = () => { prev(); if (active) paint(); };
   document.getElementById('shot-btn')?.addEventListener('click', () => openScreenshot());
+  // Handle the recording chord before note editors or canvas tools can swallow it.
+  window.addEventListener('keydown', e => {
+    if (!(e.metaKey || e.ctrlKey) || !e.shiftKey || e.altKey || (e.code !== 'KeyS' && e.key.toLowerCase() !== 's')) return;
+    e.preventDefault();
+    e.stopImmediatePropagation();
+    if (e.repeat) return;
+    if (recordingActive()) { stopRecording(); return; }
+    if ((!session.draft && !session.boardId) || document.querySelector('dialog[open], .auth-backdrop, #overlay:not([hidden]), #home:not([hidden]), #share:not([hidden]), #shortcuts:not([hidden])')) return;
+    if (active && kind === 'photo' && canRecord) pickKind('video');
+    record();
+  }, true);
 }
 
 // ---------------------------------------------------------------- the shot
@@ -461,13 +470,15 @@ function videoRect(): Box | null {
 }
 
 function record() {
-  const rect = videoRect();
+  if (!canRecord) return toast('Recording needs Chrome, Edge or another Chromium browser on a computer');
+  const rect = active ? videoRect() : { x: 0, y: 0, w: innerWidth, h: innerHeight };
   if (!rect) return hint('Bring what you want to record onto the screen first', true);
-  const full = mode === 'screen' || (rect.w >= innerWidth - 1 && rect.h >= innerHeight - 1);
+  const full = rect.w >= innerWidth - 1 && rect.h >= innerHeight - 1;
+  const keepInMedia = active && $<HTMLInputElement>('[data-keep-media]').checked;
   close();
   void startRecording({
     rect, full, look: prefs.backdrop, fps: prefs.fps, tabAudio: prefs.tabAudio, mic: prefs.mic, chrome: prefs.chrome, grid: prefs.grid,
-    name: recordingName(), board: session.boardId ? { id: session.boardId, name: session.boardName } : null, camera: openScreenshot, keepInMedia: $<HTMLInputElement>('[data-keep-media]').checked,
+    name: recordingName(), board: session.boardId ? { id: session.boardId, name: session.boardName } : null, camera: openScreenshot, keepInMedia,
   });
 }
 

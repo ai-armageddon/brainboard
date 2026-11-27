@@ -423,7 +423,7 @@ function showHud(tabAudio: boolean, mic: boolean) {
       ${tabAudio ? `<span class="rec-mic" aria-label="Tab audio on">${icon('sound', 15)}</span>` : ''}
       ${mic ? `<span class="rec-mic" aria-label="Microphone on">${icon('mic', 15)}</span>` : ''}
       <button data-act="pause" aria-label="Pause"><i class="rec-bars"></i></button>
-      <button data-act="stop" class="rec-stop" aria-label="${keyLabel('Stop recording (⌥R)')}"><i></i><span>Stop recording</span></button>
+      <button data-act="stop" class="rec-stop" aria-label="${keyLabel('Stop recording (⇧⌘S)')}"><i></i><span>Stop recording</span></button>
     </div>`;
   document.body.append(hud);
   hud.querySelector('.rec-pill')!.addEventListener('click', (e) => {
@@ -478,7 +478,7 @@ async function countdown(opts: RecordOpts) {
   placeHud();
   const el = hud!.querySelector<HTMLElement>('.rec-count')!;
   const num = el.querySelector('b')!;
-  el.querySelector('span')!.innerHTML = keyLabel('Stop recording or <kbd>⌥R</kbd> to finish');
+  el.querySelector('span')!.innerHTML = keyLabel('Stop recording or <kbd>⇧⌘S</kbd> to finish');
   el.classList.add('in');
   const beat = reducedMotion() ? 450 : 650;
   for (const n of [3, 2, 1]) {

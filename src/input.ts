@@ -720,7 +720,6 @@ function onKeyDown(e: KeyboardEvent) {
     const k = e.key.toLowerCase();
     if (ro && ['z', 'y', 'd', 'x'].includes(k)) { e.preventDefault(); return; }
     if (k === 'e' && e.shiftKey) { e.preventDefault(); openExport(); return; }
-    if (k === 's' && e.shiftKey && !e.altKey) { e.preventDefault(); openScreenshot(); return; }
     if (k === 'r' && e.ctrlKey && !e.metaKey && !e.shiftKey) { e.preventDefault(); if (!ro) redo(); return; } // vim redo
     if (['=', '+', '-', '0'].includes(k) && !userMovedCamera()) { e.preventDefault(); return; }
     switch (k) {

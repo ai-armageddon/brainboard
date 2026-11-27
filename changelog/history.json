@@ -41,6 +41,7 @@
         "Beautify smooths handwriting and tidies rough shapes."
       ],
       "Keyboard": [
+        "Press Cmd+Shift+S on Mac or Ctrl+Shift+S on Windows and Linux to start or stop recording. Option+R or Alt+R opens recording setup.",
         "Press H to select the Hand tool in standard and Vim modes.",
         "In Vim mode, gh jumps to the item on the left and Shift+H pans left."
       ]
