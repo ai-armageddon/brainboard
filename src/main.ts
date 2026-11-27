@@ -14,7 +14,7 @@ import { api, events, loadSession, session } from './net';
 import { openBoard, openDraft, restoreCamera } from './boards';
 import { initCollab } from './collab';
 import { initInk } from './ink';
-import { initHome } from './home';
+import { initHome, loadBoards } from './home';
 import { initViews } from './views';
 import { initBoardAreas } from './board-areas';
 import { initWriting } from './writing';
@@ -115,7 +115,10 @@ async function main() {
   // and a visit alone never shows (or creates) a board.
   if (boards.some((b) => b.id === hashId)) openBoard(hashId);
   else if (hashId) await openSomeoneElses(hashId);
-  else openDraft();
+  else {
+    openDraft();
+    void loadBoards(boards);
+  }
 
   window.addEventListener('hashchange', () => {
     const next = location.hash.slice(1);

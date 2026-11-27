@@ -6,6 +6,7 @@ import { showUploading } from './uploading';
 import { FONTS, type FontKey, type TextRun } from './types';
 import { appendStyle, drawText, editorFont, forgetDrawnText, readEditor, sameStyle, type TextStyle } from './format';
 import { clamp, intersects, unionBox } from './geometry';
+import { dismissWelcomeBoards } from './home';
 import { toast, updateToolUI } from './ui';
 import { keyLabel } from './keys';
 import { prepareEditor } from './writing';
@@ -20,6 +21,7 @@ export const canEditText = (it: Item | undefined) => isTextual(it) || it?.type =
 
 export function setTool(t: Tool) {
   if (!canEdit() && t !== 'select' && t !== 'hand') return;
+  dismissWelcomeBoards();
   if (S.editing) stopEditing();
   S.tool = t;
   if (t !== 'select' && t !== 'hand') S.selected.clear();

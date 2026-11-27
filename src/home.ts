@@ -19,13 +19,21 @@ function ago(iso: string | number) {
 }
 
 type Entry =
-  | { kind: 'own'; b: BoardMeta; people: LivePerson[]; seen: number }
-  | { kind: 'shared'; b: SharedBoard; people: LivePerson[]; seen: number };
+  | { kind: 'own'; b: BoardMeta; people: LivePerson[]; visited: number; seen: number }
+  | { kind: 'shared'; b: SharedBoard; people: LivePerson[]; visited: number; seen: number };
 
 let owned: BoardMeta[] = [];
 let shared: SharedBoard[] = [];
 let query = '';
 let refreshTimer = 0;
+let loading: Promise<void> | undefined;
+let welcomeDismissed = false;
+
+export function dismissWelcomeBoards() {
+  if (welcomeDismissed) return;
+  welcomeDismissed = true;
+  $('welcome-boards').hidden = true;
+}
 
 /** Leave yourself out of "who's here" on the board you're on. */
 function others(id: string, people: LivePerson[] = []) {
@@ -36,13 +44,15 @@ function others(id: string, people: LivePerson[] = []) {
 
 function entries(): Entry[] {
   const opened = openedAt();
-  return [
-    ...owned.map((b): Entry => ({ kind: 'own', b, people: others(b.id, b.people), seen: Math.max(opened[b.id] ?? 0, Date.parse(b.updated) || 0) })),
-    ...shared.map((b): Entry => ({
-      kind: 'shared', b, people: others(b.id, b.people),
-      seen: Math.max(opened[b.id] ?? 0, Date.parse(b.lastHere ?? '') || 0, Date.parse(b.updated) || 0),
-    })),
+  const ownIds = new Set(owned.map((b) => b.id));
+  const boards = [
+    ...owned.map((b) => ({ kind: 'own' as const, b })),
+    ...shared.filter((b) => !ownIds.has(b.id)).map((b) => ({ kind: 'shared' as const, b })),
   ];
+  return boards.map((entry) => {
+    const visited = Math.max(opened[entry.b.id] ?? 0, entry.kind === 'shared' ? Date.parse(entry.b.lastHere ?? '') || 0 : 0);
+    return { ...entry, people: others(entry.b.id, entry.b.people), visited, seen: Math.max(visited, Date.parse(entry.b.updated) || 0) };
+  });
 }
 
 const matches = (e: Entry) => !query || e.b.name.toLowerCase().includes(query);
@@ -53,7 +63,7 @@ function faces(people: LivePerson[]) {
   return `<span class="hc-live"><span class="hc-faces">${shown}</span><i class="live-dot"></i>${people.length} here</span>`;
 }
 
-export function boardCallBadge(board: BoardMeta | SharedBoard) {
+function boardCallBadge(board: BoardMeta | SharedBoard) {
   const count = boardCallCount(board);
   return count ? `<span class="board-call-count">${icon('headphones', 13)}${count} in call</span>` : '';
 }
@@ -73,11 +83,38 @@ function card(e: Entry) {
   </button>`;
 }
 
+function recentBoards(all: Entry[], limit: number) {
+  return [...all].sort((a, b) => b.visited - a.visited || b.seen - a.seen).slice(0, limit);
+}
+
+function recentRows() {
+  return recentBoards(entries(), 3).map((e) => {
+    const detail = e.kind === 'shared' ? `Shared · ${e.b.role === 'editor' ? 'Can edit' : 'Can view'}` : ago(e.visited || e.b.updated);
+    const live = e.kind === 'own' ? e.b.live ?? 0 : e.people.length;
+    return `<button class="board-row${e.b.id === session.boardId ? ' current' : ''}" data-id="${esc(e.b.id)}" data-kind="${e.kind}">
+      ${icon(e.kind === 'shared' ? 'users' : 'views', 17)}
+      <span class="board-row-name">${esc(e.b.name)}</span>
+      <span class="board-row-meta">${boardCallBadge(e.b)}${live ? `<i class="live-dot"></i>${live} live · ` : ''}${detail}</span>
+    </button>`;
+  }).join('');
+}
+
+function renderRecentBoards() {
+  const rows = recentRows();
+  if (!session.invite && !$('menu').hidden) {
+    $('board-list').innerHTML = rows;
+    $('recent-menu').hidden = !rows;
+  }
+  const welcome = $('welcome-boards');
+  welcome.hidden = welcomeDismissed || !session.draft || !rows;
+  if (!welcome.hidden) welcome.querySelector('.recent-rows')!.innerHTML = rows;
+}
+
 function render() {
   const body = $('home').querySelector<HTMLElement>('.home-body')!;
   const all = entries();
   const live = all.filter((e) => (e.people.length || boardCallCount(e.b)) && matches(e)).sort((a, b) => b.people.length - a.people.length);
-  const recent = all.filter(matches).sort((a, b) => b.seen - a.seen).slice(0, 6);
+  const recent = recentBoards(all.filter(matches), 6);
   const sharedE = all.filter((e) => e.kind === 'shared' && matches(e)).sort((a, b) => b.seen - a.seen);
   const mine = all.filter((e): e is Extract<Entry, { kind: 'own' }> => e.kind === 'own' && matches(e))
     .sort((a, b) => Date.parse(b.b.updated) - Date.parse(a.b.updated));
@@ -103,11 +140,17 @@ function render() {
   ].join('');
 }
 
-async function load() {
-  try {
-    [owned, shared] = await Promise.all([api.boards().catch(() => []), api.shared().catch(() => [])]);
-  } catch { /* keep what we have */ }
-  if (!$('home').hidden) render();
+export function loadBoards(initialOwned?: BoardMeta[]) {
+  loading ??= Promise.all([
+    initialOwned ?? api.boards().catch(() => owned),
+    api.shared().catch(() => shared),
+  ]).then(([mine, invited]) => {
+    owned = mine;
+    shared = invited;
+    if (!$('home').hidden) render();
+    renderRecentBoards();
+  }).finally(() => { loading = undefined; });
+  return loading;
 }
 
 function go(id: string, kind: string) {
@@ -134,10 +177,10 @@ export function openHome() {
   const input = el.querySelector<HTMLInputElement>('.home-search')!;
   input.value = '';
   render();
-  void load();
+  void loadBoards();
   setTimeout(() => input.focus(), 0);
   clearInterval(refreshTimer);
-  refreshTimer = window.setInterval(() => { if (el.hidden) clearInterval(refreshTimer); else void load(); }, 15_000);
+  refreshTimer = window.setInterval(() => { if (el.hidden) clearInterval(refreshTimer); else void loadBoards(); }, 15_000);
 }
 
 export function closeHome() {
@@ -147,7 +190,20 @@ export function closeHome() {
 
 export function initHome() {
   const el = $('home');
-  events.addEventListener('peers', () => { if (!el.hidden) render(); });
+  events.addEventListener('peers', () => {
+    if (!el.hidden) render();
+    if (!$('menu').hidden) renderRecentBoards();
+  });
+  events.addEventListener('status', () => { if (!session.draft) dismissWelcomeBoards(); });
+  for (const list of [$('board-list'), $('welcome-boards')]) {
+    list.addEventListener('click', (e) => {
+      const button = (e.target as Element).closest<HTMLElement>('button');
+      if (button?.dataset.action === 'home') return openHome();
+      if (!button?.dataset.id) return;
+      closePopovers();
+      go(button.dataset.id, button.dataset.kind!);
+    });
+  }
   el.querySelector('.home-body')!.innerHTML = `
     <div class="home-top">
       <input class="home-search" type="search" placeholder="Search boards" aria-label="Search boards" />

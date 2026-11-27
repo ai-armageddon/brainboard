@@ -9,9 +9,9 @@ import {
   importBoard, reorder, setColor, setShape, setTool, setZoom, startEditing, viewCenter, zoomBy, zoomToFit,
 } from './actions';
 import { clamp } from './geometry';
-import { account, api, events, saveProfile, session, type BoardMeta } from './net';
+import { account, api, events, saveProfile, session } from './net';
 import { ensureBoard, openBoard, openDraft, saveCamera, showBoardInUrl } from './boards';
-import { boardCallBadge, openHome } from './home';
+import { dismissWelcomeBoards, loadBoards, openHome } from './home';
 import { paintLogos } from './brand';
 import { userMovedCamera } from './collab';
 import { keyLabel, localizeKeys } from './keys';
@@ -107,7 +107,10 @@ function updateBrushSize() {
   }
 }
 
-export const openImagePicker = () => fileImages.click();
+export function openImagePicker() {
+  dismissWelcomeBoards();
+  fileImages.click();
+}
 
 // ---------------------------------------------------------------- context bar
 
@@ -301,6 +304,7 @@ export function buildUI() {
   $('toolbar').addEventListener('click', (e) => {
     const b = (e.target as Element).closest<HTMLElement>('button');
     if (!b) return;
+    dismissWelcomeBoards();
     if (b.dataset.tool) setTool(b.dataset.tool as Tool);
     else if (b.id === 'img-btn') openImagePicker();
   });
@@ -406,7 +410,7 @@ export function buildUI() {
     e.stopPropagation();
     menu.hidden = !menu.hidden;
     $('menu-btn').classList.toggle('open', !menu.hidden);
-    if (!menu.hidden && !session.invite) void refreshBoardList();
+    if (!menu.hidden && !session.invite) void loadBoards();
   });
   menu.addEventListener('click', (e) => {
     const b = (e.target as Element).closest<HTMLElement>('button');
@@ -467,7 +471,9 @@ export function buildUI() {
 
   hooks.afterRender = () => {
     updateCtxBar();
-    hint.classList.toggle('show', S.items.length === 0 && !uploadsPending());
+    const empty = S.items.length === 0 && !uploadsPending();
+    hint.classList.toggle('show', empty);
+    if (!empty) dismissWelcomeBoards();
     ($('undo-btn') as HTMLButtonElement).disabled = !canUndo();
     ($('redo-btn') as HTMLButtonElement).disabled = !canRedo();
   };
@@ -479,13 +485,6 @@ export function buildUI() {
   };
   viewport.dataset.tool = S.tool;
 
-  events.addEventListener('peers', () => { if (!menu.hidden && !session.invite) renderBoardList(); });
-  $('board-list').addEventListener('click', (e) => {
-    const b = (e.target as Element).closest<HTMLElement>('[data-board]');
-    if (!b) return;
-    closePopovers();
-    openBoard(b.dataset.board!, b.querySelector('.board-row-name')?.textContent ?? undefined);
-  });
   $('board-name').addEventListener('dblclick', (e) => { e.stopPropagation(); if (!session.invite) startRename(); });
   window.addEventListener('keydown', (e) => {
     if (e.altKey && !e.ctrlKey && !e.metaKey && e.code === 'KeyN' && !session.invite && !S.editing) { e.preventDefault(); void newBoard(); }
@@ -514,30 +513,7 @@ export function buildUI() {
 
 // ---------------------------------------------------------------- boards
 
-let boardCache: BoardMeta[] = [];
 const escapeHtml = (s: string) => s.replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`);
-
-function relTime(iso: string) {
-  const s = (Date.now() - Date.parse(iso)) / 1000;
-  if (s < 60) return 'just now';
-  if (s < 3600) return `${Math.floor(s / 60)}m ago`;
-  if (s < 86400) return `${Math.floor(s / 3600)}h ago`;
-  if (s < 86400 * 7) return `${Math.floor(s / 86400)}d ago`;
-  return new Date(iso).toLocaleDateString();
-}
-
-async function refreshBoardList() {
-  try { boardCache = await api.boards(); } catch { return; }
-  renderBoardList();
-}
-
-function renderBoardList() {
-  $('board-list').innerHTML = boardCache.map((b) => `
-    <button class="board-row ${b.id === session.boardId ? 'current' : ''}" data-board="${b.id}">
-      <span class="board-row-name">${escapeHtml(b.name)}</span>
-      <span class="board-row-meta">${boardCallBadge(b)}${b.live ? `<i class="live-dot"></i>${b.live} live · ` : ''}${relTime(b.updated)}</span>
-    </button>`).join('');
-}
 
 export async function newBoard() {
   closePopovers();
