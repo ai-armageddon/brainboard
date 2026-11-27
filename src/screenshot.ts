@@ -1,16 +1,16 @@
 // The camera button turns the screen into a viewfinder: frame the whole screen,
 // drag out an area, use the selection or a saved view, pick a look, and press the shutter. The shot is
-// rendered sharp on the server; a little print of it lands in the corner with Save and Copy.
+// rendered on the server and appears in a corner preview with local save and copy actions.
 // Switch it to Video (⌥R opens it that way) and the same frame records the board instead: see record.ts.
 import { S } from './state';
-import { hooks, viewport, world, selBounds } from './render';
+import { hooks, viewport, selBounds } from './render';
 import { session } from './net';
 import { goToView } from './views';
 import { icon } from './icons';
 import { toast } from './ui';
 import { keyLabel } from './keys';
 import {
-  BACKDROP_NAMES, bindCaptureSave, copyMedia, dismissCaptureCard, latestMedia, listMedia, mediaEvents, mediaUrl, openMedia, saveMedia, takeScreenshot,
+  BACKDROP_NAMES, bindCaptureSave, copyMedia, dismissCaptureCard, flashCapture, latestMedia, listMedia, mediaEvents, mediaUrl, openMedia, saveMedia, takeScreenshot,
   type Backdrop, type MediaItem,
 } from './media';
 import { canRecord, recordingActive, recordingName, startRecording, stopRecording } from './record';
@@ -38,7 +38,6 @@ const prefs: Prefs = (() => {
 })();
 const savePrefs = () => { try { localStorage.setItem(PREFS, JSON.stringify(prefs)); } catch { /* ignore */ } };
 
-const reducedMotion = () => matchMedia('(prefers-reduced-motion: reduce)').matches;
 const esc = (s: string) => s.replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`);
 
 let root: HTMLDivElement | null = null;
@@ -123,7 +122,7 @@ function build() {
         <label class="shot-keep"><input type="checkbox" data-audio="mic"> Microphone</label>
       </div>
       <button class="cbtn video-only" data-act="chrome" data-tip="Toolbars in the video · T">${icon('eye', 18)}</button>
-      <label class="shot-keep"><input type="checkbox" data-keep-media /> Save to Media</label>
+      <label class="shot-keep"><input type="checkbox" data-keep-media checked /> Save to Media</label>
       <button class="cbtn" data-act="close" data-tip="Cancel · Esc" aria-label="Cancel">${icon('close', 18)}</button>
     </div>
     <div class="shot-views panel" role="menu" hidden></div>`;
@@ -247,7 +246,6 @@ function easeFrame() {
 function pickKind(k: Kind) {
   if (k === 'video' && !canRecord) return hint('Recording needs Chrome, Edge or another Chromium browser on a computer', true);
   if (k === 'photo' && !session.boardId) return hint(S.items.length ? 'One moment: the board is still saving' : 'Add something to the board first, then take a screenshot', true);
-  if (kind !== k) $<HTMLInputElement>('[data-keep-media]').checked = false;
   kind = k;
   paint();
 }
@@ -373,7 +371,7 @@ export function openScreenshot(want: Kind = 'photo') {
   if (want === 'photo' && !session.boardId) return toast(S.items.length ? 'One moment: the board is still saving' : 'Add something to the board first, then take a screenshot');
   if (!root) build();
   active = true;
-  $<HTMLInputElement>('[data-keep-media]').checked = false;
+  $<HTMLInputElement>('[data-keep-media]').checked = true;
   kind = want;
   viewId = null;
   const sel = selectionBox();
@@ -474,7 +472,7 @@ function record() {
   const rect = active ? videoRect() : { x: 0, y: 0, w: innerWidth, h: innerHeight };
   if (!rect) return hint('Bring what you want to record onto the screen first', true);
   const full = rect.w >= innerWidth - 1 && rect.h >= innerHeight - 1;
-  const keepInMedia = active && $<HTMLInputElement>('[data-keep-media]').checked;
+  const keepInMedia = !active || $<HTMLInputElement>('[data-keep-media]').checked;
   close();
   void startRecording({
     rect, full, look: prefs.backdrop, fps: prefs.fps, tabAudio: prefs.tabAudio, mic: prefs.mic, chrome: prefs.chrome, grid: prefs.grid,
@@ -492,83 +490,21 @@ async function shoot() {
   const scale = scaleFor(b);
   const look = prefs.backdrop;
   const keepInMedia = $<HTMLInputElement>('[data-keep-media]').checked;
-  const print = freeze(r);
   close();
   if (prefs.sound) shutterSound();
-  flash(r);
+  flashCapture(r);
   const card = showCard(look, r, keepInMedia);
   const capture = takeScreenshot({
     frame: b, scale, theme: theme(), grid: prefs.grid, zoom: S.cam.z, backdrop: look, name: shotName(),
   });
   try {
-    const [, { item, blob }] = await Promise.all([develop(print, r, card), capture]);
+    const { item, blob } = await capture;
     card.ready(item, blob);
   } catch (err) {
     card.failed((err as Error).message);
   } finally {
     shooting = false;
   }
-}
-
-/** A frozen copy of exactly what's on screen inside the frame: it becomes the print that flies to the corner. */
-function freeze(r: Box) {
-  const print = document.createElement('div');
-  print.className = 'shot-print';
-  const cam = S.cam;
-  print.style.cssText = `left:${r.x}px;top:${r.y}px;width:${r.w}px;height:${r.h}px;`;
-  const paper = document.createElement('div');
-  paper.className = 'shot-paper';
-  paper.style.backgroundSize = viewport.style.backgroundSize;
-  paper.style.backgroundPosition = `${cam.x - r.x}px ${cam.y - r.y}px`;
-  if (!prefs.grid) paper.style.backgroundImage = 'none';
-  const copy = world.cloneNode(true) as HTMLElement;
-  copy.removeAttribute('id');
-  copy.querySelectorAll('#selbox, #live').forEach((x) => x.remove());
-  copy.querySelectorAll('[id]').forEach((x) => x.removeAttribute('id'));
-  copy.querySelectorAll('.selected, .peer-sel, .editing').forEach((x) => x.classList.remove('selected', 'peer-sel', 'editing'));
-  copy.querySelectorAll('.port').forEach((x) => x.remove());
-  copy.querySelectorAll('[contenteditable]').forEach((x) => x.removeAttribute('contenteditable'));
-  copy.classList.add('shot-world');
-  copy.style.transform = `translate(${cam.x - r.x}px,${cam.y - r.y}px) scale(${cam.z})`;
-  paper.append(copy);
-  print.append(paper);
-  document.body.append(print);
-  return print;
-}
-
-function flash(r: Box) {
-  const f = document.createElement('div');
-  f.className = 'shot-flash';
-  f.style.cssText = `left:${r.x}px;top:${r.y}px;width:${r.w}px;height:${r.h}px;`;
-  document.body.append(f);
-  f.animate([{ opacity: 0.92 }, { opacity: 0 }], { duration: reducedMotion() ? 120 : 520, easing: 'cubic-bezier(.2,.7,.3,1)' }).finished
-    .finally(() => f.remove());
-}
-
-/** The print lifts off the board, then glides into the card in the corner. */
-async function develop(print: HTMLElement, r: Box, card: ReturnType<typeof showCard>) {
-  const slot = card.slot.getBoundingClientRect();
-  const k = Math.min(slot.width / r.w, slot.height / r.h);
-  const tx = slot.left + slot.width / 2 - (r.x + r.w / 2), ty = slot.top + slot.height / 2 - (r.y + r.h / 2);
-  const fullScreen = r.w >= innerWidth - 2 && r.h >= innerHeight - 2;
-  const lift = fullScreen ? 0.9 : 0.965;
-  if (reducedMotion()) {
-    await print.animate([{ opacity: 1 }, { opacity: 0 }], { duration: 200, fill: 'forwards' }).finished;
-  } else {
-    await print.animate([
-      { transform: 'none', borderRadius: '0px', boxShadow: '0 0 0 0 rgba(0,0,0,0)', offset: 0 },
-      { transform: `scale(${lift})`, borderRadius: '10px', boxShadow: '0 30px 80px -20px rgba(0,0,0,.55), 0 0 0 6px rgba(255,255,255,.92)', offset: 0.32 },
-      { transform: `scale(${lift})`, borderRadius: '10px', boxShadow: '0 30px 80px -20px rgba(0,0,0,.55), 0 0 0 6px rgba(255,255,255,.92)', offset: 0.5 },
-      { transform: `translate(${tx}px,${ty}px) scale(${k})`, borderRadius: `${4 / k}px`, boxShadow: `0 10px 30px -10px rgba(0,0,0,.5), 0 0 0 ${2 / k}px rgba(255,255,255,.95)`, offset: 1 },
-    ], { duration: 1050, easing: 'cubic-bezier(.65,0,.25,1)', fill: 'forwards' }).finished;
-  }
-  // Hand the frozen print over to the card, where the real image replaces it once it's rendered.
-  print.getAnimations().forEach((a) => a.cancel());
-  print.removeAttribute('style');
-  print.classList.add('docked');
-  print.style.cssText = `width:${r.w}px;height:${r.h}px;left:${(slot.width - r.w * k) / 2}px;top:${(slot.height - r.h * k) / 2}px;transform:scale(${k});`;
-  card.slot.append(print);
-  card.el.classList.add('landed');
 }
 
 // ---------------------------------------------------------------- the card in the corner
@@ -620,21 +556,18 @@ function showCard(look: Backdrop, r: Box, keepInMedia: boolean) {
   });
 
   return {
-    el,
-    slot: el.querySelector<HTMLElement>('.shot-slot')!,
     ready(it: MediaItem, blob: Blob) {
-      if (!el.isConnected) return;
       item = it;
       localBlob = blob;
       el.querySelector('.shot-card-body b')!.textContent = 'Screenshot ready';
       el.querySelector('.shot-card-meta')!.textContent = `${it.w.toLocaleString()} × ${it.h.toLocaleString()} · ${BACKDROP_NAMES[it.backdrop]}`;
       for (const b of el.querySelectorAll<HTMLButtonElement>('[data-act="save"], [data-act="copy"]')) b.disabled = false;
-      const keep = bindCaptureSave(el, it, blob, null, openScreenshot, saved => {
+      bindCaptureSave(el, it, blob, null, openScreenshot, keepInMedia, saved => {
         item = saved;
         el.querySelector<HTMLButtonElement>('.shot-card-thumb')!.disabled = false;
         arm(7000);
       });
-      if (keepInMedia) void keep();
+      if (!el.isConnected) return;
       const img = new Image();
       img.alt = '';
       img.className = 'shot-real';
@@ -642,11 +575,9 @@ function showCard(look: Backdrop, r: Box, keepInMedia: boolean) {
       img.src = preview;
       img.decode().then(() => {
         el.querySelector('.shot-slot')!.append(img);
-        // The framed shot is a little taller than the print: the thumbnail eases to its shape as it appears.
         el.style.setProperty('--th', `${Math.round(Math.min(Math.max(tw * it.h / it.w, 60), 132))}px`);
-        requestAnimationFrame(() => { img.classList.add('in'); el.classList.add('real'); });
+        requestAnimationFrame(() => img.classList.add('in'));
       }).catch(() => {}).finally(() => URL.revokeObjectURL(preview));
-      el.classList.add('done');
     },
     failed(msg: string) {
       el.classList.add('error');

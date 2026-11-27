@@ -5,7 +5,7 @@ import { session } from './net';
 import { icon } from './icons';
 import { toast } from './ui';
 import { keyLabel } from './keys';
-import { bindCaptureSave, clock, dismissCaptureCard, openMedia, saveMedia, type Backdrop, type MediaItem } from './media';
+import { bindCaptureSave, clock, dismissCaptureCard, flashCapture, openMedia, saveMedia, type Backdrop, type MediaItem } from './media';
 import type { Box } from './types';
 
 export interface RecordOpts {
@@ -393,6 +393,7 @@ async function finish(t: Take) {
   cleanup();
   const length = t.elapsed / 1000;
   if (!t.chunks.length) return toast('Nothing was recorded');
+  flashCapture(t.opts.full ? { x: 0, y: 0, w: innerWidth, h: innerHeight } : t.opts.rect);
   const type = t.recorder.mimeType || t.chunks[0].type || 'video/webm';
   const blob = new Blob(t.chunks, { type });
   // The still is made off the main thread: give it a moment if the recording was very short.
@@ -483,9 +484,6 @@ async function countdown(opts: RecordOpts) {
   const beat = reducedMotion() ? 450 : 650;
   for (const n of [3, 2, 1]) {
     num.textContent = String(n);
-    num.classList.remove('pop');
-    void num.offsetWidth;
-    num.classList.add('pop');
     await new Promise((r) => setTimeout(r, beat));
   }
   el.classList.remove('in');
@@ -505,7 +503,7 @@ async function countdown(opts: RecordOpts) {
 function showCard(local: MediaItem, blob: Blob, poster: Blob | null, opts: RecordOpts) {
   dismissCaptureCard();
   const el = document.createElement('div');
-  el.className = 'shot-card rec-card panel landed';
+  el.className = 'shot-card rec-card panel';
   el.setAttribute('role', 'status');
   const size = blob.size > 1048576 ? `${(blob.size / 1048576).toFixed(1)} MB` : `${Math.max(1, Math.round(blob.size / 1024))} KB`;
   const facts = `${clock(local.duration ?? 0)} · ${local.w.toLocaleString()} × ${local.h.toLocaleString()} · ${size}`;
@@ -557,13 +555,11 @@ function showCard(local: MediaItem, blob: Blob, poster: Blob | null, opts: Recor
     if (act === 'open' && item) { dismiss(); openMedia(item.id, opts.camera); }
   });
 
-  const keep = bindCaptureSave(el, local, blob, poster, opts.camera, saved => {
+  bindCaptureSave(el, local, blob, poster, opts.camera, opts.keepInMedia, saved => {
     item = saved;
     el.querySelector<HTMLButtonElement>('.shot-card-thumb')!.disabled = false;
-    el.classList.add('done');
     arm(9000);
   });
-  if (opts.keepInMedia) void keep();
 }
 
 /** What a new recording is called until you rename it. */

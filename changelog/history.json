@@ -15,14 +15,14 @@
         "Read a matching excerpt and press Enter to open the board."
       ],
       "Camera": [
-        "Frame the whole screen, a dragged area, your selection or a saved view for a screenshot.",
+        "Frame the screen, an area, a selection or a saved view for a screenshot, with a single white camera flash.",
         "Choose a backdrop, canvas dots and sharpness, then download or copy the finished image.",
         "Record the board in supported desktop Chromium browsers with tab audio, microphone audio, both or neither.",
         "Pause, resume or stop with the on-screen controls, including during full-screen recording."
       ],
       "Media": [
-        "Choose Save locally or Save to Media from the finished screenshot or recording preview.",
-        "Select Save to Media in the camera to keep that capture as soon as it finishes.",
+        "Screenshots and recordings save to Media by default and can also be downloaded with Save locally.",
+        "Uncheck Save to Media in the camera or click Don’t save in the finished preview to skip that upload.",
         "Browse saved captures across boards, play recordings, rename items or put a screenshot on the canvas.",
         "The Delete button shows an animated confirmation for the selected item before moving it to the trash."
       ],

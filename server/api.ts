@@ -256,7 +256,7 @@ export async function handleApi(req: IncomingMessage, res: ServerResponse): Prom
       const id = parts[1]?.replace(/\.(png|mp4|webm)$/, '');
       if (!id && method === 'GET') return send(res, 200, (await listMedia(mine)).map(publicMedia)), true;
 
-      // An explicit save from the capture preview. The body is the original PNG or video.
+      // Save a finished capture. The body is the original PNG or video.
       if (!id && method === 'POST') {
         const owner = ownerKeyOf(p);
         if (!owner && !p.local) return send(res, 403, { error: 'forbidden' }), true;

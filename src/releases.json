@@ -6,7 +6,7 @@
       "Pick up where you left off with previews of your three most recent boards, including boards shared with you.",
       "Press Cmd+K on Mac or Ctrl+K on Windows and Linux to find tools, menu actions, board titles, or a phrase you remember writing.",
       "Take a screenshot or record the board with tab audio, your microphone, both, or neither. Stop recording stays within reach.",
-      "Choose Save locally or Save to Media from the finished preview. You can also copy a screenshot to the clipboard.",
+      "Captures save to Media by default. Choose Don’t save in the preview to skip the upload, or Save locally to download a copy.",
       "Accept word suggestions as you write, browse a site with collaborators, and press H for the Hand tool in either keyboard mode."
     ],
     "tour": [
@@ -40,7 +40,7 @@
       {
         "scene": "capture",
         "title": "Keep a screenshot where you want it",
-        "body": "Open the camera on a saved board, frame your shot and choose Take screenshot. In the preview, choose Save locally, Save to Media, or Copy.",
+        "body": "Open the camera on a saved board, frame your shot and choose Take screenshot. The preview saves to Media by default. Choose Don’t save to skip the upload, Save locally to download, or Copy for the clipboard.",
         "target": "#shot-btn"
       },
       {

@@ -22,7 +22,7 @@ const artwork: Record<string, string> = {
     <path class="demo-guide" d="M45 39h190"/><path class="demo-line" d="M59 54h80m-80 12h57"/>
     <g class="demo-appear">${demoIcon('select', 170, 49, 20)}</g>`,
   capture: `${demoIcon('camera', 126, 12, 28)}
-    ${card(36, 52, 'Save locally', '', 96)}${card(144, 52, 'Save to Media', 'demo-appear', 100)}`,
+    ${card(36, 52, 'Save locally', '', 96)}${card(144, 52, 'Don’t save', 'demo-appear', 100)}`,
   record: `<rect class="demo-card" x="31" y="19" width="218" height="54" rx="8"/>
     ${demoIcon('sound', 43, 29, 14)}<text x="62" y="41">Tab audio</text>
     ${demoIcon('mic', 43, 49, 14)}<text x="62" y="61">Microphone</text>

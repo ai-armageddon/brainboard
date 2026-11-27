@@ -5,6 +5,7 @@ import { addImages, viewCenter } from './actions';
 import { icon } from './icons';
 import { toast } from './ui';
 import { keyLabel } from './keys';
+import type { Box } from './types';
 
 export type Backdrop = 'none' | 'aurora' | 'sunset' | 'ocean' | 'mist' | 'night';
 export interface MediaItem {
@@ -52,6 +53,20 @@ export async function listMedia(): Promise<MediaItem[]> {
   return cache;
 }
 export const latestMedia = () => cache?.[0] ?? null;
+
+/** A single white exposure flash, over the area that was captured. */
+export function flashCapture(frame: Box) {
+  const flash = document.createElement('div');
+  flash.className = 'shot-flash';
+  flash.setAttribute('aria-hidden', 'true');
+  flash.style.cssText = `left:${frame.x}px;top:${frame.y}px;width:${frame.w}px;height:${frame.h}px`;
+  document.body.append(flash);
+  const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const fade = flash.animate([{ opacity: reduced ? 0.12 : 0.45 }, { opacity: 0 }], {
+    duration: reduced ? 80 : 160, easing: 'ease-out', fill: 'forwards',
+  });
+  fade.finished.then(() => flash.remove(), () => flash.remove());
+}
 
 export function dismissCaptureCard() {
   document.querySelectorAll<HTMLButtonElement>('.shot-card [data-act="dismiss"]').forEach(b => b.click());
@@ -109,17 +124,21 @@ async function keepCapture(meta: MediaItem, blob: Blob, poster: Blob | null): Pr
 /** Both capture cards keep their local file available during an upload and after a failed save. */
 export function bindCaptureSave(
   card: HTMLElement, capture: MediaItem, blob: Blob, poster: Blob | null,
-  camera: (kind?: 'photo' | 'video') => void, onSaved: (item: MediaItem) => void,
+  camera: (kind?: 'photo' | 'video') => void, saveByDefault: boolean, onSaved: (item: MediaItem) => void,
 ) {
   const button = card.querySelector<HTMLButtonElement>('[data-act="library"]')!;
   const label = button.querySelector('span')!;
   const title = card.querySelector<HTMLElement>('.shot-card-body b')!;
   let saved: MediaItem | undefined;
   let saving = false;
+  let autoSaveTimer = 0;
   const keep = async () => {
     if (saving || saved) return;
+    clearTimeout(autoSaveTimer);
+    autoSaveTimer = 0;
     saving = true;
     button.disabled = true;
+    label.textContent = 'Save to Media';
     title.textContent = 'Saving to Media…';
     try {
       saved = await keepCapture(capture, blob, poster);
@@ -136,11 +155,27 @@ export function bindCaptureSave(
   };
   button.disabled = false;
   button.addEventListener('click', () => {
+    if (autoSaveTimer) {
+      clearTimeout(autoSaveTimer);
+      autoSaveTimer = 0;
+      label.textContent = 'Save to Media';
+      title.textContent = isVideo(capture) ? 'Recording ready' : 'Screenshot ready';
+      return;
+    }
     if (!saved) { void keep(); return; }
     card.querySelector<HTMLButtonElement>('[data-act="dismiss"]')!.click();
     openMedia(saved.id, camera);
   });
-  return keep;
+  if (saveByDefault) {
+    title.textContent = 'Saving to Media shortly';
+    label.textContent = 'Don’t save';
+    autoSaveTimer = window.setTimeout(keep, 6000);
+    // Dismissing the preview accepts its default. Only the opt-out cancels the Media save.
+    card.querySelector('[data-act="dismiss"]')!.addEventListener('click', () => {
+      if (autoSaveTimer) void keep();
+    }, { once: true });
+    if (!card.isConnected) void keep();
+  }
 }
 
 // ---------------------------------------------------------------- actions on one item
@@ -296,7 +331,7 @@ export function openMedia(focus?: string, onNew?: (kind?: 'photo' | 'video') => 
       grid.innerHTML = `<div class="media-empty">
         <div class="media-empty-art" aria-hidden="true"><i></i><i></i><i></i>${icon('camera', 30)}</div>
         <b>${items.length ? 'Nothing captured on this board yet' : 'Nothing captured yet'}</b>
-        <span>Choose “Save to Media” in the capture preview to keep a screenshot or recording here.</span>
+        <span>Screenshots and recordings are saved here by default. Choose “Don’t save” in the preview to skip a capture.</span>
         ${onNew ? `<button class="auth-passkey media-empty-go" data-new="photo">${icon('camera', 18)}<span>Take a screenshot</span></button>` : ''}
       </div>`;
       return;
