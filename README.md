@@ -11,7 +11,7 @@ Live at **[brainboard.ink](https://brainboard.ink)**, or run your own: boards ar
 - **Infinite canvas.** Pan and zoom freely. Paste or drop images, write sticky notes and text, and sketch with a pen.
 - **Flow charts.** Bubbles, boxes, pills and decisions with curved, labelled connectors. Press `Tab` to grow the next step.
 - **Live collaboration.** Invite links that can edit or only view. Everyone's cursor, selection, typing and pen strokes show up live. Talk over built-in voice chat, follow someone, or present to the room.
-- **Vim keys.** A `:` command line with completion, `/` search, find and replace, and an optional vim mode with `hjkl` navigation.
+- **Vim keys.** A `:` command line with completion, `/` search, find and replace, and an optional vim mode with directional navigation.
 - **Agent friendly.** A built-in MCP server lets Claude, Cursor and other agents list, read, render and edit boards. Their edits appear live in your tab.
 - **No sign-up wall.** Start drawing straight away. Create an account (with a passkey, or email and password) when you want to keep your boards and open them anywhere.
 - **Screenshots.** A camera mode frames the whole screen, an area you drag, your selection or a saved view, with a shutter, a flash and an optional gradient frame. Choose **Save locally**, **Save to Media**, or **Copy** from the screenshot preview.
@@ -129,11 +129,11 @@ These work all the time, because they don't clash with the regular shortcuts:
 | `gt` · `gT` | Next or previous board |
 | `gv` · `:views` | Open saved views |
 
-Turn on **vim mode** with `:set vim` or **Vim keys** in the menu. Press `p` to select the pen in either mode. For tools whose keys become Vim commands, use commands such as `:note` and `:bubble`.
+Turn on **vim mode** with `:set vim` or **Vim keys** in the menu. Press `h` for the hand tool or `p` for the pen in either mode. For tools whose keys become Vim commands, use commands such as `:note` and `:bubble`.
 
 | | |
 |---|---|
-| `h` `j` `k` `l` | Jump to the nearest item in that direction |
+| `gh` `j` `k` `l` | Jump to the nearest item to the left, down, up or right |
 | `H` `J` `K` `L` | Pan the view |
 | `i` · `cc` | Edit text with the cursor at the start, or replace it |
 | `o` · `O` | New connected bubble below or above |

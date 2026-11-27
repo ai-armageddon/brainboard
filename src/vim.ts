@@ -3,7 +3,7 @@
 // Always on (none of these clash with the regular shortcuts):
 //   :  /  u  ⌃R  x  yy  w  b  gg  G  a  zz  zi  zo  gt  gT  gv  m{a-z}  '{a-z}
 // Vim mode (`:set vim`, or the menu) adds the keys that would otherwise pick a tool:
-//   h j k l  H J K L  i  o O  gp P  n N  dd  cc  s  e
+//   gh j k l  H J K L  i  o O  gp P  n N  dd  cc  s  e
 import { replaceItemText } from './text-runs';
 import { S, changed, checkpoint, getItem, redo, requestRender, undo } from './state';
 import { COLORS, type Box, type ColorKey, type Item, type NodeItem, type ShapeKind, type Tool } from './types';
@@ -142,7 +142,7 @@ function nearestToView(): NodeItem | undefined {
   return best;
 }
 
-/** h/j/k/l: hop to the closest item in that direction, preferring ones that are straight ahead. */
+/** gh/j/k/l: hop to the closest item in that direction, preferring ones that are straight ahead. */
 function move(dir: 'h' | 'j' | 'k' | 'l') {
   const cur = current();
   const from = cur && boxOf(cur);
@@ -509,7 +509,7 @@ const COMMANDS: Cmd[] = [
         applyTheme(v);
       } else return fail(`E518: Unknown option: ${opt}`);
     }
-    if (/\b(no|inv)?vim!?\b/.test(a)) message(vimMode ? 'Vim mode on: hjkl, i, o, gp, dd…' : 'Vim mode off');
+    if (/\b(no|inv)?vim!?\b/.test(a)) message(vimMode ? 'Vim mode on: gh/j/k/l, i, o, gp, dd…' : 'Vim mode off');
   }, complete: (a) => filterPrefix(['vim', 'novim', 'spell', 'nospell', 'bg=light', 'bg=dark', 'bg=auto'], a) },
   ...TOOL_CMDS.map(([names, tool, desc]): Cmd => ({ names, desc, run: () => {
     if (!canEdit() && tool !== 'select' && tool !== 'hand') return fail('E21: Cannot make changes, board is view-only');
@@ -750,7 +750,7 @@ const ALWAYS: Record<string, Fn> = {
 };
 
 const VIM: Record<string, Fn> = {
-  h: () => move('h'), j: () => move('j'), k: () => move('k'), l: () => move('l'),
+  j: () => move('j'), k: () => move('k'), l: () => move('l'),
   H: () => panScreen('H'), J: () => panScreen('J'), K: () => panScreen('K'), L: () => panScreen('L'),
   e: () => step(1),
   i: () => editAt('start'), I: () => editAt('start'),
@@ -772,6 +772,7 @@ const SEQS: Record<string, Fn> = {
   zo: () => { if (userMovedCamera()) zoomBy(0.8); },
 };
 const VIM_SEQS: Record<string, Fn> = {
+  gh: () => move('h'),
   gp: () => put(false),
   dd: () => { if (canEdit() && yankSelection()) deleteSelection(); },
   cc: () => editAt('all'),

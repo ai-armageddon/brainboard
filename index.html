@@ -244,7 +244,7 @@
 
     <nav id="toolbar" class="panel" aria-label="Tools">
       <button class="tbtn" data-tool="select" data-icon="select" data-tip="Select · V" aria-label="Select"></button>
-      <button class="tbtn" data-tool="hand" data-icon="hand" data-tip="Pan · H, Space or ⌘-drag" data-vim-tip="Pan · :hand or hold Space" aria-label="Pan"></button>
+      <button class="tbtn" data-tool="hand" data-icon="hand" data-tip="Hand · H, Space or ⌘-drag to pan" aria-label="Hand tool" aria-keyshortcuts="H"></button>
       <button id="shot-btn" class="tbtn" data-icon="camera" data-tip="Screenshot · ⇧⌘S  ·  Record · ⌥R" data-vim-tip="Screenshot · :shot or ⇧⌘S  ·  Record · :record or ⌥R" aria-label="Screenshot or recording"></button>
       <span class="sep"></span>
       <button class="tbtn edit-tool" data-tool="pen" data-icon="pen" data-tip="Pen · P" aria-label="Pen"></button>
@@ -335,7 +335,7 @@
             <dl>
               <dt>Search tools, menus and boards</dt><dd><kbd>⌘K</kbd></dd>
               <dt>Select</dt><dd><kbd>V</kbd></dd>
-              <dt>Pan</dt><dd><kbd>H</kbd>, hold <kbd>Space</kbd>, or <kbd class="pan-key">⌘</kbd>-drag</dd>
+              <dt>Hand tool (pan)</dt><dd><kbd>H</kbd>, hold <kbd>Space</kbd>, or <kbd class="pan-key">⌘</kbd>-drag</dd>
               <dt>Pen / Eraser</dt><dd><kbd>P</kbd> <kbd>E</kbd></dd>
               <dt>Pen or eraser size</dt><dd><kbd>−</kbd> <kbd>+</kbd> or <kbd>[</kbd> <kbd>]</kbd></dd>
               <dt>Scroll to resize brush</dt><dd><kbd>Shift</kbd> + scroll up or down</dd>
@@ -402,7 +402,7 @@
           <section class="vim-keys">
             <h3>Vim mode <span class="muted">· :set vim</span></h3>
             <dl>
-              <dt>Move to nearest item</dt><dd><kbd>h</kbd> <kbd>j</kbd> <kbd>k</kbd> <kbd>l</kbd></dd>
+              <dt>Move left / down / up / right</dt><dd><kbd>gh</kbd> <kbd>j</kbd> <kbd>k</kbd> <kbd>l</kbd></dd>
               <dt>Pan the view</dt><dd><kbd>H</kbd> <kbd>J</kbd> <kbd>K</kbd> <kbd>L</kbd></dd>
               <dt>Insert / Change text</dt><dd><kbd>i</kbd> <kbd>cc</kbd></dd>
               <dt>New bubble below / above</dt><dd><kbd>o</kbd> <kbd>O</kbd></dd>
