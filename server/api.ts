@@ -18,7 +18,7 @@ import {
 import { liveBoard, liveBoardPresence, onlineByInvite, refreshAccess } from './realtime.ts';
 import { EXPORT_TYPES, exportBoard, type ExportFormat } from './export.ts';
 import {
-  BACKDROPS, RecordingError, VIDEO_TYPES, addRecording, addShot, cleanMediaName, getMedia, itemFile, listMedia, mediaFile, publicMedia,
+  BACKDROPS, MediaUploadError, VIDEO_TYPES, addCapture, addShot, cleanMediaName, getMedia, itemFile, listMedia, mediaFile, publicMedia,
   recordingBytes, renameMedia, renderShot, setPoster, transferMedia, trashMedia, type Backdrop, type VideoExt,
 } from './media.ts';
 import {
@@ -30,6 +30,8 @@ import { HOSTED, ICE_SERVERS, PUBLIC_URL } from './config.ts';
 import { BROWSE_ENABLED, handleBrowse } from './browse.ts';
 
 const MAX_BODY = 30 * 1024 * 1024;
+// Allow a full-resolution 40-megapixel PNG including the camera backdrop.
+const MAX_SCREENSHOT = 192 * 1024 * 1024;
 /** One recording, and (on the hosted service) all of one person's recordings together. */
 const MAX_RECORDING = (HOSTED ? 300 : 4096) * 1024 * 1024;
 const MAX_RECORDINGS = 2048 * 1024 * 1024;
@@ -217,7 +219,7 @@ export async function handleApi(req: IncomingMessage, res: ServerResponse): Prom
       return true;
     }
 
-    // ---- screenshots: anyone who can open the board takes one into their own media
+    // ---- screenshots: render a capture, keeping it only when requested
     if (parts[0] === 'boards' && parts[2] === 'screenshot' && method === 'POST') {
       const id = parts[1];
       const token = inviteToken(req, url);
@@ -227,14 +229,20 @@ export async function handleApi(req: IncomingMessage, res: ServerResponse): Prom
       if (limited(`shot:${clientIp(req)}`, 90)) return send(res, 429, { error: 'Too many screenshots at once. Try again in a few minutes.' }), true;
       const b = (await liveBoard(id)) ?? (await readBoard(id));
       if (!b) return send(res, 404, { error: 'not found' }), true;
-      const body = await readJson<{ frame?: Record<string, unknown>; scale?: number; theme?: string; grid?: boolean; zoom?: number; backdrop?: string; name?: string }>(req);
+      const body = await readJson<{ frame?: Record<string, unknown>; scale?: number; theme?: string; grid?: boolean; zoom?: number; backdrop?: string; name?: string; keepInMedia?: boolean }>(req);
       const num = (v: unknown) => (typeof v === 'number' && Number.isFinite(v) && Math.abs(v) < 1e8 ? v : NaN);
       const frame = { x: num(body.frame?.x), y: num(body.frame?.y), w: num(body.frame?.w), h: num(body.frame?.h) };
       if (Object.values(frame).some(Number.isNaN) || frame.w < 1 || frame.h < 1) return send(res, 400, { error: 'Frame an area first' }), true;
       const backdrop: Backdrop = (BACKDROPS as readonly string[]).includes(String(body.backdrop)) ? body.backdrop as Backdrop : 'none';
       const theme = body.theme === 'dark' ? 'dark' : 'light';
       const zoom = num(body.zoom);
-      const shot = await renderShot(b, { frame, scale: num(body.scale) || 2, theme, backdrop, grid: body.grid && zoom > 0 ? { zoom } : undefined });
+      const keepInMedia = body.keepInMedia === true;
+      const shot = await renderShot(b, { frame, scale: num(body.scale) || 2, theme, backdrop, grid: body.grid && zoom > 0 ? { zoom } : undefined }, keepInMedia);
+      if (!keepInMedia) {
+        res.writeHead(200, { 'content-type': 'image/png', 'cache-control': 'no-store', 'x-image-width': shot.w, 'x-image-height': shot.h });
+        res.end(shot.png);
+        return true;
+      }
       const item = await addShot({
         name: cleanMediaName(body.name) || `${b.name} screenshot`, owner, board: { id: b.id, name: b.name },
         w: shot.w, h: shot.h, backdrop, theme,
@@ -248,15 +256,17 @@ export async function handleApi(req: IncomingMessage, res: ServerResponse): Prom
       const id = parts[1]?.replace(/\.(png|mp4|webm)$/, '');
       if (!id && method === 'GET') return send(res, 200, (await listMedia(mine)).map(publicMedia)), true;
 
-      // A recording made in the browser: the video is the request body, its details are in the query.
+      // An explicit save from the capture preview. The body is the original PNG or video.
       if (!id && method === 'POST') {
         const owner = ownerKeyOf(p);
         if (!owner && !p.local) return send(res, 403, { error: 'forbidden' }), true;
         const ext = (Object.keys(VIDEO_TYPES) as VideoExt[]).find((e) => (req.headers['content-type'] ?? '').startsWith(VIDEO_TYPES[e]));
-        if (!ext) return send(res, 415, { error: 'Send the recording as MP4 or WebM' }), true;
-        if (Number(req.headers['content-length']) > MAX_RECORDING) return send(res, 413, { error: 'That recording is too long to keep. Save it to your computer instead.' }), true;
-        if (limited(`rec:${clientIp(req)}`, 40)) return send(res, 429, { error: 'Too many recordings at once. Try again in a few minutes.' }), true;
-        if (HOSTED && (await recordingBytes(owner)) > MAX_RECORDINGS) return send(res, 413, { error: 'Your Media is full of recordings. Delete some to keep new ones.' }), true;
+        const photo = req.headers['content-type'] === 'image/png';
+        if (!ext && !photo) return send(res, 415, { error: 'Send a PNG, MP4 or WebM capture' }), true;
+        const limit = photo ? MAX_SCREENSHOT : MAX_RECORDING;
+        if (Number(req.headers['content-length']) > limit) return send(res, 413, { error: 'Capture is too large for Media. Save it locally instead.' }), true;
+        if (limited(`capture:${clientIp(req)}`, 40)) return send(res, 429, { error: 'Too many captures at once. Try again in a few minutes.' }), true;
+        if (!photo && HOSTED && (await recordingBytes(owner)) > MAX_RECORDINGS) return send(res, 413, { error: 'Your Media is full of recordings. Delete some to keep new ones.' }), true;
         const q = url.searchParams;
         // Say which board it's of only if they can open that board.
         const boardId = q.get('board');
@@ -271,14 +281,14 @@ export async function handleApi(req: IncomingMessage, res: ServerResponse): Prom
         const size = (v: string | null) => Math.min(Math.max(Math.round(Number(v)) || 0, 0), 16384);
         const backdrop: Backdrop = (BACKDROPS as readonly string[]).includes(String(q.get('backdrop'))) ? q.get('backdrop') as Backdrop : 'none';
         try {
-          const item = await addRecording({
-            name: cleanMediaName(q.get('name')) || `${board?.name ?? 'Brainboard'} recording`, owner, board, ext,
-            w: size(q.get('w')), h: size(q.get('h')), duration: Math.min(Math.max(Number(q.get('duration')) || 0, 0), 86400),
+          const item = await addCapture({
+            ...(photo ? { kind: 'screenshot' } : { kind: 'recording', ext, duration: Math.min(Math.max(Number(q.get('duration')) || 0, 0), 86400) }),
+            name: cleanMediaName(q.get('name')), owner, board, w: size(q.get('w')), h: size(q.get('h')),
             backdrop, theme: q.get('theme') === 'dark' ? 'dark' : 'light',
-          }, req, MAX_RECORDING);
+          }, req, limit);
           return send(res, 201, publicMedia(item)), true;
         } catch (e) {
-          if (e instanceof RecordingError) return send(res, e.status, { error: e.message }), true;
+          if (e instanceof MediaUploadError) return send(res, e.status, { error: e.message }), true;
           throw e;
         }
       }
@@ -286,11 +296,10 @@ export async function handleApi(req: IncomingMessage, res: ServerResponse): Prom
       const it = id ? await getMedia(id) : null;
       if (!it || !mine(it.owner)) return send(res, 404, { error: 'not found' }), true;
       if (parts[2] === 'poster' && method === 'PUT') {
-        if (it.kind !== 'recording') return send(res, 400, { error: 'Only recordings have a preview to set' }), true;
         try {
           await setPoster(it.id, await readBody(req));
         } catch (e) {
-          if (e instanceof RecordingError) return send(res, e.status, { error: e.message }), true;
+          if (e instanceof MediaUploadError) return send(res, e.status, { error: e.message }), true;
           throw e;
         }
         return send(res, 200, { ok: true }), true;

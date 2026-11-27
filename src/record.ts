@@ -1,11 +1,11 @@
 // The board recorder: video from the same camera that takes screenshots. Frame the screen, an area, the selection
 // or a saved view, press record, and work on the board as usual. It films this tab, keeps only what's inside the
-// frame (on a gradient backdrop if you picked a look), and puts the finished video in Media.
+// frame (on a gradient backdrop if you picked a look), and offers the finished video to save.
 import { session } from './net';
 import { icon } from './icons';
 import { toast } from './ui';
 import { keyLabel } from './keys';
-import { clock, keepRecording, openMedia, saveMedia, type Backdrop, type MediaItem } from './media';
+import { bindCaptureSave, clock, dismissCaptureCard, openMedia, saveMedia, type Backdrop, type MediaItem } from './media';
 import type { Box } from './types';
 
 export interface RecordOpts {
@@ -15,11 +15,14 @@ export interface RecordOpts {
   full: boolean;
   look: Backdrop;
   fps: 30 | 60;
+  tabAudio: boolean;
   mic: boolean;
   /** Keep the toolbars in the picture; off films only the board. */
   chrome: boolean;
   grid: boolean;
   name: string;
+  board: MediaItem['board'];
+  keepInMedia: boolean;
   /** Called to open the camera again (from Media's "New" buttons). */
   camera: (kind?: 'photo' | 'video') => void;
 }
@@ -62,6 +65,7 @@ interface Take {
   backdrop: HTMLCanvasElement | null;
   /** where the picture sits on the canvas: all of it, or inset on the backdrop */
   inner: { x: number; y: number; w: number; h: number; r: number };
+  mixer: AudioContext | null;
   recorder: MediaRecorder;
   chunks: Blob[];
   poster: Blob | null;
@@ -159,6 +163,7 @@ export async function startRecording(opts: RecordOpts): Promise<boolean> {
   starting = true;
   let display: MediaStream | null = null;
   let voice: MediaStream | null = null;
+  let mixer: AudioContext | null = null;
   try {
     const dpr = devicePixelRatio || 1;
     display = await devices!.getDisplayMedia({
@@ -166,7 +171,7 @@ export async function startRecording(opts: RecordOpts): Promise<boolean> {
         frameRate: { ideal: opts.fps, max: opts.fps }, displaySurface: 'browser',
         width: { ideal: Math.round(innerWidth * dpr) }, height: { ideal: Math.round(innerHeight * dpr) },
       },
-      audio: false,
+      audio: opts.tabAudio,
       // Offer this tab first, and nothing that can't be cropped to the board.
       preferCurrentTab: true, selfBrowserSurface: 'include', surfaceSwitching: 'exclude', monitorTypeSurfaces: 'exclude',
     } as DisplayMediaStreamOptions);
@@ -180,8 +185,22 @@ export async function startRecording(opts: RecordOpts): Promise<boolean> {
       try {
         voice = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true } });
       } catch {
-        toast('No microphone: recording without sound');
+        toast('Microphone unavailable. Recording will continue without it.');
       }
+    }
+    const tabTrack = opts.tabAudio ? display.getAudioTracks()[0] : undefined;
+    const micTrack = voice?.getAudioTracks()[0];
+    if (opts.tabAudio && !tabTrack) toast('Tab audio wasn’t shared. Enable tab audio in the browser picker to include it.');
+    let audioTrack = tabTrack ?? micTrack;
+    if (tabTrack && micTrack) {
+      // MediaRecorder needs one audio track. Mix both sources without playing either back into the tab.
+      mixer = new AudioContext();
+      const destination = mixer.createMediaStreamDestination();
+      for (const input of [tabTrack, micTrack]) {
+        mixer.createMediaStreamSource(new MediaStream([input])).connect(destination);
+      }
+      await mixer.resume();
+      audioTrack = destination.stream.getAudioTracks()[0];
     }
     document.body.classList.add('recording');
     document.body.classList.toggle('rec-clean', !opts.chrome);
@@ -191,13 +210,14 @@ export async function startRecording(opts: RecordOpts): Promise<boolean> {
     video.playsInline = true;
     video.srcObject = display;
     await video.play();
-    showHud(opts);
+    showHud(!!tabTrack, !!micTrack);
     await countdown(opts);
     if (track.readyState !== 'live') throw new DOMException('Sharing ended', 'AbortError');
-    begin(opts, display, voice, video);
+    begin(opts, display, voice, video, audioTrack, mixer);
     return true;
   } catch (e) {
     stopTracks(display, voice);
+    if (mixer) void mixer.close();
     cleanup();
     const name = (e as Error).name;
     if (name !== 'NotAllowedError' && name !== 'AbortError') toast('Couldn’t start recording. Check your browser’s screen recording permission');
@@ -207,7 +227,7 @@ export async function startRecording(opts: RecordOpts): Promise<boolean> {
   }
 }
 
-function begin(opts: RecordOpts, display: MediaStream, voice: MediaStream | null, video: HTMLVideoElement) {
+function begin(opts: RecordOpts, display: MediaStream, voice: MediaStream | null, video: HTMLVideoElement, audio: MediaStreamTrack | undefined, mixer: AudioContext | null) {
   const src = source(opts, video);
   // The picture is as sharp as the tab is filmed, up to 4K on its long side.
   const fit = Math.min(1, MAX_SIDE / Math.max(src.w, src.h));
@@ -223,18 +243,26 @@ function begin(opts: RecordOpts, display: MediaStream, voice: MediaStream | null
   const backdrop = opts.look === 'none' ? null : paintBackdrop(opts.look, canvas.width, canvas.height, inner);
 
   const out = canvas.captureStream(opts.fps);
-  for (const t of voice?.getAudioTracks() ?? []) out.addTrack(t);
-  const mimeType = mimeFor(!!voice);
+  if (audio) out.addTrack(audio);
+  const mimeType = mimeFor(!!audio);
   const bits = Math.min(Math.max(canvas.width * canvas.height * opts.fps * 0.1, 6e6), 50e6);
-  const recorder = new MediaRecorder(out, { ...(mimeType ? { mimeType } : {}), videoBitsPerSecond: bits });
-  const t: Take = {
-    opts, display, voice, video, canvas, ctx, backdrop, inner, recorder, chunks: [], poster: null,
-    started: performance.now(), elapsed: 0, paused: false, raf: 0, tick: 0,
-  };
+  let t: Take;
+  try {
+    const recorder = new MediaRecorder(out, { ...(mimeType ? { mimeType } : {}), videoBitsPerSecond: bits });
+    t = {
+      opts, display, voice, video, canvas, ctx, backdrop, inner, mixer, recorder, chunks: [], poster: null,
+      started: performance.now(), elapsed: 0, paused: false, raf: 0, tick: 0,
+    };
+    recorder.ondataavailable = (e) => { if (e.data.size) t.chunks.push(e.data); };
+    recorder.onstop = () => void finish(t);
+    recorder.onerror = () => stopRecording();
+    draw(t);
+    recorder.start(1000);
+  } catch (err) {
+    stopTracks(out);
+    throw err;
+  }
   take = t;
-  recorder.ondataavailable = (e) => { if (e.data.size) t.chunks.push(e.data); };
-  recorder.onstop = () => void finish(t);
-  recorder.onerror = () => stopRecording();
   // "Stop sharing" in the browser's own bar ends the recording too.
   display.getVideoTracks()[0].addEventListener('ended', () => stopRecording(), { once: true });
 
@@ -249,8 +277,6 @@ function begin(opts: RecordOpts, display: MediaStream, voice: MediaStream | null
     draw(t);
     if (!t.poster && now - t.started > 600) grabPoster(t);
   };
-  draw(t);
-  recorder.start(1000);
   t.raf = requestAnimationFrame(loop);
   t.tick = window.setInterval(paintHud, 250);
   paintHud();
@@ -258,7 +284,7 @@ function begin(opts: RecordOpts, display: MediaStream, voice: MediaStream | null
   window.addEventListener('keydown', stopKey, true);
 }
 
-/** ⌥R stops from anywhere, even mid-sentence in a note: with a full-screen frame it's the only control there is. */
+/** ⌥R stops from anywhere, even mid-sentence in a note. */
 function stopKey(e: KeyboardEvent) {
   if (!e.altKey || e.code !== 'KeyR' || e.ctrlKey || e.metaKey || e.shiftKey) return;
   e.preventDefault();
@@ -350,6 +376,8 @@ function cleanup() {
   document.body.classList.remove('recording', 'rec-clean', 'rec-nogrid');
   window.removeEventListener('beforeunload', warnLeaving);
   window.removeEventListener('keydown', stopKey, true);
+  window.removeEventListener('resize', placeHud);
+  pending = null;
   hud?.remove();
   hud = null;
 }
@@ -357,7 +385,8 @@ function cleanup() {
 async function finish(t: Take) {
   cancelAnimationFrame(t.raf);
   clearInterval(t.tick);
-  stopTracks(t.display, t.voice);
+  stopTracks(t.recorder.stream, t.display, t.voice);
+  if (t.mixer) void t.mixer.close();
   t.video.srcObject = null;
   take = null;
   document.title = boardTitle();
@@ -371,27 +400,17 @@ async function finish(t: Take) {
   const poster = t.poster?.size ? t.poster : null;
   const local: MediaItem = {
     id: '', kind: 'recording', ext: type.includes('mp4') ? 'mp4' : 'webm', duration: length, name: t.opts.name,
-    board: null, w: t.canvas.width, h: t.canvas.height, bytes: blob.size, backdrop: t.opts.look, theme: theme(), created: new Date().toISOString(),
+    board: t.opts.board, w: t.canvas.width, h: t.canvas.height, bytes: blob.size, backdrop: t.opts.look, theme: theme(), created: new Date().toISOString(),
   };
-  const card = showCard(local, blob, poster, t.opts.camera);
-  try {
-    card.ready(await keepRecording(blob, poster, { name: local.name, w: local.w, h: local.h, duration: length, theme: local.theme, backdrop: local.backdrop }));
-  } catch (err) {
-    card.failed((err as Error).message);
-  }
+  showCard(local, blob, poster, t.opts);
 }
 
 const warnLeaving = (e: BeforeUnloadEvent) => { e.preventDefault(); };
 
 // ---------------------------------------------------------------- on screen while recording
 
-/**
- * Red corners just outside the frame and a small control pill beside it. Nothing of the recorder is ever inside
- * the frame, so none of it ends up in the video: when the frame fills the window there are no controls on screen
- * at all, and ⌥R (or the browser's own "Stop sharing") stops. For the same reason the pill has no pop-up
- * tooltips: they'd open over the frame.
- */
-function showHud(opts: RecordOpts) {
+/** Keep controls outside a cropped frame when they fit, and on screen throughout every recording. */
+function showHud(tabAudio: boolean, mic: boolean) {
   hud?.remove();
   hud = document.createElement('div');
   hud.id = 'rec';
@@ -401,9 +420,10 @@ function showHud(opts: RecordOpts) {
     <div class="rec-count" aria-hidden="true"><b></b><span></span></div>
     <div class="rec-pill panel" role="toolbar" aria-label="Recording">
       <span class="rec-time" role="timer"><i class="rec-dot"></i><b>0:00</b></span>
-      ${opts.mic ? `<span class="rec-mic" aria-label="Microphone on">${icon('mic', 15)}</span>` : ''}
+      ${tabAudio ? `<span class="rec-mic" aria-label="Tab audio on">${icon('sound', 15)}</span>` : ''}
+      ${mic ? `<span class="rec-mic" aria-label="Microphone on">${icon('mic', 15)}</span>` : ''}
       <button data-act="pause" aria-label="Pause"><i class="rec-bars"></i></button>
-      <button data-act="stop" class="rec-stop" aria-label="${keyLabel('Stop recording (⌥R)')}"><i></i><span>Stop</span></button>
+      <button data-act="stop" class="rec-stop" aria-label="${keyLabel('Stop recording (⌥R)')}"><i></i><span>Stop recording</span></button>
     </div>`;
   document.body.append(hud);
   hud.querySelector('.rec-pill')!.addEventListener('click', (e) => {
@@ -436,7 +456,8 @@ function placeHud() {
   else if (innerWidth - (r.x + r.w) >= pw + gap + 10) at = [r.x + r.w + gap, cy];
   else if (r.x >= pw + gap + 10) at = [r.x - gap - pw, cy];
   hud.classList.toggle('in-shot', !at);
-  if (at) { pill.style.left = `${Math.round(at[0])}px`; pill.style.top = `${Math.round(at[1])}px`; }
+  pill.style.left = at ? `${Math.round(Math.max(10, Math.min(at[0], innerWidth - pw - 10)))}px` : '50%';
+  pill.style.top = at ? `${Math.round(Math.max(10, Math.min(at[1], innerHeight - ph - 10)))}px` : 'calc(12px + var(--sa-t))';
 }
 
 function paintHud() {
@@ -448,7 +469,6 @@ function paintHud() {
   hud.querySelector('.rec-time b')!.textContent = time;
   const pause = hud.querySelector<HTMLElement>('[data-act="pause"]')!;
   pause.setAttribute('aria-label', t.paused ? 'Resume' : 'Pause');
-  // With no controls on screen, the tab itself says it's recording.
   document.title = `${t.paused ? '❚❚' : '●'} ${time} · ${boardTitle()}`;
 }
 
@@ -458,9 +478,7 @@ async function countdown(opts: RecordOpts) {
   placeHud();
   const el = hud!.querySelector<HTMLElement>('.rec-count')!;
   const num = el.querySelector('b')!;
-  el.querySelector('span')!.innerHTML = hud!.classList.contains('in-shot')
-    ? keyLabel('Press <kbd>⌥R</kbd> to stop')
-    : keyLabel('<kbd>⌥R</kbd> or Stop to finish');
+  el.querySelector('span')!.innerHTML = keyLabel('Stop recording or <kbd>⌥R</kbd> to finish');
   el.classList.add('in');
   const beat = reducedMotion() ? 450 : 650;
   for (const n of [3, 2, 1]) {
@@ -480,29 +498,25 @@ async function countdown(opts: RecordOpts) {
 
 // ---------------------------------------------------------------- the card in the corner
 
-let cardEl: HTMLDivElement | null = null;
-
 /**
  * The finished take, in the corner where screenshots land. Save works at once (the video is still in this tab);
  * Media opens it once it's been kept there. If keeping it fails the card stays until you've saved or dismissed it.
  */
-function showCard(local: MediaItem, blob: Blob, poster: Blob | null, camera: RecordOpts['camera']) {
-  cardEl?.remove();
-  document.querySelector('.shot-card')?.remove();
+function showCard(local: MediaItem, blob: Blob, poster: Blob | null, opts: RecordOpts) {
+  dismissCaptureCard();
   const el = document.createElement('div');
-  cardEl = el;
   el.className = 'shot-card rec-card panel landed';
   el.setAttribute('role', 'status');
   const size = blob.size > 1048576 ? `${(blob.size / 1048576).toFixed(1)} MB` : `${Math.max(1, Math.round(blob.size / 1024))} KB`;
   const facts = `${clock(local.duration ?? 0)} · ${local.w.toLocaleString()} × ${local.h.toLocaleString()} · ${size}`;
   el.innerHTML = `
-    <button class="shot-card-thumb" data-act="open" aria-label="Open in Media"><span class="shot-slot"></span><i class="mtile-play"></i></button>
+    <button class="shot-card-thumb" data-act="open" aria-label="Open in Media" disabled><span class="shot-slot"></span><i class="mtile-play"></i></button>
     <div class="shot-card-body">
-      <b>Saving to Media…</b>
+      <b>Recording ready</b>
       <span class="shot-card-meta">${facts}</span>
       <div class="shot-card-acts">
-        <button data-act="save">${icon('download', 15)}<span>Save…</span></button>
-        <button data-act="open" disabled>${icon('media', 15)}<span>Media</span></button>
+        <button data-act="save">${icon('download', 15)}<span>Save locally</span></button>
+        <button data-act="library">${icon('media', 15)}<span>Save to Media</span></button>
       </div>
     </div>
     <button class="shot-card-x" data-act="dismiss" aria-label="Dismiss">${icon('close', 14)}</button>`;
@@ -521,7 +535,7 @@ function showCard(local: MediaItem, blob: Blob, poster: Blob | null, camera: Rec
   requestAnimationFrame(() => el.classList.add('in'));
 
   let item: MediaItem | null = null;
-  let kept = false, saved = false;
+  let savedLocally = false;
   let timer = 0;
   const dismiss = () => {
     clearTimeout(timer);
@@ -529,36 +543,27 @@ function showCard(local: MediaItem, blob: Blob, poster: Blob | null, camera: Rec
     setTimeout(() => el.remove(), 260);
     if (posterUrl) setTimeout(() => URL.revokeObjectURL(posterUrl), 1000);
     window.removeEventListener('beforeunload', guard);
-    if (cardEl === el) cardEl = null;
   };
   // A take that isn't in Media and hasn't been saved exists only in this tab.
-  const guard = (e: BeforeUnloadEvent) => { if (!kept && !saved) e.preventDefault(); };
+  const guard = (e: BeforeUnloadEvent) => { if (!item && !savedLocally) e.preventDefault(); };
   window.addEventListener('beforeunload', guard);
   const arm = (ms: number) => { clearTimeout(timer); timer = window.setTimeout(dismiss, ms); };
   el.addEventListener('pointerenter', () => clearTimeout(timer));
-  el.addEventListener('pointerleave', () => { if (kept) arm(5000); });
+  el.addEventListener('pointerleave', () => { if (item) arm(5000); });
   el.addEventListener('click', async (e) => {
     const act = (e.target as Element).closest<HTMLElement>('[data-act]')?.dataset.act;
     if (act === 'dismiss') return dismiss();
-    if (act === 'save') { if (await saveMedia(item ?? local, blob)) saved = true; return; }
-    if (act === 'open' && item) { dismiss(); openMedia(item.id, camera); }
+    if (act === 'save') { if (await saveMedia(item ?? local, blob)) savedLocally = true; return; }
+    if (act === 'open' && item) { dismiss(); openMedia(item.id, opts.camera); }
   });
 
-  return {
-    ready(it: MediaItem) {
-      item = it;
-      kept = true;
-      el.querySelector('.shot-card-body b')!.textContent = 'Saved to Media';
-      el.querySelectorAll('button[disabled]').forEach((b) => b.removeAttribute('disabled'));
-      el.classList.add('done');
-      arm(9000);
-    },
-    failed(msg: string) {
-      el.classList.add('unkept');
-      el.querySelector('.shot-card-body b')!.textContent = 'Not kept in Media: save it now';
-      el.querySelector('.shot-card-meta')!.textContent = msg;
-    },
-  };
+  const keep = bindCaptureSave(el, local, blob, poster, opts.camera, saved => {
+    item = saved;
+    el.querySelector<HTMLButtonElement>('.shot-card-thumb')!.disabled = false;
+    el.classList.add('done');
+    arm(9000);
+  });
+  if (opts.keepInMedia) void keep();
 }
 
 /** What a new recording is called until you rename it. */

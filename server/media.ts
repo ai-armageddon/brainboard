@@ -3,7 +3,7 @@
 // ("anon:<id>" / "user:<id>"), or to this machine (null).
 import { promises as fs, mkdirSync } from 'node:fs';
 import path from 'node:path';
-import { DATA_DIR, TRASH_DIR, isValidId, newId, type Board } from './store.ts';
+import { DATA_DIR, TRASH_DIR, imageSize, isValidId, newId, type Board } from './store.ts';
 import { Resvg } from '@resvg/resvg-js';
 import { boardSvg, rasterize, type Theme } from './render.ts';
 import type { Box } from '../src/types.ts';
@@ -104,7 +104,7 @@ function framed(inner: string, frame: Box, W: number, H: number, look: Backdrop)
 }
 
 /** Render one area of a board to PNG, plus a small thumbnail. */
-export async function renderShot(b: Board, o: ShotOpts): Promise<{ png: Buffer; thumb: Buffer; w: number; h: number }> {
+export async function renderShot(b: Board, o: ShotOpts, withThumbnail = true): Promise<{ png: Buffer; thumb: Buffer; w: number; h: number }> {
   const r = await boardSvg(b, { theme: o.theme, frame: o.frame, grid: o.grid, background: true });
   if (!r) throw new Error('Nothing to capture');
   let scale = Math.min(Math.max(o.scale, 0.05), 8);
@@ -116,7 +116,7 @@ export async function renderShot(b: Board, o: ShotOpts): Promise<{ png: Buffer; 
     ({ svg, w, h } = framed(inner, o.frame, W, H, o.backdrop));
   }
   const png = rasterize(svg, w).asPng();
-  const thumb = w > THUMB_W ? rasterize(svg, THUMB_W).asPng() : png;
+  const thumb = withThumbnail && w > THUMB_W ? rasterize(svg, THUMB_W).asPng() : png;
   return { png, thumb, w, h };
 }
 
@@ -171,7 +171,7 @@ export async function addShot(meta: Omit<MediaItem, 'id' | 'created' | 'bytes' |
   return item;
 }
 
-export class RecordingError extends Error {
+export class MediaUploadError extends Error {
   status: number;
   constructor(status: number, message: string) { super(message); this.status = status; }
 }
@@ -181,27 +181,38 @@ const isPng = (b: Buffer) => b.length > 8 && b.readUInt32BE(0) === 0x89504e47 &&
 const looksLike = (ext: VideoExt, head: Buffer) => head.length >= 12 &&
   (ext === 'mp4' ? head.toString('latin1', 4, 8) === 'ftyp' : head.readUInt32BE(0) === 0x1a45dfa3);
 
-/**
- * Keep a recording. The video is written to disk as it arrives (recordings are far bigger than screenshots),
- * and dropped if it passes `limit` bytes or turns out not to be a video.
- */
-export async function addRecording(
-  meta: Omit<MediaItem, 'id' | 'created' | 'bytes' | 'kind'> & { ext: VideoExt }, body: AsyncIterable<Buffer>, limit: number,
+/** Stream the exact capture to disk, publishing it only after the complete file passes validation. */
+export async function addCapture(
+  meta: Omit<MediaItem, 'id' | 'created' | 'bytes'>, body: AsyncIterable<Buffer>, limit: number,
 ): Promise<MediaItem> {
   const list = await load();
   const id = newId();
-  const file = mediaFile(id, false, meta.ext);
+  const ext = meta.kind === 'screenshot' ? 'png' : meta.ext ?? 'webm';
+  const file = mediaFile(id, false, ext);
   const tmp = `${file}.part`;
   const out = await fs.open(tmp, 'w');
+  const header = Buffer.alloc(ext === 'png' ? 24 : 12);
   let bytes = 0;
   try {
     for await (const chunk of body) {
-      if (!bytes && !looksLike(meta.ext, chunk)) throw new RecordingError(415, 'That isn’t a video Brainboard can keep');
+      if (bytes + chunk.length > limit) throw new MediaUploadError(413, 'Capture is too large for Media. Save it locally instead.');
+      if (bytes < header.length) {
+        const copied = chunk.copy(header, bytes);
+        if (bytes + copied === header.length) {
+          if (ext === 'png') {
+            const dims = isPng(header) && header.toString('ascii', 12, 16) === 'IHDR' && imageSize(header);
+            if (!dims || !dims.w || !dims.h || Math.max(dims.w, dims.h) > MAX_SIDE + 400) {
+              throw new MediaUploadError(415, 'Invalid screenshot PNG');
+            }
+            meta.w = dims.w;
+            meta.h = dims.h;
+          } else if (!looksLike(ext, header)) throw new MediaUploadError(415, 'Invalid recording format');
+        }
+      }
       bytes += chunk.length;
-      if (bytes > limit) throw new RecordingError(413, 'That recording is too long to keep. Save it to your computer instead.');
-      await out.write(chunk);
+      await out.writeFile(chunk);
     }
-    if (!bytes) throw new RecordingError(400, 'The recording was empty');
+    if (bytes < header.length) throw new MediaUploadError(400, 'The capture was incomplete');
     await out.close();
     await fs.rename(tmp, file);
   } catch (e) {
@@ -210,16 +221,24 @@ export async function addRecording(
     throw e;
   }
   const item: MediaItem = {
-    id, kind: 'recording', created: new Date().toISOString(), bytes, ...meta, name: cleanMediaName(meta.name) || 'Recording',
+    ...meta, id, created: new Date().toISOString(), bytes,
+    name: cleanMediaName(meta.name) || (ext === 'png' ? 'Screenshot' : 'Recording'),
   };
   list.unshift(item);
-  await persist();
+  try {
+    await persist();
+  } catch (err) {
+    const index = list.indexOf(item);
+    if (index >= 0) list.splice(index, 1);
+    await fs.unlink(file).catch(() => {});
+    throw err;
+  }
   return item;
 }
 
-/** The still shown for a recording in Media: one frame of it, sent by the browser that made it. */
+/** A small PNG preview for a capture uploaded from the browser. */
 export async function setPoster(id: string, png: Buffer) {
-  if (!isPng(png)) throw new RecordingError(415, 'The preview must be a PNG');
+  if (!isPng(png)) throw new MediaUploadError(415, 'The preview must be a PNG');
   await fs.writeFile(mediaFile(id, true), png);
 }
 

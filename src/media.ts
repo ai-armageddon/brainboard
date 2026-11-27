@@ -1,4 +1,4 @@
-// Media: every screenshot and recording you take lands here. Browse them, rename them, put a shot on the board,
+// Media holds the screenshots and recordings you choose to keep. Browse them, rename them, put a shot on the board,
 // copy it, or save it anywhere: "Save as…" asks where (Chrome, Edge, Opera); other browsers save to Downloads.
 import { session, canEdit } from './net';
 import { addImages, viewCenter } from './actions';
@@ -53,36 +53,94 @@ export async function listMedia(): Promise<MediaItem[]> {
 }
 export const latestMedia = () => cache?.[0] ?? null;
 
+export function dismissCaptureCard() {
+  document.querySelectorAll<HTMLButtonElement>('.shot-card [data-act="dismiss"]').forEach(b => b.click());
+}
+
 export async function takeScreenshot(body: {
   frame: { x: number; y: number; w: number; h: number }; scale: number; theme: 'light' | 'dark'; grid: boolean; zoom: number; backdrop: Backdrop; name: string;
-}): Promise<MediaItem> {
-  const item = await req<MediaItem>('POST', `/api/boards/${encodeURIComponent(session.boardId!)}/screenshot`, body);
+}): Promise<{ item: MediaItem; blob: Blob }> {
+  const board = { id: session.boardId!, name: session.boardName };
+  const url = `/api/boards/${encodeURIComponent(board.id)}/screenshot`;
+  const res = await fetch(url, {
+    method: 'POST', headers: { 'content-type': 'application/json', ...(session.invite ? { 'x-invite': session.invite } : {}) },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) throw new Error((await res.json().catch(() => null))?.error ?? `HTTP ${res.status}`);
+  const blob = await res.blob();
+  return { blob, item: {
+    kind: 'screenshot', id: '', name: body.name, board, theme: body.theme, backdrop: body.backdrop,
+    w: Number(res.headers.get('x-image-width')), h: Number(res.headers.get('x-image-height')),
+    created: new Date().toISOString(), bytes: blob.size,
+  } };
+}
+
+async function screenshotThumbnail(blob: Blob, item: MediaItem) {
+  if (Math.max(item.w, item.h) <= 560) return null;
+  const image = await createImageBitmap(blob);
+  try {
+    const scale = 560 / Math.max(image.width, image.height);
+    const canvas = document.createElement('canvas');
+    canvas.width = Math.max(1, Math.round(image.width * scale));
+    canvas.height = Math.max(1, Math.round(image.height * scale));
+    canvas.getContext('2d')!.drawImage(image, 0, 0, canvas.width, canvas.height);
+    return await new Promise<Blob | null>(resolve => canvas.toBlob(resolve, 'image/png'));
+  } finally { image.close(); }
+}
+
+async function keepCapture(meta: MediaItem, blob: Blob, poster: Blob | null): Promise<MediaItem> {
+  const q = new URLSearchParams({
+    name: meta.name, w: String(meta.w), h: String(meta.h), duration: String(Math.round((meta.duration ?? 0) * 10) / 10),
+    theme: meta.theme, backdrop: meta.backdrop, ...(meta.board ? { board: meta.board.id } : {}),
+  });
+  const invite: Record<string, string> = session.invite ? { 'x-invite': session.invite } : {};
+  const res = await fetch(`/api/media?${q}`, {
+    method: 'POST', headers: { 'content-type': isVideo(meta) ? `video/${extOf(meta)}` : 'image/png', ...invite }, body: blob,
+  });
+  if (!res.ok) throw new Error((await res.json().catch(() => null))?.error ?? `HTTP ${res.status}`);
+  const item = await res.json() as MediaItem;
+  if (!isVideo(meta)) poster = await screenshotThumbnail(blob, meta).catch(() => null);
+  if (poster) await fetch(`/api/media/${item.id}/poster`, { method: 'PUT', headers: { 'content-type': 'image/png', ...invite }, body: poster }).catch(() => {});
   cache = [item, ...(cache ?? []).filter((i) => i.id !== item.id)];
   mediaEvents.dispatchEvent(new CustomEvent('added', { detail: item }));
   return item;
 }
 
-/**
- * Keep a recording made in this browser: the video goes up as it is, then one frame of it as the still shown in
- * Media. The still is a nicety, so a recording is kept even if that part fails.
- */
-export async function keepRecording(video: Blob, poster: Blob | null, meta: {
-  name: string; w: number; h: number; duration: number; theme: 'light' | 'dark'; backdrop: Backdrop;
-}): Promise<MediaItem> {
-  const q = new URLSearchParams({
-    name: meta.name, w: String(meta.w), h: String(meta.h), duration: String(Math.round(meta.duration * 10) / 10),
-    theme: meta.theme, backdrop: meta.backdrop, ...(session.boardId ? { board: session.boardId } : {}),
+/** Both capture cards keep their local file available during an upload and after a failed save. */
+export function bindCaptureSave(
+  card: HTMLElement, capture: MediaItem, blob: Blob, poster: Blob | null,
+  camera: (kind?: 'photo' | 'video') => void, onSaved: (item: MediaItem) => void,
+) {
+  const button = card.querySelector<HTMLButtonElement>('[data-act="library"]')!;
+  const label = button.querySelector('span')!;
+  const title = card.querySelector<HTMLElement>('.shot-card-body b')!;
+  let saved: MediaItem | undefined;
+  let saving = false;
+  const keep = async () => {
+    if (saving || saved) return;
+    saving = true;
+    button.disabled = true;
+    title.textContent = 'Saving to Media…';
+    try {
+      saved = await keepCapture(capture, blob, poster);
+      label.textContent = 'Open in Media';
+      title.textContent = 'Saved to Media';
+      onSaved(saved);
+    } catch (err) {
+      title.textContent = 'Couldn’t save to Media';
+      toast((err as Error).message);
+    } finally {
+      saving = false;
+      button.disabled = false;
+    }
+  };
+  button.disabled = false;
+  button.addEventListener('click', () => {
+    if (!saved) { void keep(); return; }
+    card.querySelector<HTMLButtonElement>('[data-act="dismiss"]')!.click();
+    openMedia(saved.id, camera);
   });
-  const invite: Record<string, string> = session.invite ? { 'x-invite': session.invite } : {};
-  const res = await fetch(`/api/media?${q}`, {
-    method: 'POST', headers: { 'content-type': video.type.includes('mp4') ? 'video/mp4' : 'video/webm', ...invite }, body: video,
-  });
-  if (!res.ok) throw new Error((await res.json().catch(() => null))?.error ?? `HTTP ${res.status}`);
-  const item = await res.json() as MediaItem;
-  if (poster) await fetch(`/api/media/${item.id}/poster`, { method: 'PUT', headers: { 'content-type': 'image/png', ...invite }, body: poster }).catch(() => {});
-  cache = [item, ...(cache ?? []).filter((i) => i.id !== item.id)];
-  mediaEvents.dispatchEvent(new CustomEvent('added', { detail: item }));
-  return item;
+  return keep;
 }
 
 // ---------------------------------------------------------------- actions on one item
@@ -142,11 +200,11 @@ function download(it: MediaItem, have?: Blob) {
   return true;
 }
 
-export async function copyMedia(it: MediaItem) {
+export async function copyMedia(it: MediaItem, have?: Blob) {
   if (isVideo(it)) return toast('Recordings can’t be copied. Save it instead');
   try {
     // A promise keeps Safari's user-gesture window open while the image loads.
-    await navigator.clipboard.write([new ClipboardItem({ 'image/png': fetchBlob(it) })]);
+    await navigator.clipboard.write([new ClipboardItem({ 'image/png': have ?? fetchBlob(it) })]);
     toast('Image copied');
   } catch {
     toast('Your browser wouldn’t copy the image. Try Save instead');
@@ -196,7 +254,8 @@ export function openMedia(focus?: string, onNew?: (kind?: 'photo' | 'video') => 
   let items: MediaItem[] = cache ?? [];
   let scope: 'all' | 'board' = 'all';
   let current: string | null = focus ?? null;
-  let deleteArmed = 0;
+  const deleting = new Set<string>();
+  let disarmTimer = 0;
 
   const el = document.createElement('div');
   sheet = el;
@@ -237,7 +296,7 @@ export function openMedia(focus?: string, onNew?: (kind?: 'photo' | 'video') => 
       grid.innerHTML = `<div class="media-empty">
         <div class="media-empty-art" aria-hidden="true"><i></i><i></i><i></i>${icon('camera', 30)}</div>
         <b>${items.length ? 'Nothing captured on this board yet' : 'Nothing captured yet'}</b>
-        <span>Frame the whole screen, an area you drag, your selection or a saved view, then take a screenshot or record a video. Everything is kept here.</span>
+        <span>Choose “Save to Media” in the capture preview to keep a screenshot or recording here.</span>
         ${onNew ? `<button class="auth-passkey media-empty-go" data-new="photo">${icon('camera', 18)}<span>Take a screenshot</span></button>` : ''}
       </div>`;
       return;
@@ -292,7 +351,9 @@ export function openMedia(focus?: string, onNew?: (kind?: 'photo' | 'video') => 
           <button class="auth-submit" data-act="copy">${icon('copy', 16)}<span>Copy</span></button>
           ${canEdit() && (session.boardId || session.draft) ? `<button class="auth-submit" data-act="place">${icon('place', 16)}<span>Put on board</span></button>` : ''}
         </div>`}
-        <button class="md-delete" data-act="delete">${icon('trash', 15)}<span>Delete</span></button>
+        <button class="md-delete" data-act="delete" aria-label="${deleting.has(it.id) ? 'Deleting' : 'Delete'}" ${deleting.has(it.id) ? 'disabled' : ''}>
+          ${icon('trash', 16)}<span class="md-delete-label" aria-hidden="true"><span class="idle">${deleting.has(it.id) ? 'Deleting…' : 'Delete'}</span><span class="confirm">Confirm delete</span></span>
+        </button>
       </div>`;
     const input = detail.querySelector<HTMLInputElement>('input[name="name"]')!;
     input.value = it.name;
@@ -323,6 +384,7 @@ export function openMedia(focus?: string, onNew?: (kind?: 'photo' | 'video') => 
   const close = () => {
     if (sheet !== el) return;
     sheet = null;
+    clearTimeout(disarmTimer);
     el.classList.remove('in');
     mediaEvents.removeEventListener('added', onAdded);
     window.removeEventListener('keydown', onKey, true);
@@ -352,25 +414,46 @@ export function openMedia(focus?: string, onNew?: (kind?: 'photo' | 'video') => 
     else if (act === 'copy') await copyMedia(it);
     else if (act === 'place') { close(); await placeMedia(it); }
     else if (act === 'delete') {
-      const b = detail.querySelector<HTMLElement>('.md-delete span')!;
-      if (Date.now() - deleteArmed > 3500) {
-        deleteArmed = Date.now();
-        b.textContent = 'Click again to delete';
-        detail.querySelector('.md-delete')!.classList.add('armed');
-        setTimeout(() => { if (b.isConnected) { b.textContent = 'Delete'; detail.querySelector('.md-delete')?.classList.remove('armed'); } }, 3500);
+      const button = t.closest<HTMLButtonElement>('button')!;
+      if (deleting.has(it.id)) return;
+      clearTimeout(disarmTimer);
+      if (!button.classList.contains('armed')) {
+        const confirmMs = 3500;
+        button.style.setProperty('--confirm-time', `${confirmMs}ms`);
+        button.classList.add('armed');
+        button.setAttribute('aria-label', 'Confirm delete');
+        disarmTimer = window.setTimeout(() => {
+          button.classList.remove('armed');
+          if (!button.disabled) button.setAttribute('aria-label', 'Delete');
+        }, confirmMs);
         return;
       }
-      deleteArmed = 0;
+      deleting.add(it.id);
+      button.disabled = true;
+      button.classList.remove('armed');
+      button.querySelector('.idle')!.textContent = 'Deleting…';
+      button.setAttribute('aria-label', 'Deleting');
       const list = shown();
       const i = list.findIndex((x) => x.id === it.id);
       try {
         await req('DELETE', `/api/media/${it.id}`);
+        if (button.isConnected && current === it.id && !matchMedia('(prefers-reduced-motion: reduce)').matches) {
+          await detail.animate([{ opacity: 1 }, { opacity: 0, transform: 'translateY(3px)' }], { duration: 160, easing: 'ease-out' }).finished.catch(() => {});
+        }
         items = items.filter((x) => x.id !== it.id);
-        cache = items;
-        current = (list[i + 1] ?? list[i - 1])?.id ?? null;
+        cache = cache?.filter((x) => x.id !== it.id) ?? null;
+        const removedCurrent = current === it.id;
+        if (removedCurrent) current = (list[i + 1] ?? list[i - 1])?.id ?? null;
         toast(`${isVideo(it) ? 'Recording' : 'Screenshot'} moved to the trash`);
-        show();
-      } catch { toast('Couldn’t delete it'); }
+        if (sheet === el && (removedCurrent || !current)) show();
+      } catch {
+        deleting.delete(it.id);
+        if (sheet === el && current === it.id && !button.isConnected) renderDetail();
+        button.disabled = false;
+        button.querySelector('.idle')!.textContent = 'Delete';
+        button.setAttribute('aria-label', 'Delete');
+        toast('Couldn’t delete it');
+      } finally { deleting.delete(it.id); }
     }
   });
 

@@ -689,8 +689,8 @@ function onKeyDown(e: KeyboardEvent) {
     e.preventDefault();
     return;
   }
-  if (e.key === 'Tab' && !document.getElementById('welcome-boards')!.hidden) return;
-  if (target?.closest('#welcome-boards, #board-list, #penbar, #ctxbar, #choose-follow') && ['Tab', 'Enter', ' '].includes(e.key)) return;
+  if (e.key === 'Tab' && (!document.getElementById('welcome-boards')!.hidden || (recordingActive() && !S.editing))) return;
+  if (target?.closest('#rec, #welcome-boards, #board-list, #penbar, #ctxbar, #choose-follow') && ['Tab', 'Enter', ' '].includes(e.key)) return;
   const formatKey = mod && !e.altKey && !e.shiftKey ? e.key.toLowerCase() : '';
   if ((formatKey === 'b' || formatKey === 'u') && (S.editing || !isEditableTarget(e.target)) &&
       canEdit() && selectionItems().some(canEditText)) {
