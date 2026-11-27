@@ -25,7 +25,8 @@ function basics(): Step[] {
     );
   }
   list.push(
-    { target: '[data-tool="hand"]', scene: 'pinch', title: 'Move around the board', body: touch ? 'Slide two fingers to pan. Spread them to zoom in, even while the pen is selected.' : 'Scroll to pan. Pinch to zoom, or hold <kbd>⌘</kbd> while scrolling. The hand tool lets you drag the canvas.' },
+    { target: '[data-tool="hand"]', scene: 'pinch', title: 'Move around the board', body: touch ? 'Slide two fingers to pan. Spread them to zoom in, even while the pen is selected.' : 'Press <kbd>H</kbd> for the Hand tool and drag to pan. Pinch to zoom, or hold <kbd>⌘</kbd> while scrolling.' },
+    { target: '#menu-btn', scene: 'search', title: 'Find a tool or a board', body: touch ? 'Open the board menu and tap Search. Enter a tool name, a board title, or a word from a note to find where you wrote it.' : 'Press <kbd>⌘K</kbd> and type a tool name, a board title, or a word from a note. Use the arrow keys to choose a result and <kbd>Enter</kbd> to open it.' },
     { target: '#viewnav', scene: 'views', title: 'Find your way back', body: canEdit() ? 'Open Views and choose Add this view to bookmark the area on screen. Its name comes from the content and you can rename it.' : 'Choose a saved view to jump there. When others are here, choose Follow and pick their name to follow their camera.' },
   );
   if (isOwner() && !session.invite) list.push({ target: '#share-btn', scene: 'invite', title: 'Invite someone in', body: 'Open Share and choose whether the invite lets someone edit or view. They can join with just a screen name.' });

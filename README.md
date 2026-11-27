@@ -11,6 +11,7 @@ Live at **[brainboard.ink](https://brainboard.ink)**, or run your own: boards ar
 - **Infinite canvas.** Pan and zoom freely. Paste or drop images, write sticky notes and text, and sketch with a pen.
 - **Flow charts.** Bubbles, boxes, pills and decisions with curved, labelled connectors. Press `Tab` to grow the next step.
 - **Live collaboration.** Invite links that can edit or only view. Everyone's cursor, selection, typing and pen strokes show up live. Talk over built-in voice chat, follow someone, or present to the room.
+- **Board search.** Open a recent board from its preview, or search by a phrase from a note. The same search finds tools and menu actions.
 - **Vim keys.** A `:` command line with completion, `/` search, find and replace, and an optional vim mode with directional navigation.
 - **Agent friendly.** A built-in MCP server lets Claude, Cursor and other agents list, read, render and edit boards. Their edits appear live in your tab.
 - **No sign-up wall.** Start drawing straight away. Create an account (with a passkey, or email and password) when you want to keep your boards and open them anywhere.
@@ -71,6 +72,7 @@ Shortcuts are written for Mac. On Windows and Linux, `⌘` is `Ctrl` and `⌥` (
 | | Drag a shape's dot onto another shape to connect them, or onto empty space to grow a new bubble. `Tab` adds a connected bubble to the right, even while you type. |
 | **Organise** | `⌘D` duplicate · `]` / `[` bring to front or send to back · `⌫` delete |
 | **Arrange** | Select 2 or more and open the align menu in the selection bar: align edges or centers, space evenly across or down, or **Tidy up** into neat rows. `⌥A` `⌥H` `⌥D` left / center / right · `⌥W` `⌥V` `⌥S` top / middle / bottom · `⌥⇧H` `⌥⇧V` space evenly · `⌥⇧T` tidy up |
+| **Search** | `⌘K` on Mac or `Ctrl+K` on Windows and Linux · search tools, menu actions, board titles and board contents |
 | **Boards** | `⌥B` all boards · open the menu at the top left · `⌥N` new board · double-click the board name to rename it |
 | **Views** | `{` `}` previous / next view · `⌥1`–`⌥9` jump to a view |
 | **Screenshot** | `⇧⌘S`, the camera in the toolbar, or `:shot`. Frame **Screen** (what you see), **Area** (drag a frame; it shoots when you let go, or hold `⌥` to adjust it first), **Selection** or a saved **View**, then press the shutter or `Enter`. Scroll and pinch still move the board to compose the shot. Pick a look: **Clean**, or the board on a gradient (**Aurora**, **Sunset**, **Ocean**, **Mist**, **Night**) with rounded corners and a soft shadow. Toggle the canvas dots (`G`) and sharpness 1–3× (`Q`). Shots render crisp on the server in your current theme, and a print of each lands in the corner with **Save locally**, **Save to Media**, and **Copy** |

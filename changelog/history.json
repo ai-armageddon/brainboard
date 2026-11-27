@@ -1,5 +1,52 @@
 [
   {
+    "version": "0.5.0",
+    "date": "2026-11-26",
+    "changes": {
+      "Boards": [
+        "The blank canvas shows up to three recent board previews with sharing details until you start working.",
+        "The board menu groups related actions and keeps the three most recent boards close at hand.",
+        "Double-click a saved view’s name to rename it.",
+        "Directions point toward saved views and board content when you pan far away."
+      ],
+      "Search": [
+        "Open Search from the menu or press Cmd+K on Mac or Ctrl+K on Windows and Linux.",
+        "Find tools and menu actions, or search accessible boards by title, note text, shape text and connector labels.",
+        "Read a matching excerpt and press Enter to open the board."
+      ],
+      "Camera": [
+        "Frame the whole screen, a dragged area, your selection or a saved view for a screenshot.",
+        "Choose a backdrop, canvas dots and sharpness, then download or copy the finished image.",
+        "Record the board in supported desktop Chromium browsers with tab audio, microphone audio, both or neither.",
+        "Pause, resume or stop with the on-screen controls, including during full-screen recording."
+      ],
+      "Media": [
+        "Choose Save locally or Save to Media from the finished screenshot or recording preview.",
+        "Select Save to Media in the camera to keep that capture as soon as it finishes.",
+        "Browse saved captures across boards, play recordings, rename items or put a screenshot on the canvas.",
+        "The Delete button shows an animated confirmation for the selected item before moving it to the trash."
+      ],
+      "Text": [
+        "Browser spellcheck and word completions help you write in notes, text boxes and shapes.",
+        "Press Tab or the right arrow to accept a suggested ending, or turn off Spelling and suggestions in the menu."
+      ],
+      "Sharing": [
+        "Editors can open a shared browser window and take turns navigating a page together.",
+        "The participant list groups collaborators beside your own avatar and announces when someone leaves.",
+        "Opening another person’s board without access now explains how to join with an invite."
+      ],
+      "Canvas": [
+        "Drag a selection box across an item to include it, even if only part of the item overlaps.",
+        "Drag a selected image’s corner control to set its rounding.",
+        "Beautify smooths handwriting and tidies rough shapes."
+      ],
+      "Keyboard": [
+        "Press H to select the Hand tool in standard and Vim modes.",
+        "In Vim mode, gh jumps to the item on the left and Shift+H pans left."
+      ]
+    }
+  },
+  {
     "version": "0.4.0",
     "date": "2026-11-21",
     "changes": {

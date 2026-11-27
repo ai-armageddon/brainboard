@@ -1,5 +1,63 @@
 [
   {
+    "version": "0.5.0",
+    "title": "Board search, screenshots and recording",
+    "changes": [
+      "Pick up where you left off with previews of your three most recent boards, including boards shared with you.",
+      "Press Cmd+K on Mac or Ctrl+K on Windows and Linux to find tools, menu actions, board titles, or a phrase you remember writing.",
+      "Take a screenshot or record the board with tab audio, your microphone, both, or neither. Stop recording stays within reach.",
+      "Choose Save locally or Save to Media from the finished preview. You can also copy a screenshot to the clipboard.",
+      "Accept word suggestions as you write, browse a site with collaborators, and press H for the Hand tool in either keyboard mode."
+    ],
+    "tour": [
+      {
+        "scene": "recent",
+        "title": "Recognize your board",
+        "body": "On a blank board, look below the illustration for up to three previews. Names and initials identify shared boards. Open a card to return to it, or choose All boards for the full list.",
+        "target": "#welcome-boards",
+        "fallback": "#menu-btn"
+      },
+      {
+        "scene": "search",
+        "title": "Find a board by what you wrote",
+        "body": "Open Search in the board menu or press <kbd>⌘K</kbd>. Try a word from a sticky note. Matching boards show an excerpt. You can also search for a tool or menu action.",
+        "target": "#menu [data-action=\"search\"]",
+        "fallback": "#menu-btn"
+      },
+      {
+        "scene": "suggest",
+        "title": "Finish a word as you type",
+        "body": "When a gray word ending appears, press <kbd>Tab</kbd> or <kbd>→</kbd> to accept it. Keep typing to use your own ending. You can turn writing help off in the menu.",
+        "target": "[data-tool=\"text\"]",
+        "fallback": "#menu-btn"
+      },
+      {
+        "scene": "browse",
+        "title": "Read a page together",
+        "body": "On boards with shared browsing enabled, an editor can open the globe and enter a web address. Everyone can follow the page as it scrolls. Another editor can choose Take control.",
+        "target": "#browse-btn"
+      },
+      {
+        "scene": "capture",
+        "title": "Keep a screenshot where you want it",
+        "body": "Open the camera on a saved board, frame your shot and choose Take screenshot. In the preview, choose Save locally, Save to Media, or Copy.",
+        "target": "#shot-btn"
+      },
+      {
+        "scene": "record",
+        "title": "Choose what your recording hears",
+        "body": "In Chrome or Edge on a computer, open the camera and choose Video. Switch Tab audio and Microphone on independently, then start recording. Click Stop recording to see the same two save options.",
+        "target": "#shot-btn"
+      },
+      {
+        "scene": "hand",
+        "title": "Pan with the Hand tool",
+        "body": "Press <kbd>H</kbd> and drag to move across the canvas. In Vim mode, <kbd>gh</kbd> now jumps to the item on the left and <kbd>Shift</kbd> + <kbd>H</kbd> still pans left.",
+        "target": "[data-tool=\"hand\"]"
+      }
+    ]
+  },
+  {
     "version": "0.4.0",
     "title": "Drawing, layout and touch",
     "changes": [
